@@ -175,6 +175,34 @@ impl TextureRenderer {
         })
     }
 
+    /// Helper to compute viewport size and offsets based on FitMode
+    pub fn calculate_viewport(
+        fit_mode: FitMode,
+        tex_w: f32,
+        tex_h: f32,
+        mon_w: f32,
+        mon_h: f32,
+    ) -> (f32, f32, f32, f32) {
+        match fit_mode {
+            FitMode::Stretch => (mon_w, mon_h, 0.0, 0.0),
+            FitMode::Fit => {
+                let scale = (mon_w / tex_w).min(mon_h / tex_h);
+                let w = tex_w * scale;
+                let h = tex_h * scale;
+                (w, h, (mon_w - w) / 2.0, (mon_h - h) / 2.0)
+            }
+            FitMode::Fill => {
+                let scale = (mon_w / tex_w).max(mon_h / tex_h);
+                let w = tex_w * scale;
+                let h = tex_h * scale;
+                (w, h, (mon_w - w) / 2.0, (mon_h - h) / 2.0)
+            }
+            FitMode::Center => {
+                (tex_w, tex_h, (mon_w - tex_w) / 2.0, (mon_h - tex_h) / 2.0)
+            }
+        }
+    }
+
     /// Renders the texture onto the swapchain render target.
     /// Manages aspect ratio and position using D3D11 viewports based on the fit mode.
     pub fn render(
@@ -196,24 +224,7 @@ impl TextureRenderer {
         let mon_h = monitor_height as f32;
 
         // 2. Perform Viewport scaling calculations based on FitMode
-        let (vp_w, vp_h, vp_x, vp_y) = match fit_mode {
-            FitMode::Stretch => (mon_w, mon_h, 0.0, 0.0),
-            FitMode::Fit => {
-                let scale = (mon_w / tex_w).min(mon_h / tex_h);
-                let w = tex_w * scale;
-                let h = tex_h * scale;
-                (w, h, (mon_w - w) / 2.0, (mon_h - h) / 2.0)
-            }
-            FitMode::Fill => {
-                let scale = (mon_w / tex_w).max(mon_h / tex_h);
-                let w = tex_w * scale;
-                let h = tex_h * scale;
-                (w, h, (mon_w - w) / 2.0, (mon_h - h) / 2.0)
-            }
-            FitMode::Center => {
-                (tex_w, tex_h, (mon_w - tex_w) / 2.0, (mon_h - tex_h) / 2.0)
-            }
-        };
+        let (vp_w, vp_h, vp_x, vp_y) = Self::calculate_viewport(fit_mode, tex_w, tex_h, mon_w, mon_h);
 
         let viewport = D3D11_VIEWPORT {
             TopLeftX: vp_x,
@@ -317,4 +328,76 @@ fn compile_shader(source: &str, entrypoint: PCSTR, target: PCSTR) -> Result<ID3D
     }
 
     code.ok_or_else(|| AppError::Renderer("Compiled shader blob was null".to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_near(val: f32, expected: f32) {
+        assert!((val - expected).abs() < 0.01, "Expected {} to be near {}", val, expected);
+    }
+
+    #[test]
+    fn test_calculate_viewport_stretch() {
+        let (w, h, x, y) = TextureRenderer::calculate_viewport(FitMode::Stretch, 1920.0, 1080.0, 3840.0, 2160.0);
+        assert_near(w, 3840.0);
+        assert_near(h, 2160.0);
+        assert_near(x, 0.0);
+        assert_near(y, 0.0);
+    }
+
+    #[test]
+    fn test_calculate_viewport_fit_letterbox() {
+        // 16:9 Screen (1920x1080), 4:3 Texture (800x600)
+        // Aspect scale factor matches height limit: mon_h / tex_h = 1080 / 600 = 1.8
+        // w = 800 * 1.8 = 1440.0
+        // h = 600 * 1.8 = 1080.0
+        // x = (1920 - 1440) / 2.0 = 240.0
+        let (w, h, x, y) = TextureRenderer::calculate_viewport(FitMode::Fit, 800.0, 600.0, 1920.0, 1080.0);
+        assert_near(w, 1440.0);
+        assert_near(h, 1080.0);
+        assert_near(x, 240.0);
+        assert_near(y, 0.0);
+    }
+
+    #[test]
+    fn test_calculate_viewport_fit_pillarbox() {
+        // 4:3 Screen (1024x768), 16:9 Texture (1920x1080)
+        // Aspect scale factor matches width limit: mon_w / tex_w = 1024 / 1920 = 0.5333...
+        // w = 1024.0
+        // h = 1080 * (1024 / 1920) = 576.0
+        // y = (768 - 576) / 2.0 = 96.0
+        let (w, h, x, y) = TextureRenderer::calculate_viewport(FitMode::Fit, 1920.0, 1080.0, 1024.0, 768.0);
+        assert_near(w, 1024.0);
+        assert_near(h, 576.0);
+        assert_near(x, 0.0);
+        assert_near(y, 96.0);
+    }
+
+    #[test]
+    fn test_calculate_viewport_fill_cropping() {
+        // 16:9 Screen (1920x1080), 4:3 Texture (800x600)
+        // Aspect scale factor matches width limit to fill: mon_w / tex_w = 1920 / 800 = 2.4
+        // w = 800 * 2.4 = 1920.0
+        // h = 600 * 2.4 = 1440.0
+        // y = (1080 - 1440) / 2.0 = -180.0 (top and bottom cropped by 180px each)
+        let (w, h, x, y) = TextureRenderer::calculate_viewport(FitMode::Fill, 800.0, 600.0, 1920.0, 1080.0);
+        assert_near(w, 1920.0);
+        assert_near(h, 1440.0);
+        assert_near(x, 0.0);
+        assert_near(y, -180.0);
+    }
+
+    #[test]
+    fn test_calculate_viewport_center() {
+        // 1920x1080 Screen, 800x600 Texture. Should place at native resolution centered
+        // x = (1920 - 800) / 2 = 560
+        // y = (1080 - 600) / 2 = 240
+        let (w, h, x, y) = TextureRenderer::calculate_viewport(FitMode::Center, 800.0, 600.0, 1920.0, 1080.0);
+        assert_near(w, 800.0);
+        assert_near(h, 600.0);
+        assert_near(x, 560.0);
+        assert_near(y, 240.0);
+    }
 }
