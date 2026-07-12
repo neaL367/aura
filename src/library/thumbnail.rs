@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 use windows::core::{Interface, PCWSTR};
@@ -144,3 +144,58 @@ fn to_wide(path: &Path) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt;
     path.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
 }
+
+/// Resolves the file path where a thumbnail should be cached, based on its metadata fast-hash.
+pub fn cached_thumbnail_path(entry: &super::model::WallpaperLibraryEntry) -> PathBuf {
+    let appdata = std::env::var("APPDATA").unwrap_or_default();
+    let hash = get_metadata_hash(&entry.path);
+    PathBuf::from(appdata).join("Aura").join("thumbnails").join(format!("{}_{}.png", entry.id, hash))
+}
+
+/// Decodes any image file (such as a cached thumbnail PNG) to raw 32-bit RGBA bytes.
+pub fn decode_png_rgba(path: &Path) -> Result<(u32, u32, Vec<u8>)> {
+    let path_wide = to_wide(path);
+    unsafe {
+        let factory: IWICImagingFactory = windows::Win32::System::Com::CoCreateInstance(
+            &CLSID_WICImagingFactory,
+            None,
+            windows::Win32::System::Com::CLSCTX_INPROC_SERVER,
+        )?;
+
+        let decoder = factory.CreateDecoderFromFilename(
+            PCWSTR(path_wide.as_ptr()),
+            None,
+            windows::Win32::Foundation::GENERIC_ACCESS_RIGHTS(0x80000000), // GENERIC_READ
+            WICDecodeMetadataCacheOnDemand,
+        )?;
+
+        let frame = decoder.GetFrame(0)?;
+        let converter = factory.CreateFormatConverter()?;
+        let source: IWICBitmapSource = frame.cast()?;
+
+        // Convert to standard unmultiplied 32bpp RGBA for egui consumption
+        converter.Initialize(
+            &source,
+            &windows::Win32::Graphics::Imaging::GUID_WICPixelFormat32bppRGBA,
+            WICBitmapDitherTypeNone,
+            None,
+            0.0,
+            WICBitmapPaletteTypeCustom,
+        )?;
+
+        let mut w = 0;
+        let mut h = 0;
+        converter.GetSize(&mut w, &mut h)?;
+
+        let stride = w * 4;
+        let mut pixels = vec![0u8; (stride * h) as usize];
+        converter.CopyPixels(
+            std::ptr::null(),
+            stride,
+            &mut pixels,
+        )?;
+
+        Ok((w, h, pixels))
+    }
+}
+

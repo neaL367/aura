@@ -51,3 +51,19 @@ pub fn get_system_time_iso8601() -> String {
         )
     }
 }
+
+/// Helper structure for UI views to interact with library addition logic modally.
+pub struct LibraryScanner<'a> {
+    pub config: &'a mut AppConfig,
+}
+
+impl<'a> LibraryScanner<'a> {
+    pub fn new(config: &'a mut AppConfig) -> Self {
+        Self { config }
+    }
+
+    pub fn add_entry(&mut self, path: PathBuf) -> Result<(WallpaperLibraryEntry, bool)> {
+        add_entry(self.config, path)
+    }
+}
+
