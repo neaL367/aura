@@ -124,6 +124,10 @@ impl TextureRenderer {
         mon_h: f32,
     ) -> (f32, f32, f32, f32) {
         if tex_w <= 0.0 || tex_h <= 0.0 || mon_w <= 0.0 || mon_h <= 0.0 {
+            tracing::warn!(
+                "calculate_viewport: Degenerate dimensions detected (texture: {}x{}, monitor: {}x{}). Overriding fit_mode {:?} with full-screen fallback.",
+                tex_w, tex_h, mon_w, mon_h, fit_mode
+            );
             return (mon_w, mon_h, 0.0, 0.0);
         }
         match fit_mode {
