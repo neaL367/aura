@@ -1,13 +1,13 @@
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use crate::domain::fit_mode::FitMode;
-use crate::domain::wallpaper::WallpaperType;
+use crate::library::model::WallpaperLibraryEntry;
 
 /// Configuration for the entire application.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub version: u32,
     pub monitors: Vec<MonitorConfig>,
+    pub library: Vec<WallpaperLibraryEntry>,
     pub launch_on_startup: bool,
 }
 
@@ -16,10 +16,8 @@ pub struct AppConfig {
 pub struct MonitorConfig {
     /// Stable monitor device path or hardware ID.
     pub monitor_id: String,
-    /// Path to the wallpaper file (image or video).
-    pub wallpaper_path: PathBuf,
-    /// Whether the file is an image or video.
-    pub wallpaper_type: WallpaperType,
+    /// Unique identifier referencing an entry in the central library.
+    pub wallpaper_id: Option<String>,
     /// Sizing and layout fit mode.
     pub fit_mode: FitMode,
     /// Whether to loop video playback.
@@ -37,6 +35,7 @@ impl Default for AppConfig {
         Self {
             version: 1,
             monitors: Vec::new(),
+            library: Vec::new(),
             launch_on_startup: false,
         }
     }
@@ -46,8 +45,7 @@ impl Default for MonitorConfig {
     fn default() -> Self {
         Self {
             monitor_id: String::new(),
-            wallpaper_path: PathBuf::new(),
-            wallpaper_type: WallpaperType::Image,
+            wallpaper_id: None,
             fit_mode: FitMode::Fill,
             loop_playback: true,
             playback_speed: 1.0,
@@ -56,3 +54,4 @@ impl Default for MonitorConfig {
         }
     }
 }
+

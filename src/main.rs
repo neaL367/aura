@@ -16,6 +16,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))?;
     }
 
+    // 2. Optional --pick flag to test file dialog and WIC thumbnail generation interactively
+    if std::env::args().any(|arg| arg == "--pick") {
+        info!("Running interactive --pick verification...");
+        match aura::platform::windows::file_dialog::pick_wallpaper_file(windows::Win32::Foundation::HWND::default()) {
+            Ok(Some(path)) => {
+                info!("Selected path: {:?}", path);
+                let appdata = std::env::var("APPDATA")?;
+                let thumb_dir = PathBuf::from(appdata).join("Aura").join("thumbnails");
+                let hash = aura::library::thumbnail::get_metadata_hash(&path);
+                let id = aura::library::model::derive_id(&path);
+                let dest = thumb_dir.join(format!("{}_{}.png", id, hash));
+                info!("Generating lossless PNG thumbnail at: {:?}", dest);
+                if let Err(e) = aura::library::thumbnail::generate_thumbnail(&path, &dest, 256) {
+                    error!("Failed to generate thumbnail: {:?}", e);
+                } else {
+                    info!("Thumbnail generated successfully!");
+                }
+            }
+            Ok(None) => {
+                info!("Dialog was cancelled by the user.");
+            }
+            Err(e) => {
+                error!("File dialog error: {:?}", e);
+            }
+        }
+        unsafe { windows::Win32::System::Com::CoUninitialize(); }
+        return Ok(());
+    }
+
     // 3. Load or create default configuration in %APPDATA%/Aura/config.json
     let appdata = std::env::var("APPDATA")?;
     let config_dir = PathBuf::from(appdata).join("Aura");
@@ -35,10 +64,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if config.monitors.is_empty() {
         info!("No monitor settings found. Creating default configuration with primary monitor...");
         let default_wallpaper = PathBuf::from(r"C:\Windows\Web\Wallpaper\Windows\img0.jpg");
+        let mut wallpaper_id = None;
+        if let Ok((entry, _)) = aura::library::scanner::add_entry(&mut config, default_wallpaper) {
+            wallpaper_id = Some(entry.id);
+        }
         config.monitors.push(aura::config::model::MonitorConfig {
             monitor_id: "primary".to_string(),
-            wallpaper_path: default_wallpaper,
-            wallpaper_type: aura::domain::wallpaper::WallpaperType::Image,
+            wallpaper_id,
             fit_mode: aura::domain::fit_mode::FitMode::Fill,
             ..Default::default()
         });

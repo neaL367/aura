@@ -10,7 +10,9 @@ use crate::renderer::d3d11_device::D3d11Device;
 use crate::renderer::texture::TextureRenderer;
 use crate::platform::windows::workerw;
 use crate::platform::windows::window_class::WallpaperWindow;
+use crate::platform::windows::tray_icon::TrayIcon;
 use crate::wallpaper::image_wallpaper::ImageWallpaper;
+use crate::ui::main_window::MainWindow;
 use crate::utils::error::Result;
 use tracing::{info, error};
 
@@ -19,7 +21,7 @@ pub struct MonitorPipeline {
     pub image_wallpaper: ImageWallpaper,
 }
 
-/// The composition root responsible for wiring and initializing components for Milestone 2.
+/// The composition root responsible for wiring and initializing components.
 pub struct CompositionRoot {
     pub device: Arc<D3d11Device>,
     pub renderer: Arc<TextureRenderer>,
@@ -28,6 +30,12 @@ pub struct CompositionRoot {
     pub notification_window: crate::platform::windows::messages::NotificationWindow,
     pub parent_hwnd: HWND,
     pub is_standalone: bool,
+    /// Application shell: tray icon + main configuration window.
+    /// tray_icon is declared first so it drops first (Rust struct fields drop in
+    /// declaration order), ensuring Shell_NotifyIconW(NIM_DELETE) runs before
+    /// MainWindow::drop() calls DestroyWindow and invalidates the HWND.
+    pub tray_icon: Option<TrayIcon>,
+    pub main_window: Option<MainWindow>,
 }
 
 impl CompositionRoot {
@@ -57,7 +65,9 @@ impl CompositionRoot {
                     tracing::error!("WorkerW handshake failed on interactive desktop. Falling back to native system wallpaper.");
                     let default_path = PathBuf::from(r"C:\Windows\Web\Wallpaper\Windows\img0.jpg");
                     let wp_path = config.monitors.first()
-                        .map(|m| m.wallpaper_path.clone())
+                        .and_then(|m| m.wallpaper_id.as_ref())
+                        .and_then(|wp_id| config.library.iter().find(|entry| entry.id == *wp_id))
+                        .map(|entry| entry.path.clone())
                         .unwrap_or(default_path);
                     if let Err(err) = crate::platform::windows::window_class::set_desktop_wallpaper_native(&wp_path) {
                         tracing::error!("Failed to apply native desktop fallback wallpaper: {:?}", err);
@@ -89,12 +99,32 @@ impl CompositionRoot {
             notification_window,
             parent_hwnd,
             is_standalone,
+            tray_icon: None,
+            main_window: None,
         };
 
         // 5. Create a pipeline for each active monitor
         for id in active_ids {
             if let Err(err) = root.add_monitor_pipeline(id, config) {
                 error!("Failed to create pipeline for monitor: {:?}", err);
+            }
+        }
+
+        // 6. Create main application window + system tray icon (skipped in headless mode)
+        if !is_standalone {
+            match MainWindow::create(&root.device.device) {
+                Ok(win) => {
+                    match TrayIcon::create(win.hwnd, "Aura Wallpaper Engine") {
+                        Ok(icon) => {
+                            root.tray_icon = Some(icon);
+                            info!("Tray icon created successfully.");
+                        }
+                        Err(e) => error!("Failed to create tray icon: {:?}", e),
+                    }
+                    root.main_window = Some(win);
+                    info!("Main application window created.");
+                }
+                Err(e) => error!("Failed to create main window: {:?}", e),
             }
         }
 
@@ -113,7 +143,11 @@ impl CompositionRoot {
 
         let default_wallpaper = PathBuf::from(r"C:\Windows\Web\Wallpaper\Windows\img0.jpg");
         let (wp_path, fit_mode) = if let Some(m_cfg) = config.monitors.iter().find(|m| m.monitor_id == id.0) {
-            (m_cfg.wallpaper_path.clone(), m_cfg.fit_mode)
+            let path = m_cfg.wallpaper_id.as_ref()
+                .and_then(|wp_id| config.library.iter().find(|entry| entry.id == *wp_id))
+                .map(|entry| entry.path.clone())
+                .unwrap_or(default_wallpaper);
+            (path, m_cfg.fit_mode)
         } else {
             (default_wallpaper, FitMode::Fill)
         };
@@ -177,9 +211,12 @@ impl CompositionRoot {
                         let w = geometry.width as i32;
                         let h = geometry.height as i32;
                         unsafe {
+                            // SWP_NOZORDER: hWndInsertAfter is ignored by the API when this
+                            // flag is set, so None vs HWND_TOP vs any sentinel are equivalent.
+                            // Z-order is preserved exactly as it was — wallpaper stays behind icons.
                             let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowPos(
                                 pipeline.wallpaper_window.hwnd,
-                                HWND::default(),
+                                None,
                                 x,
                                 y,
                                 w,
