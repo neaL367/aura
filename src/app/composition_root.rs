@@ -13,6 +13,9 @@ use crate::platform::windows::window_class::WallpaperWindow;
 use crate::platform::windows::tray_icon::TrayIcon;
 use crate::wallpaper::image_wallpaper::ImageWallpaper;
 use crate::ui::main_window::MainWindow;
+use crate::ui::views::library_grid::ThumbnailCache;
+use crate::ui::views::monitor_panel::MonitorPanelState;
+use crate::domain::traits::ConfigStore;
 use crate::utils::error::Result;
 use tracing::{info, error};
 
@@ -36,6 +39,8 @@ pub struct CompositionRoot {
     /// MainWindow::drop() calls DestroyWindow and invalidates the HWND.
     pub tray_icon: Option<TrayIcon>,
     pub main_window: Option<MainWindow>,
+    pub thumbnail_cache: ThumbnailCache,
+    pub monitor_panel_state: MonitorPanelState,
 }
 
 impl CompositionRoot {
@@ -101,6 +106,8 @@ impl CompositionRoot {
             is_standalone,
             tray_icon: None,
             main_window: None,
+            thumbnail_cache: ThumbnailCache::new(),
+            monitor_panel_state: MonitorPanelState::new(),
         };
 
         // 5. Create a pipeline for each active monitor
@@ -238,5 +245,15 @@ impl CompositionRoot {
             }
         }
         Ok(())
+    }
+
+    /// Checks if the main configuration window exists and is currently visible.
+    pub fn main_window_visible(&self) -> bool {
+        crate::app::ui_bridge::main_window_visible(self)
+    }
+
+    /// Renders the configuration UI, syncing display snapshots and invoking view layouts.
+    pub fn render_ui(&mut self, config: &mut AppConfig, store: &dyn ConfigStore) -> Result<()> {
+        crate::app::ui_bridge::render_ui(self, config, store)
     }
 }
