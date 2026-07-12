@@ -67,4 +67,15 @@ impl ImageWallpaper {
         self.swapchain.resize(device, width, height)?;
         Ok(())
     }
+
+    /// Replaces the active wallpaper texture and updates the fit mode.
+    pub fn replace_texture(&mut self, texture: ID3D11Texture2D, fit_mode: FitMode) {
+        self.texture = texture;
+        self.fit_mode = fit_mode;
+    }
+
+    /// Reconfigures the active viewport fit mode layout.
+    pub fn set_fit_mode(&mut self, fit_mode: FitMode) {
+        self.fit_mode = fit_mode;
+    }
 }
