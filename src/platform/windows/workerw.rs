@@ -1,5 +1,5 @@
-use windows::core::w;
-use windows::Win32::Foundation::{HWND, LPARAM, BOOL};
+use windows::core::{w, BOOL};
+use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowW, FindWindowExW, SendMessageTimeoutW, EnumWindows,
     GetClassNameW, SMTO_NORMAL,
@@ -41,8 +41,15 @@ pub fn get_wallpaper_parent() -> Result<(HWND, usize)> {
     };
     debug!("Found Progman window: {:?}", progman);
 
-    // Look for SHELLDLL_DefView directly under Progman
-    let shelldll = unsafe { FindWindowExW(progman, HWND::default(), w!("SHELLDLL_DefView"), None).unwrap_or_default() };
+    // Look for SHELLDLL_DefView directly under Progman.
+    // FindWindowExW(hwndParent, hwndChildAfter, class, title):
+    //   hwndParent = `progman` — always a real handle, never null.
+    //     (null hwndParent would mean "search all top-level windows" — a different semantic
+    //     that we never want here; we are always scoping to a specific window's children.)
+    //   hwndChildAfter = Some(HWND::default()) — null sentinel meaning "start from the first child".
+    //     In windows 0.62.2 this parameter changed from bare HWND to Option<HWND>;
+    //     Some(HWND(0)) is FFI-identical to passing NULL, per MSDN.
+    let shelldll = unsafe { FindWindowExW(Some(progman), Some(HWND::default()), w!("SHELLDLL_DefView"), None).unwrap_or_default() };
     if shelldll != HWND::default() {
         debug!("Found SHELLDLL_DefView child under Progman: {:?}", shelldll);
     }
@@ -54,8 +61,8 @@ pub fn get_wallpaper_parent() -> Result<(HWND, usize)> {
         SendMessageTimeoutW(
             progman,
             0x052C,
-            None,
-            None,
+            WPARAM(0),
+            LPARAM(0),
             SMTO_NORMAL,
             1000,
             Some(&mut result),
@@ -105,8 +112,9 @@ extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
     if len > 0 {
         let name_str = String::from_utf16_lossy(&class_name[..len as usize]);
         if name_str == "WorkerW" {
-            // Check if this WorkerW window contains the SHELLDLL_DefView child (desktop icons)
-            let shell_dll = unsafe { FindWindowExW(hwnd, HWND::default(), w!("SHELLDLL_DefView"), None).unwrap_or_default() };
+            // hwndParent = `hwnd` (the WorkerW being iterated) — always a real handle, never null.
+            // hwndChildAfter = Some(HWND::default()) — null sentinel, "start from first child".
+            let shell_dll = unsafe { FindWindowExW(Some(hwnd), Some(HWND::default()), w!("SHELLDLL_DefView"), None).unwrap_or_default() };
             if shell_dll != HWND::default() {
                 state.shelldll_defview = shell_dll;
             } else {

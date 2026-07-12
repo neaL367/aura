@@ -49,9 +49,9 @@ impl NotificationWindow {
                 0,
                 0,
                 0,
-                HWND::default(),
+                Some(HWND::default()),
                 None,
-                hinstance,
+                Some(hinstance),
                 None,
             )?
         };

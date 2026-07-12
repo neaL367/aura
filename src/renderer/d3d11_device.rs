@@ -35,7 +35,7 @@ impl D3d11Device {
             D3D11CreateDevice(
                 None, // Default adapter
                 D3D_DRIVER_TYPE_HARDWARE,
-                None, // No software rasterizer
+                windows::Win32::Foundation::HMODULE::default(), // No software rasterizer
                 D3D11_CREATE_DEVICE_FLAG(flags.0),
                 Some(&feature_levels),
                 D3D11_SDK_VERSION,

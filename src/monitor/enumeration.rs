@@ -1,5 +1,6 @@
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
-use windows::Win32::Foundation::{BOOL, LPARAM, RECT};
+use windows::core::BOOL;
+use windows::Win32::Foundation::{LPARAM, RECT};
 use windows::Win32::Graphics::Gdi::{
     EnumDisplayDevicesW, EnumDisplayMonitors, GetMonitorInfoW, DISPLAY_DEVICEW,
     HDC, HMONITOR, MONITORINFOEXW,
@@ -36,7 +37,7 @@ pub fn enumerate_monitors() -> Result<Vec<MonitorInfo>> {
 
     unsafe {
         EnumDisplayMonitors(
-            HDC::default(),
+            Some(HDC::default()),
             None,
             Some(monitor_enum_proc),
             LPARAM(&mut handles as *mut _ as isize),

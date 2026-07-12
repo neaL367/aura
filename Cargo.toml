@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # Win32 API access
-windows = { version = "0.58.0", features = [
+windows = { version = "0.62.2", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Direct3D",
@@ -23,7 +23,11 @@ windows = { version = "0.58.0", features = [
     "Win32_System_StationsAndDesktops",
     "Win32_Graphics_Gdi",
     "Win32_UI_HiDpi",
+    "Win32_UI_Shell",
+    "Win32_UI_Input_KeyboardAndMouse",
     "Win32_Security",
+    "Win32_System_SystemInformation",
+    "Win32_UI_Shell_Common",
 ] }
 
 # Serialization/Deserialization
@@ -40,3 +44,10 @@ crossbeam-channel = "0.5"
 
 # Image processing fallback
 image = { version = "0.25", default-features = false, features = ["webp"] }
+
+# GUI — egui version MUST match the version egui-directx11 compiles against internally.
+# egui-directx11 v0.12.1 transitively requires egui v0.33.3; using a higher version
+# produces a FullOutput type mismatch because Cargo pulls in two different egui crates.
+# Do NOT bump egui without first checking `cargo tree -p egui-directx11`.
+egui = "0.33.3"
+egui-directx11 = "0.12.1"

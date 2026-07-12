@@ -56,9 +56,9 @@ impl WallpaperWindow {
                 y,
                 width,
                 height,
-                parent,
+                Some(parent),
                 None,
-                hinstance,
+                Some(hinstance),
                 None,
             )?
         };
@@ -107,9 +107,9 @@ impl WallpaperWindow {
                 y,
                 width,
                 height,
-                HWND::default(),
+                Some(HWND::default()),
                 None,
-                hinstance,
+                Some(hinstance),
                 None,
             )?
         };
