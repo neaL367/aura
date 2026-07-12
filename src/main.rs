@@ -93,24 +93,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Entering Win32 message loop...");
     unsafe {
         let mut msg = windows::Win32::UI::WindowsAndMessaging::MSG::default();
-        while windows::Win32::UI::WindowsAndMessaging::GetMessageW(&mut msg, None, 0, 0).as_bool() {
-            if msg.message == windows::Win32::UI::WindowsAndMessaging::WM_USER + 100 {
-                info!("Main loop: Syncing monitors after display change event...");
-                if let Err(e) = composition.sync_monitors(&config) {
-                    error!("Failed to sync monitors: {:?}", e);
-                }
-                // Drain any duplicate sync messages posted concurrently by multiple windows
-                let mut dummy = windows::Win32::UI::WindowsAndMessaging::MSG::default();
-                while windows::Win32::UI::WindowsAndMessaging::PeekMessageW(
-                    &mut dummy,
+        loop {
+            let is_visible = composition.main_window_visible();
+            let has_msg = if is_visible {
+                windows::Win32::UI::WindowsAndMessaging::PeekMessageW(
+                    &mut msg,
                     None,
-                    windows::Win32::UI::WindowsAndMessaging::WM_USER + 100,
-                    windows::Win32::UI::WindowsAndMessaging::WM_USER + 100,
+                    0,
+                    0,
                     windows::Win32::UI::WindowsAndMessaging::PM_REMOVE,
-                ).as_bool() {}
+                ).as_bool()
+            } else {
+                windows::Win32::UI::WindowsAndMessaging::GetMessageW(&mut msg, None, 0, 0).as_bool()
+            };
+
+            if has_msg {
+                if msg.message == windows::Win32::UI::WindowsAndMessaging::WM_QUIT {
+                    break;
+                }
+                if msg.message == windows::Win32::UI::WindowsAndMessaging::WM_USER + 100 {
+                    info!("Main loop: Syncing monitors after display change event...");
+                    if let Err(e) = composition.sync_monitors(&config) {
+                        error!("Failed to sync monitors: {:?}", e);
+                    }
+                    // Drain any duplicate sync messages posted concurrently by multiple windows
+                    let mut dummy = windows::Win32::UI::WindowsAndMessaging::MSG::default();
+                    while windows::Win32::UI::WindowsAndMessaging::PeekMessageW(
+                        &mut dummy,
+                        None,
+                        windows::Win32::UI::WindowsAndMessaging::WM_USER + 100,
+                        windows::Win32::UI::WindowsAndMessaging::WM_USER + 100,
+                        windows::Win32::UI::WindowsAndMessaging::PM_REMOVE,
+                    ).as_bool() {}
+                }
+                let _ = windows::Win32::UI::WindowsAndMessaging::TranslateMessage(&msg);
+                windows::Win32::UI::WindowsAndMessaging::DispatchMessageW(&msg);
+            } else if is_visible {
+                if let Err(e) = composition.render_ui(&mut config, &store) {
+                    error!("UI render error: {:?}", e);
+                }
+                // Sleep to throttle frame rate to ~120 FPS max when rendering
+                std::thread::sleep(std::time::Duration::from_millis(8));
             }
-            let _ = windows::Win32::UI::WindowsAndMessaging::TranslateMessage(&msg);
-            windows::Win32::UI::WindowsAndMessaging::DispatchMessageW(&msg);
         }
     }
 
