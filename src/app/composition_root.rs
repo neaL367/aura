@@ -155,6 +155,7 @@ impl CompositionRoot {
     /// Syncs display change events from MonitorManager (adding, removing, or changing monitors).
     pub fn sync_monitors(&mut self, config: &AppConfig) -> Result<()> {
         let events = self.monitor_manager.sync()?;
+        info!("Display sync: sync produced {} events", events.len());
         for event in events {
             match event {
                 crate::domain::events::AppEvent::MonitorAdded(id) => {
