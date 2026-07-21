@@ -16,13 +16,13 @@ use windows::{
         System::LibraryLoader::GetModuleHandleW,
         UI::WindowsAndMessaging::{
             CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DispatchMessageW, EnumWindows,
-            FindWindowExW, FindWindowW, GWL_STYLE, GetClientRect, GetMessageW, GetSystemMetrics,
-            GetWindowLongPtrW, IDC_ARROW, LoadCursorW, MSG, MoveWindow, PostQuitMessage,
-            RegisterClassExW, RegisterWindowMessageW, SEND_MESSAGE_TIMEOUT_FLAGS, SM_CXSCREEN,
-            SM_CYSCREEN, SW_SHOW, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SendMessageTimeoutW,
-            SetParent, SetWindowLongPtrW, SetWindowPos, ShowWindow, TranslateMessage,
-            WINDOW_EX_STYLE, WM_DESTROY, WM_DISPLAYCHANGE, WM_PAINT, WNDCLASSEXW, WS_CHILD,
-            WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_POPUP, WS_VISIBLE,
+            FindWindowExW, FindWindowW, GWL_STYLE, GetClientRect, GetDesktopWindow, GetMessageW,
+            GetSystemMetrics, GetWindowLongPtrW, IDC_ARROW, LoadCursorW, MSG, MoveWindow,
+            PostQuitMessage, RegisterClassExW, RegisterWindowMessageW, SEND_MESSAGE_TIMEOUT_FLAGS,
+            SM_CXSCREEN, SM_CYSCREEN, SW_SHOW, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE,
+            SendMessageTimeoutW, SetParent, SetWindowLongPtrW, SetWindowPos, ShowWindow,
+            TranslateMessage, WINDOW_EX_STYLE, WM_DESTROY, WM_DISPLAYCHANGE, WM_PAINT, WNDCLASSEXW,
+            WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_POPUP, WS_VISIBLE,
         },
     },
     core::{BOOL, Error, HRESULT, Result, w},
@@ -258,21 +258,35 @@ fn create_and_attach(hinstance: HINSTANCE) -> Result<HWND> {
 
 fn ensure_attached(render_hwnd: HWND) -> Result<HWND> {
     // Step 1: Locate Progman.
-    let progman = unsafe { FindWindowW(w!("Progman"), None) }?;
+    let mut progman = unsafe { FindWindowW(w!("Progman"), None) }.unwrap_or_default();
     if progman.0.is_null() {
-        eprintln!("  [!] Progman not found — Explorer may not be running");
-        return Err(Error::new(
-            HRESULT(0x80004005u32 as i32),
-            "Progman window not found",
-        ));
+        println!("  [info] FindWindowW(\"Progman\") returned null; searching via EnumWindows...");
+        unsafe {
+            let _ = EnumWindows(Some(find_progman_proc), LPARAM(&raw mut progman as isize));
+        }
     }
-    println!("  Progman : {:?}", progman.0);
 
-    // Step 2: Send 0x052C to Progman (idempotent).
+    let target_msg_hwnd = if !progman.0.is_null() {
+        progman
+    } else {
+        unsafe { GetDesktopWindow() }
+    };
+    println!("  Progman / Shell Window : {:?}", target_msg_hwnd.0);
+
+    // Step 2: Send 0x052C to Progman/Desktop (idempotent).
     let mut _result: usize = 0;
     unsafe {
         SendMessageTimeoutW(
-            progman,
+            target_msg_hwnd,
+            0x052C,
+            WPARAM(0x0D),
+            LPARAM(1),
+            SEND_MESSAGE_TIMEOUT_FLAGS(0),
+            1000,
+            Some(&raw mut _result),
+        );
+        SendMessageTimeoutW(
+            target_msg_hwnd,
             0x052C,
             WPARAM(0),
             LPARAM(0),
@@ -293,7 +307,7 @@ fn ensure_attached(render_hwnd: HWND) -> Result<HWND> {
             ));
         }
     };
-    println!("  WorkerW : {:?}", workerw.0);
+    println!("  Target WorkerW : {:?}", workerw.0);
 
     // Step 4: SetParent render window into WorkerW.
     unsafe {
@@ -327,6 +341,19 @@ fn ensure_attached(render_hwnd: HWND) -> Result<HWND> {
     Ok(workerw)
 }
 
+unsafe extern "system" fn find_progman_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let mut class_buf = [0u16; 256];
+    let len =
+        unsafe { windows::Win32::UI::WindowsAndMessaging::GetClassNameW(hwnd, &mut class_buf) };
+    let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
+    if class_name == "Progman" {
+        let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
+        *slot = hwnd;
+        return BOOL::from(false);
+    }
+    BOOL::from(true)
+}
+
 /// Poll EnumWindows for the target WorkerW, up to ~2s (8 × 250ms).
 fn find_workerw_retry() -> Option<HWND> {
     for i in 0..8 {
@@ -355,18 +382,48 @@ fn find_workerw_once() -> HWND {
 }
 
 unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    use windows::Win32::UI::WindowsAndMessaging::{GW_HWNDNEXT, GetClassNameW, GetWindow};
+
+    let mut class_buf = [0u16; 256];
+    let len = unsafe { GetClassNameW(hwnd, &mut class_buf) };
+    let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
+
+    // Check 1: Is this a top-level WorkerW window without SHELLDLL_DefView?
+    if class_name == "WorkerW" {
+        let def_view = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) };
+        let has_def_view = match def_view {
+            Ok(h) => !h.0.is_null(),
+            Err(_) => false,
+        };
+
+        if !has_def_view {
+            let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
+            *slot = hwnd;
+            return BOOL::from(false);
+        }
+    }
+
+    // Check 2: Is this a top-level window hosting SHELLDLL_DefView? Check Z-order sibling below it.
     if let Ok(def_view) = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) } {
         if !def_view.0.is_null() {
-            if let Ok(target_hwnd) = unsafe { FindWindowExW(None, Some(hwnd), w!("WorkerW"), None) }
-            {
-                if !target_hwnd.0.is_null() {
+            let mut next = unsafe { GetWindow(hwnd, GW_HWNDNEXT) };
+            while let Ok(next_hwnd) = next {
+                if next_hwnd.0.is_null() {
+                    break;
+                }
+                let mut c_buf = [0u16; 256];
+                let c_len = unsafe { GetClassNameW(next_hwnd, &mut c_buf) };
+                let c_name = String::from_utf16_lossy(&c_buf[..c_len as usize]);
+                if c_name == "WorkerW" {
                     let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
-                    *slot = target_hwnd;
+                    *slot = next_hwnd;
                     return BOOL::from(false);
                 }
+                next = unsafe { GetWindow(next_hwnd, GW_HWNDNEXT) };
             }
         }
     }
+
     BOOL::from(true)
 }
 

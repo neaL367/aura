@@ -4,10 +4,10 @@ use windows::{
     Win32::{
         Foundation::{HWND, LPARAM, WPARAM},
         UI::WindowsAndMessaging::{
-            EnumWindows, FindWindowExW, FindWindowW, GWL_STYLE, GetWindowLongPtrW,
-            SEND_MESSAGE_TIMEOUT_FLAGS, SW_SHOW, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE,
-            SendMessageTimeoutW, SetParent, SetWindowLongPtrW, SetWindowPos, ShowWindow, WS_CHILD,
-            WS_POPUP, WS_VISIBLE,
+            EnumWindows, FindWindowExW, FindWindowW, GW_HWNDNEXT, GWL_STYLE, GetClassNameW,
+            GetDesktopWindow, GetWindow, GetWindowLongPtrW, SEND_MESSAGE_TIMEOUT_FLAGS, SW_SHOW,
+            SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SendMessageTimeoutW, SetParent,
+            SetWindowLongPtrW, SetWindowPos, ShowWindow, WS_CHILD, WS_POPUP, WS_VISIBLE,
         },
     },
     core::{BOOL, w},
@@ -20,16 +20,8 @@ use crate::error::PlatformError;
 // ---------------------------------------------------------------------------
 
 /// Manages the WorkerW attachment lifecycle for a set of host windows.
-///
-/// # Algorithm (same as workerw-proof tool — now production quality)
-///
-/// 1. `FindWindow("Progman")` → locate Program Manager.
-/// 2. `SendMessageTimeout(progman, 0x052C, …)` → trigger WorkerW insertion.
-/// 3. `EnumWindows` → find the empty WorkerW (below SHELLDLL_DefView layer).
-/// 4. `SetParent(hwnd, workerw)` for each host window.
-/// 5. On `TaskbarCreated`: repeat steps 1–4 with fresh host windows.
 pub struct WorkerWManager {
-    /// Currently known WorkerW HWND.  May be null if not yet attached.
+    /// Currently known WorkerW HWND. May be null if not yet attached.
     current_workerw: HWND,
 }
 
@@ -83,7 +75,7 @@ impl Default for WorkerWManager {
 // Core functions (also used by host_window.rs)
 // ---------------------------------------------------------------------------
 
-/// Single pass: send 0x052C and poll EnumWindows once.
+/// Single pass: scan EnumWindows for empty WorkerW.
 fn find_workerw_once() -> std::result::Result<HWND, PlatformError> {
     let mut found = HWND(ptr::null_mut());
     unsafe {
@@ -96,21 +88,41 @@ fn find_workerw_once() -> std::result::Result<HWND, PlatformError> {
     }
 }
 
-/// Send 0x052C to Progman, locate the target WorkerW with retry.
+/// Send 0x052C to Progman/Desktop, locate the target WorkerW with retry.
 ///
 /// Polls for the WorkerW up to ~2 seconds (8 × 250ms).
 pub(crate) fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformError> {
-    // Step 1: Find Progman (once — it doesn't vanish during our retry window).
-    let progman = unsafe { FindWindowW(w!("Progman"), None) }?;
+    // Step 1: Find Progman or Desktop.
+    let mut progman = unsafe { FindWindowW(w!("Progman"), None) }.unwrap_or_default();
     if progman.0.is_null() {
-        return Err(PlatformError::WorkerWNotFound);
+        unsafe {
+            let _ = EnumWindows(
+                Some(find_progman_callback),
+                LPARAM(&raw mut progman as isize),
+            );
+        }
     }
+
+    let target_msg_hwnd = if !progman.0.is_null() {
+        progman
+    } else {
+        unsafe { GetDesktopWindow() }
+    };
 
     // Step 2: Send 0x052C (idempotent).
     let mut _result: usize = 0;
     unsafe {
         SendMessageTimeoutW(
-            progman,
+            target_msg_hwnd,
+            0x052C,
+            WPARAM(0x0D),
+            LPARAM(1),
+            SEND_MESSAGE_TIMEOUT_FLAGS(0),
+            1000,
+            Some(&raw mut _result),
+        );
+        SendMessageTimeoutW(
+            target_msg_hwnd,
             0x052C,
             WPARAM(0),
             LPARAM(0),
@@ -133,23 +145,63 @@ pub(crate) fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformEr
     Err(PlatformError::WorkerWNotFound)
 }
 
+unsafe extern "system" fn find_progman_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let mut class_buf = [0u16; 256];
+    let len = unsafe { GetClassNameW(hwnd, &mut class_buf) };
+    let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
+    if class_name == "Progman" {
+        let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
+        *slot = hwnd;
+        return BOOL::from(false);
+    }
+    BOOL::from(true)
+}
+
 /// EnumWindows callback: locates the empty WorkerW below the icon layer.
 ///
 /// # Safety
 /// `lparam` must be a valid `*mut HWND` for the duration of `EnumWindows`.
 unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let mut class_buf = [0u16; 256];
+    let len = unsafe { GetClassNameW(hwnd, &mut class_buf) };
+    let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
+
+    // Check 1: Is this a top-level WorkerW window without SHELLDLL_DefView?
+    if class_name == "WorkerW" {
+        let def_view = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) };
+        let has_def_view = match def_view {
+            Ok(h) => !h.0.is_null(),
+            Err(_) => false,
+        };
+
+        if !has_def_view {
+            let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
+            *slot = hwnd;
+            return BOOL::from(false);
+        }
+    }
+
+    // Check 2: Is this a top-level window hosting SHELLDLL_DefView? If so, check Z-order sibling below it.
     if let Ok(def_view) = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) } {
         if !def_view.0.is_null() {
-            if let Ok(target_hwnd) = unsafe { FindWindowExW(None, Some(hwnd), w!("WorkerW"), None) }
-            {
-                if !target_hwnd.0.is_null() {
+            let mut next = unsafe { GetWindow(hwnd, GW_HWNDNEXT) };
+            while let Ok(next_hwnd) = next {
+                if next_hwnd.0.is_null() {
+                    break;
+                }
+                let mut c_buf = [0u16; 256];
+                let c_len = unsafe { GetClassNameW(next_hwnd, &mut c_buf) };
+                let c_name = String::from_utf16_lossy(&c_buf[..c_len as usize]);
+                if c_name == "WorkerW" {
                     let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
-                    *slot = target_hwnd;
+                    *slot = next_hwnd;
                     return BOOL::from(false);
                 }
+                next = unsafe { GetWindow(next_hwnd, GW_HWNDNEXT) };
             }
         }
     }
+
     BOOL::from(true)
 }
 
@@ -164,6 +216,7 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
             (style & !(WS_POPUP.0 as isize)) | WS_CHILD.0 as isize | WS_VISIBLE.0 as isize;
         SetWindowLongPtrW(host_hwnd, GWL_STYLE, new_style);
 
+        // Update window position and force frame update.
         let _ = SetWindowPos(
             host_hwnd,
             None,
@@ -173,7 +226,9 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED,
         );
+
         let _ = ShowWindow(host_hwnd, SW_SHOW);
     }
+
     Ok(())
 }
