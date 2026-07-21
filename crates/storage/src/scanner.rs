@@ -11,12 +11,17 @@ impl LibraryScanner {
     /// Scan a set of directory paths and return all discovered `WallpaperMeta` items.
     pub fn scan_paths(paths: &[PathBuf]) -> Vec<WallpaperMeta> {
         let mut results = Vec::new();
-        for dir in paths {
-            if !dir.is_dir() {
-                warn!("Scan path {:?} is not a directory or does not exist", dir);
-                continue;
+        for path in paths {
+            if path.is_dir() {
+                Self::scan_directory(path, &mut results);
+            } else if path.is_file() {
+                let meta = Self::inspect_file(path);
+                if let Some(meta) = meta {
+                    results.push(meta);
+                }
+            } else {
+                warn!("Scan path {:?} is not a valid file or directory", path);
             }
-            Self::scan_directory(dir, &mut results);
         }
         info!(
             "Library scan complete — discovered {} wallpapers",

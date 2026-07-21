@@ -22,6 +22,9 @@ impl LibraryPanel {
                     if ui.button("➕ Add Folder").clicked() {
                         self.pick_and_add_folder(ipc_client);
                     }
+                    if ui.button("📄 Add File(s)").clicked() {
+                        self.pick_and_add_files(ipc_client);
+                    }
                 });
             });
 
@@ -33,9 +36,14 @@ impl LibraryPanel {
                     ui.add_space(40.0);
                     ui.label("No wallpapers found in library scan paths.");
                     ui.add_space(10.0);
-                    if ui.button("➕ Add Wallpaper Directory").clicked() {
-                        self.pick_and_add_folder(ipc_client);
-                    }
+                    ui.horizontal(|ui| {
+                        if ui.button("📄 Add File(s)").clicked() {
+                            self.pick_and_add_files(ipc_client);
+                        }
+                        if ui.button("➕ Add Folder").clicked() {
+                            self.pick_and_add_folder(ipc_client);
+                        }
+                    });
                 });
                 return;
             }
@@ -51,8 +59,23 @@ impl LibraryPanel {
     }
 
     fn pick_and_add_folder(&self, ipc_client: &UiIpcClient) {
-        if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+        let folder = rfd::FileDialog::new().pick_folder();
+        if let Some(folder) = folder {
             ipc_client.send(Request::AddScanPath { path: folder });
+        }
+    }
+
+    fn pick_and_add_files(&self, ipc_client: &UiIpcClient) {
+        let files = rfd::FileDialog::new()
+            .add_filter(
+                "Media Files",
+                &["png", "jpg", "jpeg", "bmp", "webp", "gif", "mp4", "webm"],
+            )
+            .pick_files();
+        if let Some(files) = files {
+            for file in files {
+                ipc_client.send(Request::AddScanPath { path: file });
+            }
         }
     }
 

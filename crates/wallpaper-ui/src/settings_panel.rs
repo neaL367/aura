@@ -19,6 +19,19 @@ impl SettingsPanel {
                 ui.add_space(4.0);
 
                 ui.horizontal(|ui| {
+                    if ui.button("📄 Add File(s)").clicked() {
+                        let files = rfd::FileDialog::new()
+                            .add_filter(
+                                "Media Files",
+                                &["png", "jpg", "jpeg", "bmp", "webp", "gif", "mp4", "webm"],
+                            )
+                            .pick_files();
+                        if let Some(files) = files {
+                            for file in files {
+                                ipc_client.send(Request::AddScanPath { path: file });
+                            }
+                        }
+                    }
                     if ui.button("➕ Add Scan Folder").clicked() {
                         let folder = rfd::FileDialog::new().pick_folder();
                         if let Some(folder) = folder {

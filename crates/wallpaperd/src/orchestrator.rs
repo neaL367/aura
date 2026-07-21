@@ -24,18 +24,19 @@ impl Orchestrator {
     pub fn new(active_monitors: usize, shutdown_tx: crossbeam_channel::Sender<()>) -> Self {
         let config_path = ConfigStore::default_path();
         let config_store = ConfigStore::new(&config_path);
-        let config = config_store.load().unwrap_or_default();
+        let mut config = config_store.load().unwrap_or_default();
+        if config.library.scan_paths.is_empty() {
+            config.library.scan_paths = aura_core::config::LibraryConfig::default().scan_paths;
+            let _ = config_store.save(&config);
+        }
 
         let library_path = config_path.with_file_name("library.json");
         let library_store = LibraryStore::new(&library_path);
 
-        let mut library_items = library_store.load().unwrap_or_default();
+        let mut library_items = Vec::new();
         if !config.library.scan_paths.is_empty() {
-            let scanned = LibraryScanner::scan_paths(&config.library.scan_paths);
-            if !scanned.is_empty() {
-                library_items = scanned;
-                let _ = library_store.save(&library_items);
-            }
+            library_items = LibraryScanner::scan_paths(&config.library.scan_paths);
+            let _ = library_store.save(&library_items);
         }
 
         info!(
@@ -111,10 +112,10 @@ impl Orchestrator {
                 if !config.library.scan_paths.contains(&path) {
                     config.library.scan_paths.push(path);
                     let _ = state.config_store.save(&config);
-                    let scanned = LibraryScanner::scan_paths(&config.library.scan_paths);
-                    state.library_items = scanned;
-                    let _ = state.library_store.save(&state.library_items);
                 }
+                let scanned = LibraryScanner::scan_paths(&config.library.scan_paths);
+                state.library_items = scanned;
+                let _ = state.library_store.save(&state.library_items);
                 Response::Ok
             }
             Request::RemoveScanPath { path } => {
