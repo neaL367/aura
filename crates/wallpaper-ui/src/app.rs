@@ -58,7 +58,7 @@ impl eframe::App for AuraApp {
 
         match self.active_tab {
             Tab::Library => {
-                self.library.show(ui);
+                self.library.show(ui, &self.ipc_client);
             }
             Tab::Monitors => {
                 self.monitor.show(ui);

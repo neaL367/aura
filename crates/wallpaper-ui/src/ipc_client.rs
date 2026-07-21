@@ -1,5 +1,5 @@
 use aura_ipc::client::IpcClient;
-use aura_ipc::protocol::{DaemonStatus, Request, Response};
+use aura_ipc::protocol::{DaemonStatus, Request, Response, WallpaperEntry};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -13,6 +13,7 @@ pub enum ConnectionStatus {
 
 pub struct UiIpcClient {
     status: Arc<Mutex<ConnectionStatus>>,
+    wallpapers: Arc<Mutex<Vec<WallpaperEntry>>>,
     cmd_tx: tokio::sync::mpsc::UnboundedSender<(
         Request,
         tokio::sync::oneshot::Sender<Result<Response, String>>,
@@ -22,7 +23,10 @@ pub struct UiIpcClient {
 impl UiIpcClient {
     pub fn new() -> Self {
         let status = Arc::new(Mutex::new(ConnectionStatus::Connecting));
+        let wallpapers = Arc::new(Mutex::new(Vec::new()));
         let status_clone = status.clone();
+        let wallpapers_clone = wallpapers.clone();
+
         let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<(
             Request,
             tokio::sync::oneshot::Sender<Result<Response, String>>,
@@ -66,12 +70,24 @@ impl UiIpcClient {
                                     }
                                 }
 
+                                // Initial wallpaper list fetch
+                                if let Ok(Response::WallpaperList(list)) = client.send(Request::ListWallpapers).await {
+                                    *wallpapers_clone.lock().unwrap() = list;
+                                }
+
                                 loop {
                                     tokio::select! {
                                         cmd = cmd_rx.recv() => {
                                             match cmd {
                                                 Some((req, resp_tx)) => {
+                                                    let is_refresh = matches!(req, Request::RefreshLibrary);
                                                     let res = client.send(req).await.map_err(|e| e.to_string());
+                                                    if is_refresh {
+                                                        let fetch_res = client.send(Request::ListWallpapers).await;
+                                                        if let Ok(Response::WallpaperList(list)) = fetch_res {
+                                                            *wallpapers_clone.lock().unwrap() = list;
+                                                        }
+                                                    }
                                                     let _ = resp_tx.send(res);
                                                 }
                                                 None => return,
@@ -102,11 +118,23 @@ impl UiIpcClient {
             })
             .expect("Failed to spawn UI IPC worker thread");
 
-        Self { status, cmd_tx }
+        Self {
+            status,
+            wallpapers,
+            cmd_tx,
+        }
     }
 
     pub fn status(&self) -> ConnectionStatus {
         self.status.lock().unwrap().clone()
+    }
+
+    pub fn wallpapers(&self) -> Vec<WallpaperEntry> {
+        self.wallpapers.lock().unwrap().clone()
+    }
+
+    pub fn fetch_wallpapers(&self) {
+        self.send(Request::ListWallpapers);
     }
 
     pub fn send(&self, req: Request) {
