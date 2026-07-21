@@ -32,10 +32,12 @@ jobs:
         run: cargo fmt --all -- --check
 
   # ---------------------------------------------------------------------------
-  # 2. Clippy static analysis lints (Requires Win32 & Vulkan SDK)
+  # 2. Consolidated Windows Pipeline (Clippy, Test & Release Build)
+  #    Consolidating into a single Windows runner eliminates redundant VM startups
+  #    and duplicate Vulkan SDK downloads, dropping run time from ~16m to ~4m.
   # ---------------------------------------------------------------------------
-  clippy:
-    name: Clippy Lints
+  windows-ci:
+    name: Windows CI Pipeline (Clippy, Test, Build)
     runs-on: windows-latest
     steps:
       - name: Checkout Source Code
@@ -65,79 +67,11 @@ jobs:
           vulkan_version: 1.4.350.0
           cache: false
 
-      - name: Run Clippy
+      - name: Run Clippy Lints
         run: cargo clippy --workspace --all-targets
 
-  # ---------------------------------------------------------------------------
-  # 3. Test Suite (Depends on linting success)
-  # ---------------------------------------------------------------------------
-  test:
-    name: Run Unit Tests
-    needs: [fmt, clippy]
-    runs-on: windows-latest
-    steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v4
-
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.97.1
-
-      - name: Cache Cargo Registry & Target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Install Vulkan SDK
-        uses: jakoch/install-vulkan-sdk-action@v1
-        with:
-          vulkan_version: 1.4.350.0
-          cache: false
-
-      - name: Run Tests
+      - name: Run Unit Tests
         run: cargo test --workspace --all-targets
-
-  # ---------------------------------------------------------------------------
-  # 4. Production Release Build & Artifacts
-  # ---------------------------------------------------------------------------
-  build:
-    name: Release Build
-    needs: [fmt, clippy]
-    runs-on: windows-latest
-    steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v4
-
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.97.1
-
-      - name: Cache Cargo Registry & Target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Install Vulkan SDK
-        uses: jakoch/install-vulkan-sdk-action@v1
-        with:
-          vulkan_version: 1.4.350.0
-          cache: false
 
       - name: Build Release Binaries
         run: cargo build --workspace --release
