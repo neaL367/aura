@@ -151,10 +151,7 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
 }
 
 /// Reparent `host_hwnd` into `workerw` and apply the correct window style.
-pub fn attach_to_workerw(
-    host_hwnd: HWND,
-    workerw: HWND,
-) -> std::result::Result<(), PlatformError> {
+pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<(), PlatformError> {
     unsafe {
         SetParent(host_hwnd, Some(workerw))?;
 

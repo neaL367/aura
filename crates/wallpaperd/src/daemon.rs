@@ -1,13 +1,13 @@
 use std::time::Duration;
 
+use aura_platform_windows::PlatformError;
 use aura_platform_windows::event_pump::{EventPump, HostEvent};
 use aura_platform_windows::host_window::HostWindow;
 use aura_platform_windows::monitor_enum::MonitorEnumerator;
 use aura_platform_windows::singleton::ProcessSingleton;
-use aura_platform_windows::workerw::{attach_to_workerw, WorkerWManager};
-use aura_platform_windows::PlatformError;
-use aura_renderer_vulkan::monitor_renderer::MonitorRenderer;
+use aura_platform_windows::workerw::{WorkerWManager, attach_to_workerw};
 use aura_renderer_vulkan::VulkanContext;
+use aura_renderer_vulkan::monitor_renderer::MonitorRenderer;
 use crossbeam_channel::RecvTimeoutError;
 use thiserror::Error;
 
@@ -98,9 +98,9 @@ pub(crate) fn run() -> Result<(), DaemonError> {
                 Ok(mut ctx) => {
                     // Upload a 1×1 white fallback so the descriptor set is valid.
                     let white = [255u8; 4];
-                    let _ = ctx.renderer.set_wallpaper_pixels(
-                        &mut vulkan_context, 1, 1, &white,
-                    );
+                    let _ = ctx
+                        .renderer
+                        .set_wallpaper_pixels(&mut vulkan_context, 1, 1, &white);
                     contexts.push(ctx);
                 }
                 Err(e) => tracing::error!("Failed to create monitor context: {}", e),

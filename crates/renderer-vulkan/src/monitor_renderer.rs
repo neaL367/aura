@@ -119,10 +119,7 @@ impl MonitorRenderer {
         unsafe {
             context
                 .device
-                .reset_command_buffer(
-                    self.command_buffer,
-                    vk::CommandBufferResetFlags::empty(),
-                )
+                .reset_command_buffer(self.command_buffer, vk::CommandBufferResetFlags::empty())
                 .ok();
         }
 
@@ -173,15 +170,19 @@ impl MonitorRenderer {
         };
 
         unsafe {
-            context
-                .device
-                .cmd_set_viewport(self.command_buffer, 0, std::slice::from_ref(&viewport));
+            context.device.cmd_set_viewport(
+                self.command_buffer,
+                0,
+                std::slice::from_ref(&viewport),
+            );
             context
                 .device
                 .cmd_set_scissor(self.command_buffer, 0, std::slice::from_ref(&scissor));
-            context
-                .device
-                .cmd_bind_pipeline(self.command_buffer, vk::PipelineBindPoint::GRAPHICS, self.pipeline.pipeline);
+            context.device.cmd_bind_pipeline(
+                self.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline.pipeline,
+            );
         }
 
         // Bind texture descriptor set if available
@@ -200,19 +201,12 @@ impl MonitorRenderer {
 
         // Draw fullscreen quad (6 vertices, no index buffer)
         unsafe {
-            context
-                .device
-                .cmd_draw(self.command_buffer, 6, 1, 0, 0);
+            context.device.cmd_draw(self.command_buffer, 6, 1, 0, 0);
         }
 
         unsafe {
-            context
-                .device
-                .cmd_end_render_pass(self.command_buffer);
-            context
-                .device
-                .end_command_buffer(self.command_buffer)
-                .ok();
+            context.device.cmd_end_render_pass(self.command_buffer);
+            context.device.end_command_buffer(self.command_buffer).ok();
         }
 
         let wait_semaphores = [self.frame_sync.image_available_semaphore];
@@ -328,7 +322,9 @@ impl MonitorRenderer {
             }
 
             destroy_framebuffers(&context.device, &mut self.framebuffers);
-            context.device.destroy_descriptor_pool(self.descriptor_pool, None);
+            context
+                .device
+                .destroy_descriptor_pool(self.descriptor_pool, None);
             context.device.destroy_command_pool(self.command_pool, None);
             self.pipeline.destroy(&context.device);
             self.frame_sync.destroy(&context.device);
