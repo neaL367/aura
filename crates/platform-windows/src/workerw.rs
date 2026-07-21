@@ -1,17 +1,16 @@
-use std::mem;
 use std::ptr;
 
 use windows::{
     Win32::{
         Foundation::{HWND, LPARAM, WPARAM},
         UI::WindowsAndMessaging::{
-            EnumWindows, FindWindowExW, FindWindowW, GWL_STYLE, GetSystemMetrics,
-            GetWindowLongPtrW, MoveWindow, SEND_MESSAGE_TIMEOUT_FLAGS, SM_CXSCREEN, SM_CYSCREEN,
-            SW_SHOW, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SendMessageTimeoutW, SetParent,
-            SetWindowLongPtrW, SetWindowPos, ShowWindow, WS_CHILD, WS_POPUP, WS_VISIBLE,
+            EnumWindows, FindWindowExW, FindWindowW, GWL_STYLE, GetWindowLongPtrW,
+            SEND_MESSAGE_TIMEOUT_FLAGS, SW_SHOW, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE,
+            SendMessageTimeoutW, SetParent, SetWindowLongPtrW, SetWindowPos, ShowWindow, WS_CHILD,
+            WS_POPUP, WS_VISIBLE,
         },
     },
-    core::{BOOL, Error, Result, w},
+    core::{BOOL, w},
 };
 
 use crate::error::PlatformError;

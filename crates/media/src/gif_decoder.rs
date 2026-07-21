@@ -49,7 +49,7 @@ impl GifDecoder {
             .bg_color()
             .map(|c| {
                 let palette = decoder.global_palette().unwrap_or(&[]);
-                let idx = (c as usize) * 3;
+                let idx = c * 3;
                 if idx + 2 < palette.len() {
                     [palette[idx], palette[idx + 1], palette[idx + 2], 0xFF]
                 } else {

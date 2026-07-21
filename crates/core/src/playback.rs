@@ -7,18 +7,13 @@ use serde::{Deserialize, Serialize};
 /// Current playback state for an animated wallpaper (GIF or Video).
 ///
 /// For static images this is always `Playing` once loaded.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum PlaybackState {
     Playing,
     Paused,
     /// Decoder has not produced any frames yet.
+    #[default]
     Buffering,
-}
-
-impl Default for PlaybackState {
-    fn default() -> Self {
-        Self::Buffering
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -45,18 +40,13 @@ pub enum PlaybackCommand {
 /// Performance behaviour profile for the wallpaper daemon.
 ///
 /// Applied when the system enters specific states.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum PerformanceProfile {
     /// Render at full rate; no restrictions.
     Maximum,
     /// Reduce frame rate to conserve power.
+    #[default]
     Balanced,
     /// Pause all rendering.
     Paused,
-}
-
-impl Default for PerformanceProfile {
-    fn default() -> Self {
-        Self::Balanced
-    }
 }

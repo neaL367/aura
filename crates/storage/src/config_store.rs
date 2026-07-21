@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use aura_core::config::{AppConfig, CONFIG_VERSION};
 use tracing::{info, warn};

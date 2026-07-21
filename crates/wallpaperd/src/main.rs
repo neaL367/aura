@@ -8,6 +8,8 @@
 //! - Own the IPC server.
 //! - Dispatch PlaybackCommands to decode worker threads.
 
+#![allow(dead_code)]
+
 mod assignment;
 mod daemon;
 mod decode_worker;

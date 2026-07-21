@@ -1,18 +1,16 @@
 use std::mem;
-use std::ptr;
 
 use windows::{
     Win32::{
         Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM},
         System::LibraryLoader::GetModuleHandleW,
         UI::WindowsAndMessaging::{
-            CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DestroyWindow, HMENU,
-            IDC_ARROW, LoadCursorW, RegisterClassExW, SW_SHOW, ShowWindow, WINDOW_EX_STYLE,
-            WM_DESTROY, WNDCLASSEXW, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_NOREDIRECTIONBITMAP,
-            WS_POPUP,
+            CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DestroyWindow, IDC_ARROW,
+            LoadCursorW, RegisterClassExW, WM_DESTROY, WNDCLASSEXW, WS_CLIPCHILDREN,
+            WS_CLIPSIBLINGS, WS_EX_NOREDIRECTIONBITMAP, WS_POPUP,
         },
     },
-    core::{Error, Result, w},
+    core::{Error, w},
 };
 
 use crate::error::PlatformError;
@@ -45,7 +43,7 @@ impl HostWindow {
     ///
     /// - `WS_POPUP` — top-level initially; later reparented into WorkerW.
     /// - `WS_EX_NOREDIRECTIONBITMAP` — skip DWM redirection; required for
-    ///    direct GPU presentation (Vulkan surface).
+    ///   direct GPU presentation (Vulkan surface).
     pub fn create() -> std::result::Result<Self, PlatformError> {
         ensure_class_registered()?;
 

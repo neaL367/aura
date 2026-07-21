@@ -1,10 +1,12 @@
-/// SPIR-V shader blobs compiled at build time by `build.rs` via `glslc`.
-///
-/// The `build.rs` script invokes:
-///   `$VULKAN_SDK/Bin/glslc.exe src/shaders/wallpaper.vert -o out/wallpaper.vert.spv`
-///   `$VULKAN_SDK/Bin/glslc.exe src/shaders/wallpaper.frag -o out/wallpaper.frag.spv`
-///
-/// The compiled blobs are embedded at compile time via `include_bytes!`.
+//! SPIR-V shader blobs compiled at build time by `build.rs` via `glslc`.
+//!
+//! The `build.rs` script invokes:
+//! ```text
+//! $VULKAN_SDK/Bin/glslc.exe src/shaders/wallpaper.vert -o out/wallpaper.vert.spv
+//! $VULKAN_SDK/Bin/glslc.exe src/shaders/wallpaper.frag -o out/wallpaper.frag.spv
+//! ```
+//!
+//! The compiled blobs are embedded at compile time via `include_bytes!`.
 
 /// Vertex shader SPIR-V for the wallpaper quad.
 pub fn vertex_shader_spv() -> &'static [u8] {

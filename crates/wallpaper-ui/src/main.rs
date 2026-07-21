@@ -6,6 +6,8 @@
 //! `aura-media`, `aura-platform-windows`, or `aura-renderer-vulkan`.
 //! All daemon communication goes through `aura-ipc`.
 
+#![allow(dead_code)]
+
 mod app;
 mod ipc_client;
 mod library_panel;

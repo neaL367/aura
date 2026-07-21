@@ -1,11 +1,9 @@
-use std::ptr;
-
 use windows::{
     Win32::{
-        Foundation::{CloseHandle, HANDLE, WAIT_ABANDONED},
-        System::Threading::{CreateMutexW, MUTEX_ALL_ACCESS, ReleaseMutex, WaitForSingleObject},
+        Foundation::{CloseHandle, HANDLE},
+        System::Threading::{CreateMutexW, ReleaseMutex},
     },
-    core::{Error, Result, w},
+    core::w,
 };
 
 use crate::error::PlatformError;

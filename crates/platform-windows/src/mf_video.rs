@@ -21,6 +21,7 @@ use crate::error::PlatformError;
 /// - `MFCreateDXGIDeviceManager` + D3D11↔Vulkan interop
 /// - Zero-copy via external memory extension
 pub struct MfVideoDecoder {
+    #[allow(dead_code)]
     path: std::path::PathBuf,
     width: u32,
     height: u32,

@@ -1,12 +1,7 @@
-use std::ptr;
-
 use windows::{
     Win32::{
         Foundation::{LPARAM, RECT},
-        Graphics::Gdi::{
-            EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST,
-            MONITORINFOEXW, MonitorFromWindow,
-        },
+        Graphics::Gdi::{EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFOEXW},
         UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
     },
     core::BOOL,

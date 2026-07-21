@@ -41,16 +41,16 @@ const CLASS_RENDER: windows::core::PCWSTR = w!("AuraProof_Render");
 
 thread_local! {
     /// Message ID for "TaskbarCreated" — registered at startup, stable per session.
-    static TASKBAR_MSG_ID: Cell<u32> = Cell::new(0);
+    static TASKBAR_MSG_ID: Cell<u32> = const { Cell::new(0) };
 
     /// Current render window HWND (as isize). Replaced after each Explorer restart.
-    static RENDER_HWND_RAW: Cell<isize> = Cell::new(0);
+    static RENDER_HWND_RAW: Cell<isize> = const { Cell::new(0) };
 
     /// HINSTANCE for this process — needed to recreate windows from WndProc.
-    static HINSTANCE_RAW: Cell<isize> = Cell::new(0);
+    static HINSTANCE_RAW: Cell<isize> = const { Cell::new(0) };
 
     /// Total successful WorkerW attachments (for proof output).
-    static ATTACH_COUNT: Cell<u32> = Cell::new(0);
+    static ATTACH_COUNT: Cell<u32> = const { Cell::new(0) };
 }
 
 // ---------------------------------------------------------------------------

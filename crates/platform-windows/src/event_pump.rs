@@ -49,7 +49,7 @@ impl EventPump {
     ///
     /// The thread runs a Win32 message loop and sends `HostEvent`s.
     pub fn spawn(self) -> std::thread::JoinHandle<()> {
-        let sender = self.sender.clone();
+        let _sender = self.sender.clone();
         std::thread::Builder::new()
             .name("aura-event-pump".into())
             .spawn(move || {
