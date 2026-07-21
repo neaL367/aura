@@ -1,53 +1,80 @@
-[package]
-name = "aura"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = [
+    "crates/core",
+    "crates/ipc",
+    "crates/storage",
+    "crates/media",
+    "crates/platform-windows",
+    "crates/renderer-vulkan",
+    "crates/wallpaperd",
+    "crates/wallpaper-ui",
+    "tools/workerw-proof",
+]
+resolver = "2"
 
-[dependencies]
-# Win32 API access
-windows = { version = "0.62.2", features = [
-    "Win32_Foundation",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_Graphics_Direct3D",
-    "Win32_Graphics_Direct3D_Fxc",
-    "Win32_Graphics_Direct3D11",
-    "Win32_Graphics_Dxgi",
-    "Win32_Graphics_Dxgi_Common",
-    "Win32_Graphics_Imaging",
-    "Win32_Media_MediaFoundation",
-    "Win32_System_Com",
-    "Win32_System_Com_StructuredStorage",
-    "Win32_System_LibraryLoader",
-    "Win32_System_Threading",
-    "Win32_System_Power",
-    "Win32_System_StationsAndDesktops",
-    "Win32_Graphics_Gdi",
-    "Win32_UI_HiDpi",
-    "Win32_UI_Shell",
-    "Win32_UI_Input_KeyboardAndMouse",
-    "Win32_Security",
-    "Win32_System_SystemInformation",
-    "Win32_UI_Shell_Common",
-] }
+[workspace.package]
+version       = "0.1.0"
+edition       = "2024"
+license       = "MIT"
+authors       = ["Aura Contributors"]
+rust-version  = "1.97.1"
 
-# Serialization/Deserialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# ---------------------------------------------------------------------------
+# Shared dependency versions — all crates inherit from here.
+# Crates add feature flags on top as needed.
+# ---------------------------------------------------------------------------
+[workspace.dependencies]
 
-# Logging and Diagnostics
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Serialisation
+serde        = { version = "1.0.229", features = ["derive"] }
+serde_json   = "1.0"
+toml         = "1.1"
 
-# Utilities
-thiserror = "1.0"
+# Errors & logging
+thiserror          = "2.0"
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Async runtime (IPC, UI reconnect)
+tokio = { version = "1", features = ["full"] }
+
+# Identifiers
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
+
+# Bounded channels (frame pipeline, event queues)
 crossbeam-channel = "0.5"
 
-# Image processing fallback
-image = { version = "0.25", default-features = false, features = ["webp"] }
+# Windows APIs — only platform-windows, renderer-vulkan, workerw-proof depend on this
+windows = "0.62"
 
-# GUI — egui version MUST match the version egui-directx11 compiles against internally.
-# egui-directx11 v0.12.1 transitively requires egui v0.33.3; using a higher version
-# produces a FullOutput type mismatch because Cargo pulls in two different egui crates.
-# Do NOT bump egui without first checking `cargo tree -p egui-directx11`.
-egui = "0.33.3"
-egui-directx11 = "0.12.1"
+# Vulkan — only renderer-vulkan depends on this
+ash            = { version = "0.38", default-features = false, features = ["loaded"] }
+gpu-allocator  = { version = "0.28", default-features = false, features = ["vulkan"] }
+
+# Media decoding — only media crate depends on this
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif", "webp", "tiff"] }
+gif   = "0.14"
+
+# UI — only wallpaper-ui depends on this
+eframe = { version = "0.35", default-features = false, features = ["default_fonts", "wgpu"] }
+egui   = "0.35"
+
+# Internal workspace crates
+aura-core             = { path = "crates/core" }
+aura-ipc              = { path = "crates/ipc" }
+aura-storage          = { path = "crates/storage" }
+aura-media            = { path = "crates/media" }
+aura-platform-windows = { path = "crates/platform-windows" }
+aura-renderer-vulkan  = { path = "crates/renderer-vulkan" }
+
+# ---------------------------------------------------------------------------
+# Build profiles
+# ---------------------------------------------------------------------------
+[profile.dev]
+opt-level = 1          # Faster debug builds with minimal optimisation
+
+[profile.release]
+opt-level       = 3
+lto             = "thin"
+codegen-units   = 1
+strip           = "symbols"
