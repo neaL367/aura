@@ -2,7 +2,7 @@ use ash::vk;
 
 use crate::{context::VulkanContext, error::VulkanError};
 
-/// Vulkan Graphics Pipeline for rendering quad wallpaper textures.
+/// Vulkan Graphics Pipeline for rendering full-screen textured wallpaper quads.
 pub struct GraphicsPipeline {
     pub descriptor_set_layout: vk::DescriptorSetLayout,
     pub pipeline_layout: vk::PipelineLayout,
@@ -82,8 +82,112 @@ impl GraphicsPipeline {
                 .map_err(|e| VulkanError::Pipeline(e.to_string()))?
         };
 
-        // Null pipeline placeholder until shader compilation step
-        let pipeline = vk::Pipeline::null();
+        // 4. Create shader modules from embedded SPIR-V bytecode
+        let vert_code = crate::shader::vertex_shader_spv();
+        let frag_code = crate::shader::fragment_shader_spv();
+
+        let vert_words = ash::util::read_spv(&mut std::io::Cursor::new(vert_code))
+            .map_err(|e| VulkanError::ShaderCompilation(e.to_string()))?;
+        let frag_words = ash::util::read_spv(&mut std::io::Cursor::new(frag_code))
+            .map_err(|e| VulkanError::ShaderCompilation(e.to_string()))?;
+
+        let vert_module_info = vk::ShaderModuleCreateInfo::default().code(&vert_words);
+        let frag_module_info = vk::ShaderModuleCreateInfo::default().code(&frag_words);
+
+        let vert_module = unsafe {
+            context
+                .device
+                .create_shader_module(&vert_module_info, None)
+                .map_err(|e| VulkanError::ShaderCompilation(e.to_string()))?
+        };
+
+        let frag_module = unsafe {
+            context
+                .device
+                .create_shader_module(&frag_module_info, None)
+                .map_err(|e| VulkanError::ShaderCompilation(e.to_string()))?
+        };
+
+        let main_name = c"main";
+        let shader_stages = [
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::VERTEX)
+                .module(vert_module)
+                .name(main_name),
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::FRAGMENT)
+                .module(frag_module)
+                .name(main_name),
+        ];
+
+        // 5. Create Graphics Pipeline state
+        let viewport_state = vk::PipelineViewportStateCreateInfo::default()
+            .viewport_count(1)
+            .scissor_count(1);
+
+        let rasterizer = vk::PipelineRasterizationStateCreateInfo::default()
+            .depth_clamp_enable(false)
+            .rasterizer_discard_enable(false)
+            .polygon_mode(vk::PolygonMode::FILL)
+            .line_width(1.0)
+            .cull_mode(vk::CullModeFlags::NONE)
+            .front_face(vk::FrontFace::COUNTER_CLOCKWISE);
+
+        let multisampling = vk::PipelineMultisampleStateCreateInfo::default()
+            .sample_shading_enable(false)
+            .rasterization_samples(vk::SampleCountFlags::TYPE_1);
+
+        let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
+            .color_write_mask(
+                vk::ColorComponentFlags::R
+                    | vk::ColorComponentFlags::G
+                    | vk::ColorComponentFlags::B
+                    | vk::ColorComponentFlags::A,
+            )
+            .blend_enable(false);
+
+        let color_blending = vk::PipelineColorBlendStateCreateInfo::default()
+            .logic_op_enable(false)
+            .attachments(std::slice::from_ref(&color_blend_attachment));
+
+        let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+        let dynamic_state =
+            vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
+
+        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default();
+        let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
+            .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
+            .primitive_restart_enable(false);
+
+        let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
+            .stages(&shader_stages)
+            .vertex_input_state(&vertex_input_info)
+            .input_assembly_state(&input_assembly)
+            .viewport_state(&viewport_state)
+            .rasterization_state(&rasterizer)
+            .multisample_state(&multisampling)
+            .color_blend_state(&color_blending)
+            .dynamic_state(&dynamic_state)
+            .layout(pipeline_layout)
+            .render_pass(render_pass)
+            .subpass(0);
+
+        let pipeline = unsafe {
+            context
+                .device
+                .create_graphics_pipelines(
+                    vk::PipelineCache::null(),
+                    std::slice::from_ref(&pipeline_info),
+                    None,
+                )
+                .map_err(|(_, e)| VulkanError::Pipeline(e.to_string()))?[0]
+        };
+
+        // Clean up temporary shader module handles
+        unsafe {
+            context.device.destroy_shader_module(vert_module, None);
+            context.device.destroy_shader_module(frag_module, None);
+        }
 
         Ok(Self {
             descriptor_set_layout,
