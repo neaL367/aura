@@ -30,8 +30,10 @@ impl ConfigStore {
     /// - Old version  → migrates in memory and saves back.
     pub fn load(&self) -> Result<AppConfig, StorageError> {
         if !self.path.exists() {
-            info!("No config file at {:?}; using defaults", self.path);
-            return Ok(AppConfig::default());
+            info!("No config file at {:?}; creating default config", self.path);
+            let default_cfg = AppConfig::default();
+            let _ = self.save(&default_cfg);
+            return Ok(default_cfg);
         }
 
         let raw = std::fs::read_to_string(&self.path)?;

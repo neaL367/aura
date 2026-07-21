@@ -32,6 +32,10 @@ pub enum Request {
     ResumeAll,
     /// Refresh the wallpaper library (rescan configured paths).
     RefreshLibrary,
+    /// Add a scan directory path to the wallpaper library.
+    AddScanPath { path: std::path::PathBuf },
+    /// Remove a scan directory path from the wallpaper library.
+    RemoveScanPath { path: std::path::PathBuf },
     /// Gracefully shut down the daemon.
     Shutdown,
 }

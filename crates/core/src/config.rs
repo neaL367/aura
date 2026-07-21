@@ -120,8 +120,27 @@ fn default_thumb_cache() -> usize {
 
 impl Default for LibraryConfig {
     fn default() -> Self {
+        let mut scan_paths = Vec::new();
+
+        if let Ok(user_profile) = std::env::var("USERPROFILE") {
+            let user_buf = std::path::PathBuf::from(user_profile);
+            let pics = user_buf.join("Pictures");
+            if pics.is_dir() {
+                scan_paths.push(pics.clone());
+                let walls = pics.join("Wallpapers");
+                if walls.is_dir() {
+                    scan_paths.push(walls);
+                }
+            }
+        }
+
+        let win_wall = std::path::PathBuf::from(r"C:\Windows\Web\Wallpaper");
+        if win_wall.is_dir() {
+            scan_paths.push(win_wall);
+        }
+
         Self {
-            scan_paths: Vec::new(),
+            scan_paths,
             thumbnail_cache_limit: default_thumb_cache(),
         }
     }

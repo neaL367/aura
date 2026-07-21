@@ -19,6 +19,9 @@ impl LibraryPanel {
                     if ui.button("🔄 Refresh Library").clicked() {
                         ipc_client.send(Request::RefreshLibrary);
                     }
+                    if ui.button("➕ Add Folder").clicked() {
+                        self.pick_and_add_folder(ipc_client);
+                    }
                 });
             });
 
@@ -29,7 +32,10 @@ impl LibraryPanel {
                 ui.vertical_centered(|ui| {
                     ui.add_space(40.0);
                     ui.label("No wallpapers found in library scan paths.");
-                    ui.label("Add directories to AppConfig or click 'Refresh Library'.");
+                    ui.add_space(10.0);
+                    if ui.button("➕ Add Wallpaper Directory").clicked() {
+                        self.pick_and_add_folder(ipc_client);
+                    }
                 });
                 return;
             }
@@ -42,6 +48,12 @@ impl LibraryPanel {
                 });
             });
         });
+    }
+
+    fn pick_and_add_folder(&self, ipc_client: &UiIpcClient) {
+        if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+            ipc_client.send(Request::AddScanPath { path: folder });
+        }
     }
 
     fn show_card(&self, ui: &mut egui::Ui, entry: &WallpaperEntry, ipc_client: &UiIpcClient) {

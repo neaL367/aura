@@ -17,6 +17,12 @@ fn test_request_serialization_roundtrip() {
         Request::PauseAll,
         Request::ResumeAll,
         Request::RefreshLibrary,
+        Request::AddScanPath {
+            path: std::path::PathBuf::from(r"C:\Wallpapers"),
+        },
+        Request::RemoveScanPath {
+            path: std::path::PathBuf::from(r"C:\Wallpapers"),
+        },
         Request::Shutdown,
     ];
 

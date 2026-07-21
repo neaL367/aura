@@ -106,6 +106,28 @@ impl Orchestrator {
                 let _ = state.library_store.save(&state.library_items);
                 Response::Ok
             }
+            Request::AddScanPath { path } => {
+                let mut config = state.config_store.load().unwrap_or_default();
+                if !config.library.scan_paths.contains(&path) {
+                    config.library.scan_paths.push(path);
+                    let _ = state.config_store.save(&config);
+                    let scanned = LibraryScanner::scan_paths(&config.library.scan_paths);
+                    state.library_items = scanned;
+                    let _ = state.library_store.save(&state.library_items);
+                }
+                Response::Ok
+            }
+            Request::RemoveScanPath { path } => {
+                let mut config = state.config_store.load().unwrap_or_default();
+                if let Some(pos) = config.library.scan_paths.iter().position(|p| p == &path) {
+                    config.library.scan_paths.remove(pos);
+                    let _ = state.config_store.save(&config);
+                    let scanned = LibraryScanner::scan_paths(&config.library.scan_paths);
+                    state.library_items = scanned;
+                    let _ = state.library_store.save(&state.library_items);
+                }
+                Response::Ok
+            }
             Request::Shutdown => {
                 let _ = self.shutdown_tx.send(());
                 Response::Ok
