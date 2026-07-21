@@ -1,0 +1,26 @@
+[package]
+name        = "wallpaperd"
+description = "Aura wallpaper daemon — owns WorkerW, Vulkan, decoders, and rendering"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+
+[[bin]]
+name = "wallpaperd"
+path = "src/main.rs"
+
+[dependencies]
+aura-core             = { workspace = true }
+aura-ipc              = { workspace = true }
+aura-storage          = { workspace = true }
+aura-media            = { workspace = true }
+aura-platform-windows = { workspace = true }
+aura-renderer-vulkan  = { workspace = true }
+
+serde             = { workspace = true }
+thiserror         = { workspace = true }
+tracing           = { workspace = true }
+tracing-subscriber = { workspace = true }
+tokio             = { workspace = true }
+crossbeam-channel = { workspace = true }
