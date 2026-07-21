@@ -20,13 +20,13 @@ enum Tab {
 }
 
 impl AuraApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         Self {
             library: LibraryPanel::new(),
             monitor: MonitorPanel::new(),
             settings: SettingsPanel::new(),
             status: StatusBar::new(),
-            ipc_client: UiIpcClient::new(),
+            ipc_client: UiIpcClient::new(cc.egui_ctx.clone()),
             active_tab: Tab::Library,
         }
     }

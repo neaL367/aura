@@ -21,7 +21,7 @@ pub struct UiIpcClient {
 }
 
 impl UiIpcClient {
-    pub fn new() -> Self {
+    pub fn new(ctx: egui::Context) -> Self {
         let status = Arc::new(Mutex::new(ConnectionStatus::Connecting));
         let wallpapers = Arc::new(Mutex::new(Vec::new()));
         let status_clone = status.clone();
@@ -42,6 +42,7 @@ impl UiIpcClient {
                     Ok(rt) => rt,
                     Err(e) => {
                         *status_clone.lock().unwrap() = ConnectionStatus::Error(e.to_string());
+                        ctx.request_repaint();
                         return;
                     }
                 };
@@ -49,6 +50,7 @@ impl UiIpcClient {
                 rt.block_on(async move {
                     loop {
                         *status_clone.lock().unwrap() = ConnectionStatus::Connecting;
+                        ctx.request_repaint();
                         match IpcClient::connect().await {
                             Ok(mut client) => {
                                 match client.send(Request::GetStatus).await {
@@ -65,14 +67,17 @@ impl UiIpcClient {
                                     }
                                     Err(e) => {
                                         *status_clone.lock().unwrap() = ConnectionStatus::Error(e.to_string());
+                                        ctx.request_repaint();
                                         tokio::time::sleep(Duration::from_secs(2)).await;
                                         continue;
                                     }
                                 }
+                                ctx.request_repaint();
 
                                 // Initial wallpaper list fetch
                                 if let Ok(Response::WallpaperList(list)) = client.send(Request::ListWallpapers).await {
                                     *wallpapers_clone.lock().unwrap() = list;
+                                    ctx.request_repaint();
                                 }
 
                                 loop {
@@ -80,15 +85,17 @@ impl UiIpcClient {
                                         cmd = cmd_rx.recv() => {
                                             match cmd {
                                                 Some((req, resp_tx)) => {
-                                                    let is_refresh = matches!(req, Request::RefreshLibrary);
+                                                    let is_refresh = matches!(req, Request::RefreshLibrary | Request::AddScanPath { .. } | Request::RemoveScanPath { .. });
                                                     let res = client.send(req).await.map_err(|e| e.to_string());
                                                     if is_refresh {
                                                         let fetch_res = client.send(Request::ListWallpapers).await;
                                                         if let Ok(Response::WallpaperList(list)) = fetch_res {
                                                             *wallpapers_clone.lock().unwrap() = list;
+                                                            ctx.request_repaint();
                                                         }
                                                     }
                                                     let _ = resp_tx.send(res);
+                                                    ctx.request_repaint();
                                                 }
                                                 None => return,
                                             }
@@ -100,16 +107,19 @@ impl UiIpcClient {
                                                 }
                                                 Err(_e) => {
                                                     *status_clone.lock().unwrap() = ConnectionStatus::Disconnected;
+                                                    ctx.request_repaint();
                                                     break;
                                                 }
                                                 _ => {}
                                             }
+                                            ctx.request_repaint();
                                         }
                                     }
                                 }
                             }
                             Err(_) => {
                                 *status_clone.lock().unwrap() = ConnectionStatus::Disconnected;
+                                ctx.request_repaint();
                                 tokio::time::sleep(Duration::from_secs(2)).await;
                             }
                         }
