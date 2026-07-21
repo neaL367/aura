@@ -59,6 +59,7 @@ impl ConfigStore {
         let serialised = toml::to_string_pretty(config)?;
         let tmp_path = self.path.with_extension("tmp");
         std::fs::write(&tmp_path, serialised)?;
+        let _ = std::fs::remove_file(&self.path);
         std::fs::rename(&tmp_path, &self.path)?;
         Ok(())
     }

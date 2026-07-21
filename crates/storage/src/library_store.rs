@@ -39,6 +39,7 @@ impl LibraryStore {
         let serialised = serde_json::to_string_pretty(entries)?;
         let tmp = self.path.with_extension("tmp");
         std::fs::write(&tmp, serialised)?;
+        let _ = std::fs::remove_file(&self.path);
         std::fs::rename(&tmp, &self.path)?;
         Ok(())
     }
