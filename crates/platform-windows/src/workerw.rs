@@ -181,24 +181,23 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
         }
     }
 
-    // Check 2: Is this a top-level window hosting SHELLDLL_DefView? If so, check Z-order sibling below it.
-    if let Ok(def_view) = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) } {
-        if !def_view.0.is_null() {
-            let mut next = unsafe { GetWindow(hwnd, GW_HWNDNEXT) };
-            while let Ok(next_hwnd) = next {
-                if next_hwnd.0.is_null() {
-                    break;
-                }
-                let mut c_buf = [0u16; 256];
-                let c_len = unsafe { GetClassNameW(next_hwnd, &mut c_buf) };
-                let c_name = String::from_utf16_lossy(&c_buf[..c_len as usize]);
-                if c_name == "WorkerW" {
-                    let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
-                    *slot = next_hwnd;
-                    return BOOL::from(false);
-                }
-                next = unsafe { GetWindow(next_hwnd, GW_HWNDNEXT) };
+    // Check 2: Is this a top-level window hosting SHELLDLL_DefView? Check Z-order sibling below it.
+    let def_view = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) };
+    if matches!(def_view, Ok(h) if !h.0.is_null()) {
+        let mut next = unsafe { GetWindow(hwnd, GW_HWNDNEXT) };
+        while let Ok(next_hwnd) = next {
+            if next_hwnd.0.is_null() {
+                break;
             }
+            let mut c_buf = [0u16; 256];
+            let c_len = unsafe { GetClassNameW(next_hwnd, &mut c_buf) };
+            let c_name = String::from_utf16_lossy(&c_buf[..c_len as usize]);
+            if c_name == "WorkerW" {
+                let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
+                *slot = next_hwnd;
+                return BOOL::from(false);
+            }
+            next = unsafe { GetWindow(next_hwnd, GW_HWNDNEXT) };
         }
     }
 
