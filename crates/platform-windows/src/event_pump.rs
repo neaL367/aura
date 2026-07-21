@@ -164,7 +164,10 @@ unsafe extern "system" fn wnd_proc(
                 tracing::info!("EventPump: System suspending");
                 EVENT_SENDER.with(|s| {
                     if let Some(sender) = s.take() {
-                        let _ = sender.send(HostEvent::PerformanceHint(PerformanceProfile::Paused));
+                        let profile = crate::power::PowerMonitor::profile_for_event(
+                            crate::power::PowerEvent::DisplayOff,
+                        );
+                        let _ = sender.send(HostEvent::PerformanceHint(profile));
                         s.set(Some(sender));
                     }
                 });
@@ -172,8 +175,10 @@ unsafe extern "system" fn wnd_proc(
                 tracing::info!("EventPump: System resumed");
                 EVENT_SENDER.with(|s| {
                     if let Some(sender) = s.take() {
-                        let _ =
-                            sender.send(HostEvent::PerformanceHint(PerformanceProfile::Balanced));
+                        let profile = crate::power::PowerMonitor::profile_for_event(
+                            crate::power::PowerEvent::DisplayOn,
+                        );
+                        let _ = sender.send(HostEvent::PerformanceHint(profile));
                         s.set(Some(sender));
                     }
                 });

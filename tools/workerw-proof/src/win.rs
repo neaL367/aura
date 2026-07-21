@@ -261,7 +261,10 @@ fn ensure_attached(render_hwnd: HWND) -> Result<HWND> {
     let progman = unsafe { FindWindowW(w!("Progman"), None) }?;
     if progman.0.is_null() {
         eprintln!("  [!] Progman not found — Explorer may not be running");
-        return Err(Error::from_thread());
+        return Err(Error::new(
+            HRESULT(0x80004005u32 as i32),
+            "Progman window not found",
+        ));
     }
     println!("  Progman : {:?}", progman.0);
 

@@ -51,7 +51,5 @@ impl Drop for ProcessSingleton {
     }
 }
 
-// SAFETY: The HANDLE is only used from the thread that created the singleton.
-// In practice the singleton is held for the entire daemon lifetime.
+// SAFETY: ProcessSingleton handle can be safely transferred between threads.
 unsafe impl Send for ProcessSingleton {}
-unsafe impl Sync for ProcessSingleton {}
