@@ -58,9 +58,6 @@ impl eframe::App for AuraApp {
 
         match self.active_tab {
             Tab::Library => {
-                if self.ipc_client.wallpapers().is_empty() {
-                    self.ipc_client.fetch_wallpapers();
-                }
                 self.library.show(ui, &self.ipc_client);
             }
             Tab::Monitors => {

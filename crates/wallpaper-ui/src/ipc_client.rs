@@ -76,6 +76,7 @@ impl UiIpcClient {
 
                                 // Initial wallpaper list fetch
                                 if let Ok(Response::WallpaperList(list)) = client.send(Request::ListWallpapers).await {
+                                    tracing::info!("UI initial fetch received {} wallpaper(s) over IPC", list.len());
                                     *wallpapers_clone.lock().unwrap() = list;
                                     ctx.request_repaint();
                                 }
@@ -84,23 +85,17 @@ impl UiIpcClient {
                                     tokio::select! {
                                         cmd = cmd_rx.recv() => {
                                             match cmd {
-                                                Some((req, resp_tx)) => {
-                                                    let is_refresh = matches!(req, Request::RefreshLibrary | Request::AddScanPath { .. } | Request::RemoveScanPath { .. });
+                                                 Some((req, resp_tx)) => {
+                                                     tracing::info!("UI sending IPC request: {:?}", req);
                                                      let res = client.send(req).await;
                                                      if let Ok(Response::WallpaperList(ref list)) = res {
+                                                         tracing::info!("UI received WallpaperList with {} wallpaper(s)", list.len());
                                                          *wallpapers_clone.lock().unwrap() = list.clone();
                                                          ctx.request_repaint();
                                                      }
-                                                     if is_refresh {
-                                                         let fetch_res = client.send(Request::ListWallpapers).await;
-                                                         if let Ok(Response::WallpaperList(list)) = fetch_res {
-                                                             *wallpapers_clone.lock().unwrap() = list;
-                                                             ctx.request_repaint();
-                                                         }
-                                                     }
                                                      let _ = resp_tx.send(res.map_err(|e| e.to_string()));
                                                      ctx.request_repaint();
-                                                }
+                                                 }
                                                 None => return,
                                             }
                                         }
