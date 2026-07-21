@@ -46,7 +46,7 @@ pub enum Request {
 
 /// Responses sent from `wallpaperd` to `wallpaper-ui`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum Response {
     /// Operation succeeded with no payload.
     Ok,
