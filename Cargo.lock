@@ -182,6 +182,7 @@ name = "aura-storage"
 version = "0.1.0"
 dependencies = [
  "aura-core",
+ "image",
  "serde",
  "serde_json",
  "tempfile",

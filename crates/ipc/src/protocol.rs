@@ -73,6 +73,16 @@ pub struct WallpaperEntry {
     pub kind: aura_core::wallpaper::MediaKind,
 }
 
+impl From<&aura_core::wallpaper::WallpaperMeta> for WallpaperEntry {
+    fn from(meta: &aura_core::wallpaper::WallpaperMeta) -> Self {
+        Self {
+            id: meta.id,
+            path: meta.path.clone(),
+            kind: meta.kind,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // IpcMessage — versioned envelope
 // ---------------------------------------------------------------------------

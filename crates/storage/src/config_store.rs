@@ -15,6 +15,14 @@ impl ConfigStore {
         Self { path: path.into() }
     }
 
+    /// Resolve the default system configuration file path (`%APPDATA%\Aura\aura.toml`).
+    pub fn default_path() -> PathBuf {
+        let base = std::env::var("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(r"C:\AuraData"));
+        base.join("Aura").join("aura.toml")
+    }
+
     /// Load configuration from disk.
     ///
     /// - Missing file → returns `AppConfig::default()`.

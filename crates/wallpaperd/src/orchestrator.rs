@@ -1,11 +1,17 @@
 use crate::assignment::AssignmentManager;
+use aura_core::wallpaper::WallpaperMeta;
 use aura_ipc::protocol::{DaemonStatus, PROTOCOL_VERSION, Request, Response};
+use aura_storage::{LibraryScanner, config_store::ConfigStore, library_store::LibraryStore};
 use std::sync::{Arc, Mutex};
+use tracing::info;
 
 pub(crate) struct OrchestratorState {
     pub is_paused: bool,
     pub assignments: AssignmentManager,
     pub active_monitors: usize,
+    pub library_items: Vec<WallpaperMeta>,
+    pub config_store: ConfigStore,
+    pub library_store: LibraryStore,
 }
 
 #[derive(Clone)]
@@ -16,11 +22,35 @@ pub(crate) struct Orchestrator {
 
 impl Orchestrator {
     pub fn new(active_monitors: usize, shutdown_tx: crossbeam_channel::Sender<()>) -> Self {
+        let config_path = ConfigStore::default_path();
+        let config_store = ConfigStore::new(&config_path);
+        let config = config_store.load().unwrap_or_default();
+
+        let library_path = config_path.with_file_name("library.json");
+        let library_store = LibraryStore::new(&library_path);
+
+        let mut library_items = library_store.load().unwrap_or_default();
+        if !config.library.scan_paths.is_empty() {
+            let scanned = LibraryScanner::scan_paths(&config.library.scan_paths);
+            if !scanned.is_empty() {
+                library_items = scanned;
+                let _ = library_store.save(&library_items);
+            }
+        }
+
+        info!(
+            "Orchestrator initialized — {} wallpaper(s) in library",
+            library_items.len()
+        );
+
         Self {
             state: Arc::new(Mutex::new(OrchestratorState {
                 is_paused: false,
                 assignments: AssignmentManager::new(),
                 active_monitors,
+                library_items,
+                config_store,
+                library_store,
             })),
             shutdown_tx,
         }
@@ -47,7 +77,9 @@ impl Orchestrator {
                 assigned_wallpapers: state.assignments.all().len(),
                 is_paused: state.is_paused,
             }),
-            Request::ListWallpapers => Response::WallpaperList(Vec::new()),
+            Request::ListWallpapers => {
+                Response::WallpaperList(state.library_items.iter().map(Into::into).collect())
+            }
             Request::AssignWallpaper {
                 monitor_id,
                 wallpaper_id,
@@ -67,7 +99,13 @@ impl Orchestrator {
                 state.is_paused = false;
                 Response::Ok
             }
-            Request::RefreshLibrary => Response::Ok,
+            Request::RefreshLibrary => {
+                let config = state.config_store.load().unwrap_or_default();
+                let scanned = LibraryScanner::scan_paths(&config.library.scan_paths);
+                state.library_items = scanned;
+                let _ = state.library_store.save(&state.library_items);
+                Response::Ok
+            }
             Request::Shutdown => {
                 let _ = self.shutdown_tx.send(());
                 Response::Ok
