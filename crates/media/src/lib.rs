@@ -1,7 +1,7 @@
 //! `aura-media` — Media decoding abstractions.
 //!
 //! Defines the `MediaDecoder` trait and concrete decoders for static images
-//! and animated GIFs.  Video decoding is implemented in `aura-platform-windows`
+//! and animated GIFs. Video decoding is implemented in `aura-platform-windows`
 //! (Media Foundation) and plugged in via the `MediaDecoder` trait.
 
 pub mod decoder;
@@ -13,4 +13,6 @@ pub mod video_decoder;
 
 pub use decoder::{DecodedFrame, MediaDecoder};
 pub use error::MediaError;
-pub use frame_queue::{FrameReceiver, FrameSender};
+pub use frame_queue::{FrameReceiver, FrameSender, frame_channel};
+pub use gif_decoder::GifDecoder;
+pub use image_decoder::ImageDecoder;
