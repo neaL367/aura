@@ -3,7 +3,6 @@ use gpu_allocator::vulkan::AllocationCreateDesc;
 
 use crate::{context::VulkanContext, error::VulkanError};
 
-/// High-performance GPU Texture allocated via `gpu-allocator`.
 pub struct GpuTexture {
     pub image: vk::Image,
     pub allocation: Option<gpu_allocator::vulkan::Allocation>,
@@ -14,9 +13,8 @@ pub struct GpuTexture {
 }
 
 impl GpuTexture {
-    /// Create a new GPU texture with device-local (`GpuOnly`) memory allocation.
     pub fn create_2d(
-        context: &mut VulkanContext,
+        context: &VulkanContext,
         width: u32,
         height: u32,
         format: vk::Format,
@@ -52,6 +50,8 @@ impl GpuTexture {
 
         let allocation = context
             .allocator
+            .lock()
+            .unwrap()
             .allocate(&AllocationCreateDesc {
                 name: "GpuTexture Allocation",
                 requirements: reqs,
@@ -68,7 +68,6 @@ impl GpuTexture {
                 .map_err(|e| VulkanError::Texture(e.to_string()))?;
         }
 
-        // Create image view
         let view_info = vk::ImageViewCreateInfo::default()
             .image(image)
             .view_type(vk::ImageViewType::TYPE_2D)
@@ -94,7 +93,6 @@ impl GpuTexture {
                 .map_err(|e| VulkanError::Texture(e.to_string()))?
         };
 
-        // Create bilinear texture sampler
         let sampler_info = vk::SamplerCreateInfo::default()
             .mag_filter(vk::Filter::LINEAR)
             .min_filter(vk::Filter::LINEAR)
@@ -121,17 +119,15 @@ impl GpuTexture {
         })
     }
 
-    /// Explicitly destroy GPU resources and free memory allocation.
-    ///
     /// # Safety
     /// Must be called when GPU execution using this texture has completed.
-    pub unsafe fn destroy(&mut self, context: &mut VulkanContext) {
+    pub unsafe fn destroy(&mut self, context: &VulkanContext) {
         unsafe {
             context.device.destroy_sampler(self.sampler, None);
             context.device.destroy_image_view(self.view, None);
             context.device.destroy_image(self.image, None);
             if let Some(alloc) = self.allocation.take() {
-                let _ = context.allocator.free(alloc);
+                let _ = context.allocator.lock().unwrap().free(alloc);
             }
         }
     }

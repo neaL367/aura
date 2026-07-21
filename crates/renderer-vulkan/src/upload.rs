@@ -40,6 +40,8 @@ impl TextureUploader {
 
         let staging_allocation = context
             .allocator
+            .lock()
+            .unwrap()
             .allocate(&AllocationCreateDesc {
                 name: "Texture Staging Buffer",
                 requirements: reqs,
@@ -193,7 +195,7 @@ impl TextureUploader {
                 .device
                 .free_command_buffers(command_pool, &[command_buffer]);
             context.device.destroy_buffer(staging_buffer, None);
-            let _ = context.allocator.free(staging_allocation);
+            let _ = context.allocator.lock().unwrap().free(staging_allocation);
         }
 
         Ok(())
