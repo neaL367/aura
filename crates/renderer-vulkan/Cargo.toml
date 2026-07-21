@@ -1,0 +1,25 @@
+[package]
+name        = "aura-renderer-vulkan"
+description = "Vulkan rendering — one context per process, one MonitorRenderer per active monitor"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+
+[build-dependencies]
+# Build script invokes glslc from VULKAN_SDK to compile GLSL → SPIR-V
+# No extra crates needed; we shell out to the SDK binary.
+
+[dependencies]
+aura-core     = { workspace = true }
+thiserror     = { workspace = true }
+tracing       = { workspace = true }
+ash           = { workspace = true }
+gpu-allocator = { workspace = true }
+
+# Minimal Win32 — only HWND is needed for Win32 surface creation
+[dependencies.windows]
+workspace = true
+features = [
+    "Win32_Foundation",
+]
