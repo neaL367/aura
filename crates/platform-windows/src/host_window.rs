@@ -2,25 +2,25 @@ use std::mem;
 use std::ptr;
 
 use windows::{
-    core::{w, Error, Result},
     Win32::{
         Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM},
         System::LibraryLoader::GetModuleHandleW,
         UI::WindowsAndMessaging::{
-            CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassExW,
-            ShowWindow, LoadCursorW,
-            CS_HREDRAW, CS_VREDRAW, HMENU, IDC_ARROW, SW_SHOW,
-            WINDOW_EX_STYLE, WM_DESTROY, WNDCLASSEXW,
-            WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_POPUP, WS_EX_NOREDIRECTIONBITMAP,
+            CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DestroyWindow, HMENU,
+            IDC_ARROW, LoadCursorW, RegisterClassExW, SW_SHOW, ShowWindow, WINDOW_EX_STYLE,
+            WM_DESTROY, WNDCLASSEXW, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_NOREDIRECTIONBITMAP,
+            WS_POPUP,
         },
     },
+    core::{Error, Result, w},
 };
 
 use crate::error::PlatformError;
 
 /// Class name for host windows created by this module.
 const HOST_CLASS: windows::core::PCWSTR = w!("AuraHostWindow");
-static HOST_CLASS_REGISTERED: std::sync::OnceLock<std::result::Result<(), String>> = std::sync::OnceLock::new();
+static HOST_CLASS_REGISTERED: std::sync::OnceLock<std::result::Result<(), String>> =
+    std::sync::OnceLock::new();
 
 // ---------------------------------------------------------------------------
 // HostWindow — a Win32 HWND lifecycle wrapper
@@ -58,7 +58,10 @@ impl HostWindow {
                 HOST_CLASS,
                 w!("AuraHost"),
                 WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
-                0, 0, 1, 1, // positioned after WorkerW attach
+                0,
+                0,
+                1,
+                1, // positioned after WorkerW attach
                 None,
                 None,
                 Some(hinstance),
@@ -90,7 +93,9 @@ impl Drop for HostWindow {
     fn drop(&mut self) {
         if self.valid && !self.hwnd.0.is_null() {
             // SAFETY: DestroyWindow on a valid HWND we own.
-            unsafe { let _ = DestroyWindow(self.hwnd); }
+            unsafe {
+                let _ = DestroyWindow(self.hwnd);
+            }
         }
     }
 }
@@ -100,9 +105,8 @@ impl Drop for HostWindow {
 // ---------------------------------------------------------------------------
 
 fn ensure_class_registered() -> std::result::Result<(), PlatformError> {
-    let res = HOST_CLASS_REGISTERED.get_or_init(|| {
-        register_class_impl().map_err(|e| e.to_string())
-    });
+    let res =
+        HOST_CLASS_REGISTERED.get_or_init(|| register_class_impl().map_err(|e| e.to_string()));
     res.as_ref()
         .map(|_| ())
         .map_err(|e| PlatformError::MonitorEnum(e.clone()))

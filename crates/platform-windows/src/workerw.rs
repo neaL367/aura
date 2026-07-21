@@ -2,18 +2,16 @@ use std::mem;
 use std::ptr;
 
 use windows::{
-    core::{w, Error, Result, BOOL},
     Win32::{
         Foundation::{HWND, LPARAM, WPARAM},
         UI::WindowsAndMessaging::{
-            EnumWindows, FindWindowExW, FindWindowW, GetSystemMetrics,
-            MoveWindow, SendMessageTimeoutW, SetParent, SetWindowLongPtrW,
-            SetWindowPos, ShowWindow, GetWindowLongPtrW,
-            SEND_MESSAGE_TIMEOUT_FLAGS, SM_CXSCREEN, SM_CYSCREEN,
-            SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SW_SHOW,
-            GWL_STYLE, WS_CHILD, WS_POPUP, WS_VISIBLE,
+            EnumWindows, FindWindowExW, FindWindowW, GWL_STYLE, GetSystemMetrics,
+            GetWindowLongPtrW, MoveWindow, SEND_MESSAGE_TIMEOUT_FLAGS, SM_CXSCREEN, SM_CYSCREEN,
+            SW_SHOW, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SendMessageTimeoutW, SetParent,
+            SetWindowLongPtrW, SetWindowPos, ShowWindow, WS_CHILD, WS_POPUP, WS_VISIBLE,
         },
     },
+    core::{BOOL, Error, Result, w},
 };
 
 use crate::error::PlatformError;
@@ -94,10 +92,7 @@ pub(crate) fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformEr
     // Step 3: Enumerate windows to find the target WorkerW.
     let mut found = HWND(ptr::null_mut());
     unsafe {
-        let _ = EnumWindows(
-            Some(find_workerw_callback),
-            LPARAM(&raw mut found as isize),
-        );
+        let _ = EnumWindows(Some(find_workerw_callback), LPARAM(&raw mut found as isize));
     }
 
     if found.0.is_null() {
@@ -125,21 +120,26 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
 }
 
 /// Reparent `host_hwnd` into `workerw` and apply the correct window style.
-pub(crate) fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<(), PlatformError> {
+pub(crate) fn attach_to_workerw(
+    host_hwnd: HWND,
+    workerw: HWND,
+) -> std::result::Result<(), PlatformError> {
     unsafe {
         SetParent(host_hwnd, Some(workerw))?;
 
         // Update style: remove WS_POPUP, add WS_CHILD.
         let style = GetWindowLongPtrW(host_hwnd, GWL_STYLE);
-        let new_style = (style & !(WS_POPUP.0 as isize))
-            | WS_CHILD.0 as isize
-            | WS_VISIBLE.0 as isize;
+        let new_style =
+            (style & !(WS_POPUP.0 as isize)) | WS_CHILD.0 as isize | WS_VISIBLE.0 as isize;
         SetWindowLongPtrW(host_hwnd, GWL_STYLE, new_style);
 
         let _ = SetWindowPos(
             host_hwnd,
             None,
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED,
         );
         let _ = ShowWindow(host_hwnd, SW_SHOW);

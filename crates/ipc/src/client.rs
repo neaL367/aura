@@ -4,7 +4,7 @@ use tracing::{debug, warn};
 use crate::{
     codec::{read_message, write_message},
     error::IpcError,
-    protocol::{IpcMessage, Request, Response, PIPE_NAME, PROTOCOL_VERSION},
+    protocol::{IpcMessage, PIPE_NAME, PROTOCOL_VERSION, Request, Response},
 };
 
 /// Async IPC client — connects to `wallpaperd` and sends typed requests.

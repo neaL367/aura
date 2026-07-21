@@ -1,5 +1,7 @@
-
-use crate::{library_panel::LibraryPanel, monitor_panel::MonitorPanel, settings_panel::SettingsPanel, status_bar::StatusBar};
+use crate::{
+    library_panel::LibraryPanel, monitor_panel::MonitorPanel, settings_panel::SettingsPanel,
+    status_bar::StatusBar,
+};
 
 pub struct AuraApp {
     library: LibraryPanel,

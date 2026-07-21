@@ -1,6 +1,9 @@
 use std::path::Path;
 
-use aura_media::{decoder::{DecodedFrame, MediaDecoder}, error::MediaError};
+use aura_media::{
+    decoder::{DecodedFrame, MediaDecoder},
+    error::MediaError,
+};
 
 use crate::error::PlatformError;
 
@@ -58,6 +61,10 @@ impl MediaDecoder for MfVideoDecoder {
         Ok(()) // TODO: seek to 0
     }
 
-    fn width(&self) -> u32 { self.width }
-    fn height(&self) -> u32 { self.height }
+    fn width(&self) -> u32 {
+        self.width
+    }
+    fn height(&self) -> u32 {
+        self.height
+    }
 }

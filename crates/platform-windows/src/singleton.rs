@@ -1,11 +1,11 @@
 use std::ptr;
 
 use windows::{
-    core::{w, Error, Result},
     Win32::{
         Foundation::{CloseHandle, HANDLE, WAIT_ABANDONED},
-        System::Threading::{CreateMutexW, ReleaseMutex, WaitForSingleObject, MUTEX_ALL_ACCESS},
+        System::Threading::{CreateMutexW, MUTEX_ALL_ACCESS, ReleaseMutex, WaitForSingleObject},
     },
+    core::{Error, Result, w},
 };
 
 use crate::error::PlatformError;
@@ -26,14 +26,14 @@ impl ProcessSingleton {
     /// Returns `Err(PlatformError::AlreadyRunning)` if another process holds it.
     pub fn acquire() -> std::result::Result<Self, PlatformError> {
         // SAFETY: CreateMutexW with a valid name; initial owner = false.
-        let mutex = unsafe {
-            CreateMutexW(None, false, MUTEX_NAME)?
-        };
+        let mutex = unsafe { CreateMutexW(None, false, MUTEX_NAME)? };
 
         // A handle returned but the mutex already exists — check if we own it.
         let last_error = unsafe { windows::Win32::Foundation::GetLastError() };
         if last_error == windows::Win32::Foundation::ERROR_ALREADY_EXISTS {
-            unsafe { let _ = CloseHandle(mutex); }
+            unsafe {
+                let _ = CloseHandle(mutex);
+            }
             return Err(PlatformError::AlreadyRunning);
         }
 

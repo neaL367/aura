@@ -8,27 +8,24 @@ use std::mem;
 use std::ptr;
 
 use windows::{
-    core::{w, Error, Result, BOOL},
     Win32::{
         Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM},
         Graphics::Gdi::{
-            BeginPaint, CreateSolidBrush, EndPaint, FillRect, InvalidateRect,
-            HBRUSH, PAINTSTRUCT,
+            BeginPaint, CreateSolidBrush, EndPaint, FillRect, HBRUSH, InvalidateRect, PAINTSTRUCT,
         },
         System::LibraryLoader::GetModuleHandleW,
         UI::WindowsAndMessaging::{
-            CreateWindowExW, DefWindowProcW, DispatchMessageW, EnumWindows,
-            FindWindowExW, FindWindowW, GetClientRect, GetMessageW, GetSystemMetrics,
-            GetWindowLongPtrW, LoadCursorW, MoveWindow, PostQuitMessage,
-            RegisterClassExW, RegisterWindowMessageW, SendMessageTimeoutW,
+            CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DispatchMessageW, EnumWindows,
+            FindWindowExW, FindWindowW, GWL_STYLE, GetClientRect, GetMessageW, GetSystemMetrics,
+            GetWindowLongPtrW, IDC_ARROW, LoadCursorW, MSG, MoveWindow, PostQuitMessage,
+            RegisterClassExW, RegisterWindowMessageW, SEND_MESSAGE_TIMEOUT_FLAGS, SM_CXSCREEN,
+            SM_CYSCREEN, SW_SHOW, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SendMessageTimeoutW,
             SetParent, SetWindowLongPtrW, SetWindowPos, ShowWindow, TranslateMessage,
-            CS_HREDRAW, CS_VREDRAW, GWL_STYLE, IDC_ARROW, MSG,
-            SEND_MESSAGE_TIMEOUT_FLAGS, SM_CXSCREEN, SM_CYSCREEN,
-            SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SW_SHOW,
-            WINDOW_EX_STYLE, WNDCLASSEXW, WM_DESTROY, WM_DISPLAYCHANGE, WM_PAINT,
-            WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_POPUP, WS_VISIBLE,
+            WINDOW_EX_STYLE, WM_DESTROY, WM_DISPLAYCHANGE, WM_PAINT, WNDCLASSEXW, WS_CHILD,
+            WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_POPUP, WS_VISIBLE,
         },
     },
+    core::{BOOL, Error, Result, w},
 };
 
 // ---------------------------------------------------------------------------
@@ -119,7 +116,10 @@ pub fn main() -> Result<()> {
             CLASS_CONTROL,
             w!("AuraProof_Control"),
             WS_POPUP | WS_CLIPCHILDREN,
-            0, 0, 1, 1,
+            0,
+            0,
+            1,
+            1,
             None,
             None,
             Some(hinstance),
@@ -220,7 +220,10 @@ fn create_and_attach(hinstance: HINSTANCE) -> Result<HWND> {
             CLASS_RENDER,
             w!("AuraProof_Render"),
             WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
-            0, 0, 800, 600,
+            0,
+            0,
+            800,
+            600,
             None,
             None,
             Some(hinstance),
@@ -288,15 +291,17 @@ fn ensure_attached(render_hwnd: HWND) -> Result<HWND> {
     // Step 5: Update style and position.
     unsafe {
         let style = GetWindowLongPtrW(render_hwnd, GWL_STYLE);
-        let new_style = (style & !(WS_POPUP.0 as isize))
-            | WS_CHILD.0 as isize
-            | WS_VISIBLE.0 as isize;
+        let new_style =
+            (style & !(WS_POPUP.0 as isize)) | WS_CHILD.0 as isize | WS_VISIBLE.0 as isize;
         SetWindowLongPtrW(render_hwnd, GWL_STYLE, new_style);
 
         let _ = SetWindowPos(
             render_hwnd,
             None,
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED,
         );
 
@@ -317,10 +322,7 @@ fn ensure_attached(render_hwnd: HWND) -> Result<HWND> {
 fn find_target_workerw() -> Result<HWND> {
     let mut found = HWND(ptr::null_mut());
     unsafe {
-        let _ = EnumWindows(
-            Some(enum_windows_proc),
-            LPARAM(&raw mut found as isize),
-        );
+        let _ = EnumWindows(Some(enum_windows_proc), LPARAM(&raw mut found as isize));
     }
 
     if found.0.is_null() {

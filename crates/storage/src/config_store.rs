@@ -27,9 +27,8 @@ impl ConfigStore {
         }
 
         let raw = std::fs::read_to_string(&self.path)?;
-        let mut cfg: AppConfig = toml::from_str(&raw).map_err(|e| {
-            StorageError::Corrupt(format!("TOML parse error: {}", e))
-        })?;
+        let mut cfg: AppConfig = toml::from_str(&raw)
+            .map_err(|e| StorageError::Corrupt(format!("TOML parse error: {}", e)))?;
 
         // Run migration if schema version is older.
         if cfg.version < CONFIG_VERSION {

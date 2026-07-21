@@ -4,7 +4,7 @@ use tracing::{error, info, warn};
 use crate::{
     codec::{read_message, write_message},
     error::IpcError,
-    protocol::{IpcMessage, Request, Response, PIPE_NAME, PROTOCOL_VERSION},
+    protocol::{IpcMessage, PIPE_NAME, PROTOCOL_VERSION, Request, Response},
 };
 
 /// Callback type invoked by the server to handle each request.
@@ -54,10 +54,7 @@ impl IpcServer {
     }
 }
 
-async fn handle_client(
-    mut pipe: NamedPipeServer,
-    handler: std::sync::Arc<RequestHandler>,
-) {
+async fn handle_client(mut pipe: NamedPipeServer, handler: std::sync::Arc<RequestHandler>) {
     loop {
         let msg: IpcMessage<Request> = match read_message(&mut pipe).await {
             Ok(m) => m,

@@ -56,7 +56,9 @@ pub mod stub {
 
     pub struct WorkerWManager;
     impl WorkerWManager {
-        pub fn new() -> Self { Self }
+        pub fn new() -> Self {
+            Self
+        }
         pub fn ensure_attached(&mut self, _host_hwnd: HWND) -> Result<(), PlatformError> {
             Err(PlatformError::NotSupported)
         }
@@ -67,7 +69,9 @@ pub mod stub {
 
     pub struct MonitorEnumerator;
     impl MonitorEnumerator {
-        pub fn new() -> Self { Self }
+        pub fn new() -> Self {
+            Self
+        }
         pub fn enumerate(&self) -> Result<Vec<aura_core::monitor::MonitorInfo>, PlatformError> {
             Ok(Vec::new())
         }
@@ -82,7 +86,9 @@ pub mod stub {
 
     pub struct PowerManager;
     impl PowerManager {
-        pub fn new() -> Self { Self }
+        pub fn new() -> Self {
+            Self
+        }
         pub fn register(&self, _hwnd: HWND) -> Result<(), PlatformError> {
             Ok(())
         }
@@ -91,11 +97,16 @@ pub mod stub {
     pub struct MfVideoDecoder;
     impl MfVideoDecoder {
         pub fn open(_path: &std::path::Path) -> Result<Self, aura_media::error::MediaError> {
-            Err(aura_media::error::MediaError::Decode("Not supported".into()))
+            Err(aura_media::error::MediaError::Decode(
+                "Not supported".into(),
+            ))
         }
     }
     impl aura_media::decoder::MediaDecoder for MfVideoDecoder {
-        fn next_frame(&mut self) -> Result<Option<aura_media::decoder::DecodedFrame>, aura_media::error::MediaError> {
+        fn next_frame(
+            &mut self,
+        ) -> Result<Option<aura_media::decoder::DecodedFrame>, aura_media::error::MediaError>
+        {
             Ok(None)
         }
         fn dimensions(&self) -> (u32, u32) {

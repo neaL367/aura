@@ -47,15 +47,23 @@ jobs:
           toolchain: 1.97.1
           components: clippy
 
-      - name: Setup Rust Cache
-        uses: swatinem/rust-cache@v2
+      - name: Cache Cargo Registry & Target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Install Vulkan SDK
-        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        uses: jakoch/install-vulkan-sdk-action@v1
         with:
-          vulkan-query-version: 1.4.304.0
-          vulkan-components: KeepOnlyStandardVulcanComponents
-          vulkan-use-cache: true
+          vulkan_version: 1.4.350.0
+          cache: false
 
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets
@@ -76,15 +84,23 @@ jobs:
         with:
           toolchain: 1.97.1
 
-      - name: Setup Rust Cache
-        uses: swatinem/rust-cache@v2
+      - name: Cache Cargo Registry & Target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Install Vulkan SDK
-        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        uses: jakoch/install-vulkan-sdk-action@v1
         with:
-          vulkan-query-version: 1.4.304.0
-          vulkan-components: KeepOnlyStandardVulcanComponents
-          vulkan-use-cache: true
+          vulkan_version: 1.4.350.0
+          cache: false
 
       - name: Run Tests
         run: cargo test --workspace --all-targets
@@ -105,15 +121,23 @@ jobs:
         with:
           toolchain: 1.97.1
 
-      - name: Setup Rust Cache
-        uses: swatinem/rust-cache@v2
+      - name: Cache Cargo Registry & Target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Install Vulkan SDK
-        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        uses: jakoch/install-vulkan-sdk-action@v1
         with:
-          vulkan-query-version: 1.4.304.0
-          vulkan-components: KeepOnlyStandardVulcanComponents
-          vulkan-use-cache: true
+          vulkan_version: 1.4.350.0
+          cache: false
 
       - name: Build Release Binaries
         run: cargo build --workspace --release

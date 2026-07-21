@@ -34,16 +34,13 @@ where
     T: serde::de::DeserializeOwned,
 {
     let mut len_buf = [0u8; 4];
-    reader
-        .read_exact(&mut len_buf)
-        .await
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                IpcError::ConnectionClosed
-            } else {
-                IpcError::Io(e)
-            }
-        })?;
+    reader.read_exact(&mut len_buf).await.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::UnexpectedEof {
+            IpcError::ConnectionClosed
+        } else {
+            IpcError::Io(e)
+        }
+    })?;
 
     let len = u32::from_le_bytes(len_buf) as usize;
     if len > MAX_MSG_BYTES {

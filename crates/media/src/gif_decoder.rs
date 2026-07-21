@@ -45,15 +45,18 @@ impl GifDecoder {
 
         let canvas_w = decoder.width() as u32;
         let canvas_h = decoder.height() as u32;
-        let bg_color = decoder.bg_color().map(|c| {
-            let palette = decoder.global_palette().unwrap_or(&[]);
-            let idx = (c as usize) * 3;
-            if idx + 2 < palette.len() {
-                [palette[idx], palette[idx + 1], palette[idx + 2], 0xFF]
-            } else {
-                [0, 0, 0, 0xFF]
-            }
-        }).unwrap_or([0, 0, 0, 0]);
+        let bg_color = decoder
+            .bg_color()
+            .map(|c| {
+                let palette = decoder.global_palette().unwrap_or(&[]);
+                let idx = (c as usize) * 3;
+                if idx + 2 < palette.len() {
+                    [palette[idx], palette[idx + 1], palette[idx + 2], 0xFF]
+                } else {
+                    [0, 0, 0, 0xFF]
+                }
+            })
+            .unwrap_or([0, 0, 0, 0]);
 
         let mut canvas = vec![0u8; (canvas_w * canvas_h * 4) as usize];
         // Fill with background colour.
@@ -140,8 +143,12 @@ impl MediaDecoder for GifDecoder {
         Ok(())
     }
 
-    fn width(&self) -> u32 { self.width }
-    fn height(&self) -> u32 { self.height }
+    fn width(&self) -> u32 {
+        self.width
+    }
+    fn height(&self) -> u32 {
+        self.height
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -167,8 +174,7 @@ fn composite_frame(canvas: &mut [u8], frame: &Frame<'_>, cw: u32, ch: u32) {
             // GIF frames have a transparent index; alpha == 0 means transparent.
             let alpha = frame.buffer[src_idx + 3];
             if alpha != 0 {
-                canvas[dst_idx..dst_idx + 4]
-                    .copy_from_slice(&frame.buffer[src_idx..src_idx + 4]);
+                canvas[dst_idx..dst_idx + 4].copy_from_slice(&frame.buffer[src_idx..src_idx + 4]);
             }
         }
     }

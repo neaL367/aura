@@ -1,15 +1,15 @@
 use std::ptr;
 
 use windows::{
-    core::BOOL,
     Win32::{
         Foundation::{LPARAM, RECT},
         Graphics::Gdi::{
-            EnumDisplayMonitors, GetMonitorInfoW, MonitorFromWindow, HDC, HMONITOR,
-            MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
+            EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST,
+            MONITORINFOEXW, MonitorFromWindow,
         },
         UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
     },
+    core::BOOL,
 };
 
 use aura_core::monitor::{MonitorId, MonitorInfo};

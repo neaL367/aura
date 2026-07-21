@@ -1,4 +1,4 @@
-use crossbeam_channel::{bounded, Receiver, Sender, TrySendError};
+use crossbeam_channel::{Receiver, Sender, TrySendError, bounded};
 
 use crate::decoder::DecodedFrame;
 
@@ -40,7 +40,6 @@ impl FrameSender {
     pub fn send_blocking(&self, frame: DecodedFrame) -> bool {
         self.0.send(frame).is_ok()
     }
-
 }
 
 impl FrameReceiver {

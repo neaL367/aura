@@ -43,17 +43,16 @@ impl VulkanContext {
         let queue = unsafe { device.get_device_queue(queue_family, 0) };
 
         // Initialise gpu-allocator.
-        let allocator = gpu_allocator::vulkan::Allocator::new(
-            &gpu_allocator::vulkan::AllocatorCreateDesc {
+        let allocator =
+            gpu_allocator::vulkan::Allocator::new(&gpu_allocator::vulkan::AllocatorCreateDesc {
                 instance: instance.clone(),
                 device: device.clone(),
                 physical_device,
                 debug_settings: gpu_allocator::AllocatorDebugSettings::default(),
                 buffer_device_address: false,
                 allocation_sizes: gpu_allocator::AllocationSizes::default(),
-            },
-        )
-        .map_err(|e| VulkanError::Allocation(e.to_string()))?;
+            })
+            .map_err(|e| VulkanError::Allocation(e.to_string()))?;
 
         Ok(Self {
             entry,
@@ -101,13 +100,11 @@ fn create_instance(entry: &ash::Entry) -> Result<ash::Instance, VulkanError> {
 
     // Enable validation layer when requested.
     let validation_layer = c"VK_LAYER_KHRONOS_validation";
-    let enable_validation =
-        std::env::var("AURA_VALIDATION").as_deref() == Ok("1");
+    let enable_validation = std::env::var("AURA_VALIDATION").as_deref() == Ok("1");
 
     let layers: Vec<*const i8> = if enable_validation {
         // Check the layer is available before requesting it.
-        let available = unsafe { entry.enumerate_instance_layer_properties() }
-            .unwrap_or_default();
+        let available = unsafe { entry.enumerate_instance_layer_properties() }.unwrap_or_default();
         let has_validation = available.iter().any(|l| {
             let name = unsafe { std::ffi::CStr::from_ptr(l.layer_name.as_ptr()) };
             name == validation_layer
@@ -147,9 +144,10 @@ fn select_physical_device(
             unsafe { instance.get_physical_device_queue_family_properties(device) };
 
         // Find a queue family with graphics support.
-        let Some(qf_idx) = queue_families.iter().position(|qf| {
-            qf.queue_flags.contains(vk::QueueFlags::GRAPHICS)
-        }) else {
+        let Some(qf_idx) = queue_families
+            .iter()
+            .position(|qf| qf.queue_flags.contains(vk::QueueFlags::GRAPHICS))
+        else {
             continue;
         };
 
@@ -168,8 +166,7 @@ fn select_physical_device(
 
     let (device, qf, _) = best.ok_or(VulkanError::NoSuitableDevice)?;
     let props = unsafe { instance.get_physical_device_properties(device) };
-    let name = unsafe { std::ffi::CStr::from_ptr(props.device_name.as_ptr()) }
-        .to_string_lossy();
+    let name = unsafe { std::ffi::CStr::from_ptr(props.device_name.as_ptr()) }.to_string_lossy();
     tracing::info!("Vulkan device selected: {}", name);
     Ok((device, qf))
 }
