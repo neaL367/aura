@@ -34,7 +34,7 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 - **Crate Layout**:
   - `crates/core`: Platform-independent domain types (monitors, wallpaper lifecycle, configs).
   - `crates/ipc`: Typed length-prefixed JSON protocol over `\\.\pipe\aura-wallpaperd`.
-  - `crates/storage`: TOML configs and scanning database cache.
+  - `crates/storage`: TOML configs (`aura.toml` via `ConfigStore`), JSON wallpaper library cache (`library.json` via `LibraryStore`), and recursive `LibraryScanner` (multi-format media discovery: `png`, `jpg`, `jpeg`, `bmp`, `gif`, `webp`, `mp4`, `mkv`). Paths for both files are resolved under `%APPDATA%/aura` using `dirs::config_dir()`.
   - `crates/media`: Static image and GIF decoding (using disposal canvas composition).
   - `crates/platform-windows`: Win32 native window wrappers, WorkerW attach, event pump, and singleton.
   - `crates/renderer-vulkan`: Vulkan pipeline, swapchain, texture upload, and `MonitorRenderer`.
@@ -47,3 +47,20 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
   - `wallpaper-ui`: Main thread runs `eframe`/`egui` UI, while a background thread with a Tokio runtime manages connection/reconnection to `IpcClient`.
   - `MonitorRenderer`: Stores `Arc<VulkanContext>` and implements `Drop` for RAII resource teardown safety.
   - `ProcessSingleton`: Implements `Send` only (no `Sync`).
+
+---
+
+## 5. IPC Protocol Rules
+
+- **Serde Tagging**: The `Response` enum in `crates/ipc/src/protocol.rs` uses `#[serde(tag = "type", content = "data", rename_all = "snake_case")]` (adjacently-tagged). **Never change this to internally-tagged** (`tag = "type"` only). Serde's internally-tagged representation cannot serialize/deserialize tuple/newtype variants such as `Status(DaemonStatus)` or `WallpaperList(Vec<...>)` — it silently returns `Err` on deserialization, causing the UI to always see 0 wallpapers.
+- **Response Variants for Mutations**: IPC handlers that mutate library state (`AddScanPath`, `RemoveScanPath`, `RefreshLibrary`) must return `Response::WallpaperList(...)` directly — not `Response::Ok`. This eliminates a fragile second `ListWallpapers` round-trip and ensures the UI gallery updates atomically in a single IPC exchange.
+- **Roundtrip Test Coverage**: All four `Response` variants (`Ok`, `Error`, `Status`, `WallpaperList`) must be covered in `crates/ipc/tests/ipc_roundtrip.rs`. Any new response variant added to the protocol must include a roundtrip serialize/deserialize test.
+- **egui Frame Loop Guard**: Never call `ipc_client.send(...)` or `ipc_client.fetch_wallpapers()` unconditionally inside `eframe::App::update()`. The egui render loop runs continuously; unguarded sends flood `tokio::sync::mpsc::unbounded_channel` with thousands of duplicate requests per second, blocking real user-triggered IPC commands.
+
+---
+
+## 6. Storage Rules
+
+- **Atomic Write on Windows**: `std::fs::rename(tmp, dest)` fails with `ERROR_ALREADY_EXISTS` if `dest` already exists on Windows (unlike POSIX `rename`). Always call `let _ = std::fs::remove_file(&dest)` before `std::fs::rename(&tmp, &dest)` in `ConfigStore::save` and `LibraryStore::save`.
+- **Native File Pickers**: Use `rfd::FileDialog` for all folder/file selection dialogs. `pick_folder()` opens a native Windows folder-only picker; `pick_files()` with `.add_filter("Media Files", &["png", "jpg", "gif", "webp", "mp4", ...])` opens a native file multi-select dialog. Both are synchronous blocking calls on the egui UI thread — this is acceptable.
+- **LibraryScanner File vs Directory**: `LibraryScanner::scan_paths()` handles both directory paths (`is_dir()` → recursive scan) and individual file paths (`is_file()` → direct `inspect_file`). Always route `AddScanPath` requests through `LibraryScanner::scan_paths` after adding the path to `config.library.scan_paths`.

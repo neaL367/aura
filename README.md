@@ -15,7 +15,8 @@
   - **Static Images**: High-performance single-pass RGBA decoding.
   - **Animated GIFs**: Streaming step-by-step frame decoding with full GIF disposal method compositing (`RestoreToPrevious` snapshot canvas).
   - **Video**: Windows Media Foundation (`IMFSourceReader`) decoding path.
-- **Process Isolation & IPC**: Headless daemon (`wallpaperd`) and control panel (`wallpaper-ui`) communicate over Windows Named Pipes (`\\.\pipe\aura-wallpaperd`). The UI features an async reconnecting client (`UiIpcClient`), visual connection status indicators, and pause/resume controls.
+- **Wallpaper Library & Gallery UI**: Persistent library of discovered wallpapers stored in a JSON cache (`library.json`). The `wallpaper-ui` Control Panel displays a scrollable gallery grid with per-card **Apply → Display N** assignment buttons. Native Windows folder and file picker dialogs (`rfd`) allow adding scan paths or individual media files (`png`, `jpg`, `gif`, `webp`, `mp4`) at runtime. The library rescans automatically on every `AddScanPath` or `Refresh` IPC command.
+- **Process Isolation & IPC**: Headless daemon (`wallpaperd`) and control panel (`wallpaper-ui`) communicate over Windows Named Pipes (`\\.\pipe\aura-wallpaperd`) using an adjacently-tagged JSON protocol (`serde tag+content`). The UI features an async reconnecting client (`UiIpcClient`), visual connection status indicators, and pause/resume controls.
 
 ---
 
@@ -100,6 +101,7 @@ cargo fmt --all -- --check
 
 1. **Windows 11 Only**: Uses Win32 desktop composition messages specific to Windows 11 shell architecture (`WorkerW`).
 2. **Video Decoder Tier 1**: Current video pipeline performs CPU-visible frame transfers to Vulkan textures; zero-copy D3D11-to-Vulkan interop is planned for Tier 2.
+3. **IPC Serde Tagging**: The `Response` enum uses adjacently-tagged serde (`tag = "type", content = "data"`). Changing this to internally-tagged (`tag = "type"` only) silently breaks deserialization of newtype variants (`WallpaperList`, `Status`) — the UI will show 0 wallpapers with no visible error.
 
 ---
 
