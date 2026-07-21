@@ -79,6 +79,10 @@ impl Orchestrator {
                 is_paused: state.is_paused,
             }),
             Request::ListWallpapers => {
+                info!(
+                    "ListWallpapers requested — returning {} wallpaper(s)",
+                    state.library_items.len()
+                );
                 Response::WallpaperList(state.library_items.iter().map(Into::into).collect())
             }
             Request::AssignWallpaper {
@@ -105,18 +109,24 @@ impl Orchestrator {
                 let scanned = LibraryScanner::scan_paths(&config.library.scan_paths);
                 state.library_items = scanned;
                 let _ = state.library_store.save(&state.library_items);
-                Response::Ok
+                info!(
+                    "RefreshLibrary complete — {} wallpaper(s) in library",
+                    state.library_items.len()
+                );
+                Response::WallpaperList(state.library_items.iter().map(Into::into).collect())
             }
             Request::AddScanPath { path } => {
+                info!("AddScanPath received for {:?}", path);
                 let mut config = state.config_store.load().unwrap_or_default();
                 if !config.library.scan_paths.contains(&path) {
-                    config.library.scan_paths.push(path);
+                    config.library.scan_paths.push(path.clone());
                     let _ = state.config_store.save(&config);
                 }
                 let scanned = LibraryScanner::scan_paths(&config.library.scan_paths);
+                info!("Rescanned library — now has {} wallpaper(s)", scanned.len());
                 state.library_items = scanned;
                 let _ = state.library_store.save(&state.library_items);
-                Response::Ok
+                Response::WallpaperList(state.library_items.iter().map(Into::into).collect())
             }
             Request::RemoveScanPath { path } => {
                 let mut config = state.config_store.load().unwrap_or_default();
@@ -127,7 +137,7 @@ impl Orchestrator {
                     state.library_items = scanned;
                     let _ = state.library_store.save(&state.library_items);
                 }
-                Response::Ok
+                Response::WallpaperList(state.library_items.iter().map(Into::into).collect())
             }
             Request::Shutdown => {
                 let _ = self.shutdown_tx.send(());
