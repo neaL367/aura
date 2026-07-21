@@ -8,29 +8,31 @@
 
 ## Key Features
 
-- **Native Windows 11 Integration**: Reparents render windows directly into the undocumented `WorkerW` desktop layer behind desktop icons using Win32 API calls (`0x052C`).
-- **Explorer Restart Recovery**: Idempotent re-attachment protocol (`ensure_attached()`) automatically recovers host windows upon Explorer crashes (`TaskbarCreated` broadcast) or display topology changes (`WM_DISPLAYCHANGE`).
-- **Vulkan Rendering Pipeline**: Uses `ash` Vulkan bindings with per-monitor Vulkan surface/swapchain isolation, bounded in-flight command resources, and vsync presentation pacing.
+- **Native Windows 11 Integration**: Reparents host windows directly into the undocumented `WorkerW` desktop composition layer behind icons using Win32 desktop composition messages (`0x052C`).
+- **Explorer Restart Recovery**: Idempotent re-attachment protocol (`ensure_attached()`) with non-fatal state transitions (`Attached` ⇌ `Detached`) automatically recovers host windows upon Explorer crashes (`TaskbarCreated` broadcast) or display topology changes (`WM_DISPLAYCHANGE`).
+- **Vulkan Rendering Pipeline**: Uses `ash` Vulkan bindings with per-monitor Vulkan surface/swapchain isolation, bounded in-flight command resources, persistent mapped memory `StagingAllocator` for texture uploads, and RAII `Drop` resource safety.
 - **Low-Overhead Decoders**:
   - **Static Images**: High-performance single-pass RGBA decoding.
-  - **Animated GIFs**: Frame-by-frame decoding with full GIF disposal method compositing.
+  - **Animated GIFs**: Streaming step-by-step frame decoding with full GIF disposal method compositing (`RestoreToPrevious` snapshot canvas).
   - **Video**: Windows Media Foundation (`IMFSourceReader`) decoding path.
-- **Process Isolation**: Clean process boundary between the headless background daemon (`wallpaperd`) and the control panel (`wallpaper-ui`), communicating over Windows Named Pipes (`\\.\pipe\wallpaperd`).
+- **Process Isolation & IPC**: Headless daemon (`wallpaperd`) and control panel (`wallpaper-ui`) communicate over Windows Named Pipes (`\\.\pipe\aura-wallpaperd`). The UI features an async reconnecting client (`UiIpcClient`), visual connection status indicators, and pause/resume controls.
 
 ---
 
 ## Architecture Overview
 
 ```text
-wallpaper-ui (GUI Control Panel, egui/wgpu)
+wallpaper-ui (GUI Control Panel, egui/eframe)
     │
-    │ Named Pipe IPC (\\.\pipe\wallpaperd)
+    │ Named Pipe IPC (\\.\pipe\aura-wallpaperd)
     ▼
 wallpaperd (Headless Daemon Coordinator)
-    ├── Command & Orchestration
+    ├── Orchestrator (State machine, IPC request routing)
+    ├── RenderCoordinator (Per-monitor Vulkan render loops & pause control)
+    ├── PerfMonitor (FPS counters & frame latency metrics)
     ├── platform-windows (WorkerW attach, Win32 event pump, monitor enum, power)
-    ├── media (Static Image, GIF compositing, Media Foundation video)
-    └── renderer-vulkan (Vulkan instance/device, surface, swapchain, shaders)
+    ├── media (Static Image, GIF streaming compositing, Media Foundation video)
+    └── renderer-vulkan (Vulkan instance/device, surface, swapchain, shaders, RAII Drop)
 ```
 
 ---
@@ -46,18 +48,18 @@ wallpaperd (Headless Daemon Coordinator)
 
 ## Workspace Structure
 
-The project is structured as a modular Cargo workspace across 9 crates:
+The project is structured as a modular Cargo workspace across 8 crates and 1 tool:
 
 | Crate | Purpose |
 | :--- | :--- |
-| [`aura-core`](crates/core) | Platform-independent domain model (monitors, wallpapers, configs) |
+| [`aura-core`](crates/core) | Platform-independent domain model (monitors, wallpaper lifecycle, configs) |
 | [`aura-ipc`](crates/ipc) | Length-prefixed JSON serialization protocol over Windows Named Pipes |
 | [`aura-storage`](crates/storage) | Persistence layer for TOML app configs and library JSON database |
 | [`aura-media`](crates/media) | Frame-bounded image/GIF decoders and Media Foundation stubs |
 | [`aura-platform-windows`](crates/platform-windows) | Win32 HWND wrappers, WorkerW attachments, process singleton |
-| [`aura-renderer-vulkan`](crates/renderer-vulkan) | Vulkan context, monitor renderers, swapchains, shaders |
-| [`wallpaperd`](crates/wallpaperd) | Headless background daemon orchestrator |
-| [`wallpaper-ui`](crates/wallpaper-ui) | `egui`/`eframe` GUI Control Panel |
+| [`aura-renderer-vulkan`](crates/renderer-vulkan) | Vulkan context, monitor renderers, swapchains, shaders, RAII Drop |
+| [`wallpaperd`](crates/wallpaperd) | Headless background daemon orchestrator & IPC server |
+| [`wallpaper-ui`](crates/wallpaper-ui) | `egui`/`eframe` GUI Control Panel & reconnecting IPC client |
 | [`workerw-proof`](tools/workerw-proof) | Standalone validation tool for WorkerW integration proof |
 
 ---
@@ -88,8 +90,8 @@ cargo run --bin wallpaper-ui
 ```powershell
 cargo check --workspace
 cargo test --workspace
-cargo clippy --workspace --all-targets
-cargo fmt --workspace -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all -- --check
 ```
 
 ---
