@@ -138,14 +138,17 @@ pub(crate) fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformEr
 /// # Safety
 /// `lparam` must be a valid `*mut HWND` for the duration of `EnumWindows`.
 unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
-    let def_view = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) };
-    if def_view.is_err() {
-        return BOOL::from(true);
-    }
-    let target = unsafe { FindWindowExW(None, Some(hwnd), w!("WorkerW"), None) };
-    if let Ok(target_hwnd) = target {
-        let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
-        *slot = target_hwnd;
+    if let Ok(def_view) = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) } {
+        if !def_view.0.is_null() {
+            if let Ok(target_hwnd) = unsafe { FindWindowExW(None, Some(hwnd), w!("WorkerW"), None) }
+            {
+                if !target_hwnd.0.is_null() {
+                    let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
+                    *slot = target_hwnd;
+                    return BOOL::from(false);
+                }
+            }
+        }
     }
     BOOL::from(true)
 }

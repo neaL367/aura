@@ -287,7 +287,10 @@ fn ensure_attached(render_hwnd: HWND) -> Result<HWND> {
         Some(hwnd) => hwnd,
         None => {
             eprintln!("  [!] Target WorkerW not found after 2s timeout");
-            return Err(Error::new(HRESULT(0), "WorkerW not found after retry"));
+            return Err(Error::new(
+                HRESULT(0x80004005u32 as i32),
+                "WorkerW not found after retry",
+            ));
         }
     };
     println!("  WorkerW : {:?}", workerw.0);
@@ -352,17 +355,18 @@ fn find_workerw_once() -> HWND {
 }
 
 unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
-    let def_view = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) };
-    if def_view.is_err() {
-        return BOOL::from(true);
+    if let Ok(def_view) = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) } {
+        if !def_view.0.is_null() {
+            if let Ok(target_hwnd) = unsafe { FindWindowExW(None, Some(hwnd), w!("WorkerW"), None) }
+            {
+                if !target_hwnd.0.is_null() {
+                    let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
+                    *slot = target_hwnd;
+                    return BOOL::from(false);
+                }
+            }
+        }
     }
-
-    let target = unsafe { FindWindowExW(None, Some(hwnd), w!("WorkerW"), None) };
-    if let Ok(target_hwnd) = target {
-        let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
-        *slot = target_hwnd;
-    }
-
     BOOL::from(true)
 }
 
