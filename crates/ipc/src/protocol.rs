@@ -58,7 +58,7 @@ pub enum Response {
 // Response payloads
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DaemonStatus {
     pub protocol_version: u16,
     pub active_monitors: usize,

@@ -29,10 +29,12 @@ fn main() {
         )
         .init();
 
+    let wallpaper_path = std::env::args().nth(1).map(std::path::PathBuf::from);
+
     #[cfg(target_os = "windows")]
     {
         tracing::info!("wallpaperd starting");
-        if let Err(e) = daemon::run() {
+        if let Err(e) = daemon::run(wallpaper_path) {
             tracing::error!("wallpaperd exited with error: {}", e);
             std::process::exit(1);
         }
