@@ -29,7 +29,19 @@ pub use context::VulkanContext;
 #[cfg(target_os = "windows")]
 pub use error::VulkanError;
 #[cfg(target_os = "windows")]
+pub use frame::FrameSync;
+#[cfg(target_os = "windows")]
 pub use monitor_renderer::MonitorRenderer;
+#[cfg(target_os = "windows")]
+pub use pipeline::GraphicsPipeline;
+#[cfg(target_os = "windows")]
+pub use surface::Surface;
+#[cfg(target_os = "windows")]
+pub use swapchain::Swapchain;
+#[cfg(target_os = "windows")]
+pub use texture::GpuTexture;
+#[cfg(target_os = "windows")]
+pub use upload::TextureUploader;
 
 // Stubs for non-Windows platforms (e.g. Linux CI check/test)
 #[cfg(not(target_os = "windows"))]
