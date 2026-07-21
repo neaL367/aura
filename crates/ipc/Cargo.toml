@@ -1,0 +1,15 @@
+[package]
+name        = "aura-ipc"
+description = "Typed named-pipe IPC protocol between wallpaperd and wallpaper-ui"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+
+[dependencies]
+aura-core  = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
+tracing    = { workspace = true }
+tokio      = { workspace = true }
