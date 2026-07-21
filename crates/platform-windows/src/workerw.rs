@@ -56,6 +56,17 @@ impl WorkerWManager {
         Ok(())
     }
 
+    /// Try a single WorkerW discovery pass (no retry). Returns true if attached.
+    pub fn try_find_workerw(&mut self) -> bool {
+        match find_workerw_once() {
+            Ok(workerw) => {
+                self.current_workerw = workerw;
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
     /// Current WorkerW HWND (null if `ensure_attached` was never called or failed).
     pub fn workerw(&self) -> HWND {
         self.current_workerw
@@ -72,9 +83,24 @@ impl Default for WorkerWManager {
 // Core functions (also used by host_window.rs)
 // ---------------------------------------------------------------------------
 
-/// Send 0x052C to Progman, locate the target WorkerW.
+/// Single pass: send 0x052C and poll EnumWindows once.
+fn find_workerw_once() -> std::result::Result<HWND, PlatformError> {
+    let mut found = HWND(ptr::null_mut());
+    unsafe {
+        let _ = EnumWindows(Some(find_workerw_callback), LPARAM(&raw mut found as isize));
+    }
+    if found.0.is_null() {
+        Err(PlatformError::WorkerWNotFound)
+    } else {
+        Ok(found)
+    }
+}
+
+/// Send 0x052C to Progman, locate the target WorkerW with retry.
+///
+/// Polls for the WorkerW up to ~2 seconds (8 × 250ms).
 pub(crate) fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformError> {
-    // Step 1: Find Progman.
+    // Step 1: Find Progman (once — it doesn't vanish during our retry window).
     let progman = unsafe { FindWindowW(w!("Progman"), None) }?;
     if progman.0.is_null() {
         return Err(PlatformError::WorkerWNotFound);
@@ -94,17 +120,17 @@ pub(crate) fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformEr
         );
     }
 
-    // Step 3: Enumerate windows to find the target WorkerW.
-    let mut found = HWND(ptr::null_mut());
-    unsafe {
-        let _ = EnumWindows(Some(find_workerw_callback), LPARAM(&raw mut found as isize));
+    // Step 3: Poll for WorkerW up to ~2s.
+    for i in 0..8 {
+        if let Ok(workerw) = find_workerw_once() {
+            return Ok(workerw);
+        }
+        if i < 7 {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
     }
 
-    if found.0.is_null() {
-        Err(PlatformError::WorkerWNotFound)
-    } else {
-        Ok(found)
-    }
+    Err(PlatformError::WorkerWNotFound)
 }
 
 /// EnumWindows callback: locates the empty WorkerW below the icon layer.
@@ -125,7 +151,7 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
 }
 
 /// Reparent `host_hwnd` into `workerw` and apply the correct window style.
-pub(crate) fn attach_to_workerw(
+pub fn attach_to_workerw(
     host_hwnd: HWND,
     workerw: HWND,
 ) -> std::result::Result<(), PlatformError> {

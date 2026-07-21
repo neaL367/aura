@@ -25,7 +25,7 @@ use windows::{
             WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_POPUP, WS_VISIBLE,
         },
     },
-    core::{BOOL, Error, Result, w},
+    core::{BOOL, Error, HRESULT, Result, w},
 };
 
 // ---------------------------------------------------------------------------
@@ -265,7 +265,7 @@ fn ensure_attached(render_hwnd: HWND) -> Result<HWND> {
     }
     println!("  Progman : {:?}", progman.0);
 
-    // Step 2: Send 0x052C to Progman.
+    // Step 2: Send 0x052C to Progman (idempotent).
     let mut _result: usize = 0;
     unsafe {
         SendMessageTimeoutW(
@@ -279,8 +279,14 @@ fn ensure_attached(render_hwnd: HWND) -> Result<HWND> {
         );
     }
 
-    // Step 3: Find the target WorkerW.
-    let workerw = find_target_workerw()?;
+    // Step 3: Find the target WorkerW with retry (~2s timeout).
+    let workerw = match find_workerw_retry() {
+        Some(hwnd) => hwnd,
+        None => {
+            eprintln!("  [!] Target WorkerW not found after 2s timeout");
+            return Err(Error::new(HRESULT(0), "WorkerW not found after retry"));
+        }
+    };
     println!("  WorkerW : {:?}", workerw.0);
 
     // Step 4: SetParent render window into WorkerW.
@@ -315,22 +321,31 @@ fn ensure_attached(render_hwnd: HWND) -> Result<HWND> {
     Ok(workerw)
 }
 
+/// Poll EnumWindows for the target WorkerW, up to ~2s (8 × 250ms).
+fn find_workerw_retry() -> Option<HWND> {
+    for i in 0..8 {
+        let hwnd = find_workerw_once();
+        if !hwnd.0.is_null() {
+            return Some(hwnd);
+        }
+        if i < 7 {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
+    }
+    None
+}
+
 // ---------------------------------------------------------------------------
-// find_target_workerw — WorkerW discovery via EnumWindows
+// find_workerw_once — single-pass WorkerW discovery via EnumWindows
 // ---------------------------------------------------------------------------
 
-fn find_target_workerw() -> Result<HWND> {
+/// Single EnumWindows pass. Returns null HWND if not found (no Win32 error).
+fn find_workerw_once() -> HWND {
     let mut found = HWND(ptr::null_mut());
     unsafe {
         let _ = EnumWindows(Some(enum_windows_proc), LPARAM(&raw mut found as isize));
     }
-
-    if found.0.is_null() {
-        eprintln!("  [!] Target WorkerW not found (SHELLDLL_DefView container absent)");
-        Err(Error::from_thread())
-    } else {
-        Ok(found)
-    }
+    found
 }
 
 unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
