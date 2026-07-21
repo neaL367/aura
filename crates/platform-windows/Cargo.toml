@@ -1,0 +1,41 @@
+[package]
+name        = "aura-platform-windows"
+description = "Windows 11 platform layer — WorkerW, monitors, singleton, events, Media Foundation"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+
+[dependencies]
+aura-core         = { workspace = true }
+aura-media        = { workspace = true }
+thiserror         = { workspace = true }
+tracing           = { workspace = true }
+crossbeam-channel = { workspace = true }
+
+[dependencies.windows]
+workspace = true
+features = [
+    # Core types
+    "Win32_Foundation",
+    # Window management
+    "Win32_UI_WindowsAndMessaging",
+    # DPI awareness
+    "Win32_UI_HiDpi",
+    # Monitor / display enumeration
+    "Win32_Graphics_Gdi",
+    # Process / singleton mutex
+    "Win32_System_Threading",
+    # Mutex security attributes
+    "Win32_Security",
+    # Power & session events
+    "Win32_System_SystemServices",
+    "Win32_System_Power",
+    # Module handle
+    "Win32_System_LibraryLoader",
+    # COM (needed for Media Foundation initialisation)
+    "Win32_System_Com",
+    # Media Foundation video decoding
+    "Win32_Media",
+    "Win32_Media_MediaFoundation",
+]
