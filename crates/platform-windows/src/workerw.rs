@@ -40,12 +40,18 @@ impl WorkerWManager {
         }
     }
 
+    /// Find and prepare the WorkerW window handle.
+    pub fn find_workerw(&mut self) -> std::result::Result<HWND, PlatformError> {
+        let workerw = find_and_prepare_workerw()?;
+        self.current_workerw = workerw;
+        Ok(workerw)
+    }
+
     /// Find the WorkerW and attach `host_hwnd` to it.
     ///
     /// Idempotent — safe to call repeatedly.
     pub fn ensure_attached(&mut self, host_hwnd: HWND) -> std::result::Result<(), PlatformError> {
-        let workerw = find_and_prepare_workerw()?;
-        self.current_workerw = workerw;
+        let workerw = self.find_workerw()?;
         attach_to_workerw(host_hwnd, workerw)?;
         Ok(())
     }
