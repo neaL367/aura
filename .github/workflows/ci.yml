@@ -1,0 +1,140 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  # Force clippy and build to treat warnings as errors to keep code clean.
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Formatting Check (Fast & Platform-Independent)
+  # ---------------------------------------------------------------------------
+  fmt:
+    name: Rustfmt Style Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt
+
+      - name: Check Formatting
+        run: cargo fmt --all -- --check
+
+  # ---------------------------------------------------------------------------
+  # 2. Clippy static analysis lints (Requires Win32 & Vulkan SDK)
+  # ---------------------------------------------------------------------------
+  clippy:
+    name: Clippy Lints
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: clippy
+
+      - name: Setup Rust Cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Install Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        with:
+          vulkan-query-version: 1.4.304.0
+          vulkan-components: KeepOnlyStandardVulcanComponents
+          vulkan-use-cache: true
+
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets
+
+  # ---------------------------------------------------------------------------
+  # 3. Test Suite (Depends on linting success)
+  # ---------------------------------------------------------------------------
+  test:
+    name: Run Unit Tests
+    needs: [fmt, clippy]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+
+      - name: Setup Rust Cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Install Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        with:
+          vulkan-query-version: 1.4.304.0
+          vulkan-components: KeepOnlyStandardVulcanComponents
+          vulkan-use-cache: true
+
+      - name: Run Tests
+        run: cargo test --workspace --all-targets
+
+  # ---------------------------------------------------------------------------
+  # 4. Production Release Build & Artifacts
+  # ---------------------------------------------------------------------------
+  build:
+    name: Release Build
+    needs: [fmt, clippy]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+
+      - name: Setup Rust Cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Install Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        with:
+          vulkan-query-version: 1.4.304.0
+          vulkan-components: KeepOnlyStandardVulcanComponents
+          vulkan-use-cache: true
+
+      - name: Build Release Binaries
+        run: cargo build --workspace --release
+
+      - name: Upload Wallpaperd Daemon Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-wallpaperd
+          path: target/release/wallpaperd.exe
+          if-no-files-found: error
+
+      - name: Upload UI Control Panel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-wallpaper-ui
+          path: target/release/wallpaper-ui.exe
+          if-no-files-found: error
+
+      - name: Upload WorkerW Proof Tool Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-workerw-proof
+          path: target/release/workerw-proof.exe
+          if-no-files-found: error
