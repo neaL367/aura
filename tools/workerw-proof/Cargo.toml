@@ -10,7 +10,7 @@ rust-version.workspace = true
 name = "workerw-proof"
 path = "src/main.rs"
 
-[dependencies.windows]
+[target.'cfg(target_os = "windows")'.dependencies.windows]
 workspace = true
 features = [
     "Win32_Foundation",

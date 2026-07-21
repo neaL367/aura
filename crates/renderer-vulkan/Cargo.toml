@@ -18,7 +18,7 @@ ash           = { workspace = true }
 gpu-allocator = { workspace = true }
 
 # Minimal Win32 — only HWND is needed for Win32 surface creation
-[dependencies.windows]
+[target.'cfg(target_os = "windows")'.dependencies.windows]
 workspace = true
 features = [
     "Win32_Foundation",
