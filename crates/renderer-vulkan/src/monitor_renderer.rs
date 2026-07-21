@@ -5,20 +5,22 @@ use aura_core::monitor::MonitorId;
 use windows::Win32::Foundation::HWND;
 
 use crate::{
-    context::VulkanContext, error::VulkanError, frame::FrameSync, surface::Surface,
-    swapchain::Swapchain, texture::GpuTexture, upload::TextureUploader,
+    context::VulkanContext, error::VulkanError, frame::FrameSync, pipeline::GraphicsPipeline,
+    surface::Surface, swapchain::Swapchain, texture::GpuTexture, upload::TextureUploader,
 };
 
-/// Per-monitor Vulkan renderer.
-///
-/// Owns the HWND `Surface`, vsync-paced `Swapchain`, synchronization primitives (`FrameSync`),
-/// command pool, and active wallpaper `GpuTexture`.
+/// Per-monitor Vulkan renderer with full draw/present pipeline.
 pub struct MonitorRenderer {
     pub monitor_id: MonitorId,
     pub surface: Surface,
     pub swapchain: Swapchain,
+    pub pipeline: GraphicsPipeline,
     pub frame_sync: FrameSync,
     pub command_pool: vk::CommandPool,
+    pub command_buffer: vk::CommandBuffer,
+    pub descriptor_pool: vk::DescriptorPool,
+    pub descriptor_set: vk::DescriptorSet,
+    pub framebuffers: Vec<vk::Framebuffer>,
     pub active_texture: Option<GpuTexture>,
 }
 
@@ -34,7 +36,6 @@ impl MonitorRenderer {
     ) -> Result<Self, VulkanError> {
         let surface = Surface::create_win32(context, hwnd)?;
 
-        // Verify queue support for this surface
         if !surface.get_support(context.physical_device, context.graphics_queue_family)? {
             return Err(VulkanError::Surface(
                 "Graphics queue family does not support presentation on this surface".into(),
@@ -44,11 +45,11 @@ impl MonitorRenderer {
         let swapchain =
             Swapchain::create(context, &surface, width, height, vk::SwapchainKHR::null())?;
         let frame_sync = FrameSync::new(context)?;
+        let pipeline = GraphicsPipeline::create(context, swapchain.format)?;
 
         let pool_info = vk::CommandPoolCreateInfo::default()
             .queue_family_index(context.graphics_queue_family)
             .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
-
         let command_pool = unsafe {
             context
                 .device
@@ -56,19 +57,211 @@ impl MonitorRenderer {
                 .map_err(|e| VulkanError::Render(e.to_string()))?
         };
 
+        let alloc_info = vk::CommandBufferAllocateInfo::default()
+            .command_pool(command_pool)
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_buffer_count(1);
+        let command_buffer = unsafe {
+            context
+                .device
+                .allocate_command_buffers(&alloc_info)
+                .map_err(|e| VulkanError::Render(e.to_string()))?[0]
+        };
+
+        let descriptor_pool = create_descriptor_pool(context, 1)?;
+        let descriptor_set = allocate_descriptor_set(context, &pipeline, descriptor_pool)?;
+
+        let framebuffers = create_framebuffers(context, &pipeline, &swapchain)?;
+
         Ok(Self {
             monitor_id,
             surface,
             swapchain,
+            pipeline,
             frame_sync,
             command_pool,
+            command_buffer,
+            descriptor_pool,
+            descriptor_set,
+            framebuffers,
             active_texture: None,
         })
     }
 
+    /// Acquire, draw, and present one frame.
+    pub fn frame(
+        &mut self,
+        context: &VulkanContext,
+        clear_color: [f32; 4],
+    ) -> Result<(), VulkanError> {
+        self.frame_sync.wait_and_reset(&context.device)?;
+
+        let (image_index, _) = unsafe {
+            self.swapchain
+                .swapchain_loader
+                .acquire_next_image(
+                    self.swapchain.swapchain,
+                    u64::MAX,
+                    self.frame_sync.image_available_semaphore,
+                    vk::Fence::null(),
+                )
+                .map_err(|e| {
+                    if e == vk::Result::ERROR_OUT_OF_DATE_KHR {
+                        VulkanError::SwapchainOutOfDate
+                    } else {
+                        VulkanError::Swapchain(e.to_string())
+                    }
+                })?
+        };
+
+        let framebuffer = self.framebuffers[image_index as usize];
+
+        unsafe {
+            context
+                .device
+                .reset_command_buffer(
+                    self.command_buffer,
+                    vk::CommandBufferResetFlags::empty(),
+                )
+                .ok();
+        }
+
+        let begin_info = vk::CommandBufferBeginInfo::default()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+        unsafe {
+            context
+                .device
+                .begin_command_buffer(self.command_buffer, &begin_info)
+                .ok();
+        }
+
+        let clear_value = vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: clear_color,
+            },
+        };
+
+        let render_pass_begin = vk::RenderPassBeginInfo::default()
+            .render_pass(self.pipeline.render_pass)
+            .framebuffer(framebuffer)
+            .render_area(vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: self.swapchain.extent,
+            })
+            .clear_values(std::slice::from_ref(&clear_value));
+
+        unsafe {
+            context.device.cmd_begin_render_pass(
+                self.command_buffer,
+                &render_pass_begin,
+                vk::SubpassContents::INLINE,
+            );
+        }
+
+        let viewport = vk::Viewport::default()
+            .x(0.0)
+            .y(0.0)
+            .width(self.swapchain.extent.width as f32)
+            .height(self.swapchain.extent.height as f32)
+            .min_depth(0.0)
+            .max_depth(1.0);
+
+        let scissor = vk::Rect2D {
+            offset: vk::Offset2D { x: 0, y: 0 },
+            extent: self.swapchain.extent,
+        };
+
+        unsafe {
+            context
+                .device
+                .cmd_set_viewport(self.command_buffer, 0, std::slice::from_ref(&viewport));
+            context
+                .device
+                .cmd_set_scissor(self.command_buffer, 0, std::slice::from_ref(&scissor));
+            context
+                .device
+                .cmd_bind_pipeline(self.command_buffer, vk::PipelineBindPoint::GRAPHICS, self.pipeline.pipeline);
+        }
+
+        // Bind texture descriptor set if available
+        if self.active_texture.is_some() {
+            unsafe {
+                context.device.cmd_bind_descriptor_sets(
+                    self.command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    self.pipeline.pipeline_layout,
+                    0,
+                    std::slice::from_ref(&self.descriptor_set),
+                    &[],
+                );
+            }
+        }
+
+        // Draw fullscreen quad (6 vertices, no index buffer)
+        unsafe {
+            context
+                .device
+                .cmd_draw(self.command_buffer, 6, 1, 0, 0);
+        }
+
+        unsafe {
+            context
+                .device
+                .cmd_end_render_pass(self.command_buffer);
+            context
+                .device
+                .end_command_buffer(self.command_buffer)
+                .ok();
+        }
+
+        let wait_semaphores = [self.frame_sync.image_available_semaphore];
+        let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let signal_semaphores = [self.frame_sync.render_finished_semaphore];
+
+        let submit_info = vk::SubmitInfo::default()
+            .wait_semaphores(&wait_semaphores)
+            .wait_dst_stage_mask(&wait_stages)
+            .command_buffers(std::slice::from_ref(&self.command_buffer))
+            .signal_semaphores(&signal_semaphores);
+
+        unsafe {
+            context
+                .device
+                .queue_submit(
+                    context.graphics_queue,
+                    &[submit_info],
+                    self.frame_sync.in_flight_fence,
+                )
+                .map_err(|e| VulkanError::Render(e.to_string()))?;
+        }
+
+        let present_info = vk::PresentInfoKHR::default()
+            .wait_semaphores(&signal_semaphores)
+            .swapchains(std::slice::from_ref(&self.swapchain.swapchain))
+            .image_indices(std::slice::from_ref(&image_index));
+
+        unsafe {
+            let suboptimal = self
+                .swapchain
+                .swapchain_loader
+                .queue_present(context.graphics_queue, &present_info)
+                .map_err(|e| {
+                    if e == vk::Result::ERROR_OUT_OF_DATE_KHR {
+                        VulkanError::SwapchainOutOfDate
+                    } else {
+                        VulkanError::Swapchain(e.to_string())
+                    }
+                })?;
+            if suboptimal {
+                Err(VulkanError::SwapchainOutOfDate)
+            } else {
+                Ok(())
+            }
+        }
+    }
+
     /// Upload new RGBA pixel data to the active wallpaper texture.
-    ///
-    /// Reuses the existing `GpuTexture` if dimensions match; otherwise recreates the allocation.
     pub fn set_wallpaper_pixels(
         &mut self,
         context: &mut VulkanContext,
@@ -91,12 +284,13 @@ impl MonitorRenderer {
 
         if let Some(texture) = &self.active_texture {
             TextureUploader::upload_pixels(context, self.command_pool, texture, pixels)?;
+            update_descriptor_set(context, self.descriptor_set, texture);
         }
 
         Ok(())
     }
 
-    /// Recreate the swapchain after display resolution or DPI change.
+    /// Recreate the swapchain and framebuffers after resolution change.
     pub fn resize(
         &mut self,
         context: &VulkanContext,
@@ -112,9 +306,11 @@ impl MonitorRenderer {
             Swapchain::create(context, &self.surface, width, height, old_swapchain)?;
 
         unsafe {
+            destroy_framebuffers(&context.device, &mut self.framebuffers);
             self.swapchain.destroy(&context.device);
         }
         self.swapchain = new_swapchain;
+        self.framebuffers = create_framebuffers(context, &self.pipeline, &self.swapchain)?;
 
         Ok(())
     }
@@ -131,9 +327,113 @@ impl MonitorRenderer {
                 texture.destroy(context);
             }
 
+            destroy_framebuffers(&context.device, &mut self.framebuffers);
+            context.device.destroy_descriptor_pool(self.descriptor_pool, None);
             context.device.destroy_command_pool(self.command_pool, None);
+            self.pipeline.destroy(&context.device);
             self.frame_sync.destroy(&context.device);
             self.swapchain.destroy(&context.device);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn create_descriptor_pool(
+    context: &VulkanContext,
+    max_sets: u32,
+) -> Result<vk::DescriptorPool, VulkanError> {
+    let pool_sizes = [vk::DescriptorPoolSize {
+        ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+        descriptor_count: max_sets,
+    }];
+
+    let pool_info = vk::DescriptorPoolCreateInfo::default()
+        .pool_sizes(&pool_sizes)
+        .max_sets(max_sets);
+
+    unsafe {
+        context
+            .device
+            .create_descriptor_pool(&pool_info, None)
+            .map_err(|e| VulkanError::Render(e.to_string()))
+    }
+}
+
+fn allocate_descriptor_set(
+    context: &VulkanContext,
+    pipeline: &GraphicsPipeline,
+    pool: vk::DescriptorPool,
+) -> Result<vk::DescriptorSet, VulkanError> {
+    let layouts = [pipeline.descriptor_set_layout];
+    let alloc_info = vk::DescriptorSetAllocateInfo::default()
+        .descriptor_pool(pool)
+        .set_layouts(&layouts);
+
+    unsafe {
+        context
+            .device
+            .allocate_descriptor_sets(&alloc_info)
+            .map_err(|e| VulkanError::Render(e.to_string()))
+            .map(|sets| sets[0])
+    }
+}
+
+fn update_descriptor_set(
+    context: &VulkanContext,
+    descriptor_set: vk::DescriptorSet,
+    texture: &GpuTexture,
+) {
+    let image_info = vk::DescriptorImageInfo::default()
+        .sampler(texture.sampler)
+        .image_view(texture.view)
+        .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+
+    let write = vk::WriteDescriptorSet::default()
+        .dst_set(descriptor_set)
+        .dst_binding(0)
+        .descriptor_count(1)
+        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+        .image_info(std::slice::from_ref(&image_info));
+
+    unsafe {
+        context.device.update_descriptor_sets(&[write], &[]);
+    }
+}
+
+fn create_framebuffers(
+    context: &VulkanContext,
+    pipeline: &GraphicsPipeline,
+    swapchain: &Swapchain,
+) -> Result<Vec<vk::Framebuffer>, VulkanError> {
+    swapchain
+        .image_views
+        .iter()
+        .map(|&view| {
+            let attachments = [view];
+            let fb_info = vk::FramebufferCreateInfo::default()
+                .render_pass(pipeline.render_pass)
+                .attachments(&attachments)
+                .width(swapchain.extent.width)
+                .height(swapchain.extent.height)
+                .layers(1);
+
+            unsafe {
+                context
+                    .device
+                    .create_framebuffer(&fb_info, None)
+                    .map_err(|e| VulkanError::Render(e.to_string()))
+            }
+        })
+        .collect()
+}
+
+unsafe fn destroy_framebuffers(device: &ash::Device, framebuffers: &mut Vec<vk::Framebuffer>) {
+    unsafe {
+        for fb in framebuffers.drain(..) {
+            device.destroy_framebuffer(fb, None);
         }
     }
 }

@@ -11,12 +11,14 @@
 #![allow(dead_code)]
 
 mod assignment;
-mod daemon;
 mod decode_worker;
 mod orchestrator;
 mod perf;
 mod recovery;
 mod render_coordinator;
+
+#[cfg(target_os = "windows")]
+mod daemon;
 
 fn main() {
     // Initialise structured logging.
@@ -27,10 +29,18 @@ fn main() {
         )
         .init();
 
-    tracing::info!("wallpaperd starting");
+    #[cfg(target_os = "windows")]
+    {
+        tracing::info!("wallpaperd starting");
+        if let Err(e) = daemon::run() {
+            tracing::error!("wallpaperd exited with error: {}", e);
+            std::process::exit(1);
+        }
+    }
 
-    if let Err(e) = daemon::run() {
-        tracing::error!("wallpaperd exited with error: {}", e);
+    #[cfg(not(target_os = "windows"))]
+    {
+        tracing::error!("wallpaperd is only supported on Windows");
         std::process::exit(1);
     }
 }

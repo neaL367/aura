@@ -107,7 +107,7 @@ fn ensure_class_registered() -> std::result::Result<(), PlatformError> {
         HOST_CLASS_REGISTERED.get_or_init(|| register_class_impl().map_err(|e| e.to_string()));
     res.as_ref()
         .map(|_| ())
-        .map_err(|e| PlatformError::MonitorEnum(e.clone()))
+        .map_err(|_| PlatformError::WindowCreation)
 }
 
 fn register_class_impl() -> std::result::Result<(), PlatformError> {

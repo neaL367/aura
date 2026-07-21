@@ -18,9 +18,16 @@ aura-media            = { workspace = true }
 aura-platform-windows = { workspace = true }
 aura-renderer-vulkan  = { workspace = true }
 
-serde             = { workspace = true }
-thiserror         = { workspace = true }
-tracing           = { workspace = true }
+serde              = { workspace = true }
+thiserror          = { workspace = true }
+tracing            = { workspace = true }
 tracing-subscriber = { workspace = true }
-tokio             = { workspace = true }
-crossbeam-channel = { workspace = true }
+tokio              = { workspace = true }
+crossbeam-channel  = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies.windows]
+workspace = true
+features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+]
