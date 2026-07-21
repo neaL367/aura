@@ -34,6 +34,8 @@ impl eframe::App for AuraApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::Panel::top("tab_bar").show(ui, |ui| {
             ui.horizontal(|ui| {
+                ui.heading("✨ Aura Control Panel");
+                ui.separator();
                 ui.selectable_value(&mut self.active_tab, Tab::Library, "📁 Library");
                 ui.selectable_value(&mut self.active_tab, Tab::Monitors, "🖥 Monitors");
                 ui.selectable_value(&mut self.active_tab, Tab::Settings, "⚙ Settings");
