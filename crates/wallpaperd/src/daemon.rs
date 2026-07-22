@@ -361,7 +361,7 @@ fn create_monitor_context(
         info.height,
     )?;
 
-    // Upload a 1x1 white fallback so the descriptor set is valid before the render thread starts.
+    // Upload a 1x1 black fallback so the descriptor set is valid before the render thread starts.
     // NOTE: Do NOT wait+reset upload_fence here. The fence is submitted to the GPU with the
     // 1x1 upload command. When the render thread later calls set_wallpaper_pixels(), step 2
     // (wait_for_fences) will wait for this upload to complete and reset the fence correctly.
