@@ -301,13 +301,30 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
         };
 
         if !has_def_view {
-            let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
-            *slot = hwnd;
-            tracing::info!(
-                "Found top-level empty WorkerW (no SHELLDLL_DefView): HWND({:?})",
-                hwnd.0
-            );
-            return BOOL::from(false);
+            let mut client_rect = windows::Win32::Foundation::RECT::default();
+            let _ = unsafe {
+                windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut client_rect)
+            };
+            let cw = client_rect.right - client_rect.left;
+            let ch = client_rect.bottom - client_rect.top;
+            if cw < 300 || ch < 300 {
+                tracing::warn!(
+                    "Skipping small internal WorkerW candidate HWND({:?}) with rect {}x{}",
+                    hwnd.0,
+                    cw,
+                    ch
+                );
+            } else {
+                let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
+                *slot = hwnd;
+                tracing::info!(
+                    "Found top-level empty WorkerW (no SHELLDLL_DefView): HWND({:?}) rect {}x{}",
+                    hwnd.0,
+                    cw,
+                    ch
+                );
+                return BOOL::from(false);
+            }
         }
     }
 
@@ -318,41 +335,26 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
 pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<(), PlatformError> {
     unsafe {
         use windows::Win32::Graphics::Gdi::{InvalidateRect, UpdateWindow};
-        use windows::Win32::UI::WindowsAndMessaging::{
-            GetSystemMetrics, HWND_BOTTOM, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
-            SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW,
-        };
+        use windows::Win32::UI::WindowsAndMessaging::{HWND_BOTTOM, SWP_SHOWWINDOW};
 
-        // The metrics query + resize is wrapped in a thread-scoped DPI context
-        // (see with_virtual_screen_metrics) so virtual-screen numbers aren't
-        // virtualized to the primary monitor — but the context is restored
-        // before SetParent below runs, since SetParent fails with
-        // ERROR_INVALID_PARAMETER if child/parent DPI awareness contexts differ.
-        let (vx, vy, vw, vh) = with_virtual_screen_metrics(|| {
-            (
-                GetSystemMetrics(SM_XVIRTUALSCREEN),
-                GetSystemMetrics(SM_YVIRTUALSCREEN),
-                GetSystemMetrics(SM_CXVIRTUALSCREEN),
-                GetSystemMetrics(SM_CYVIRTUALSCREEN),
-            )
-        });
-        use windows::Win32::UI::WindowsAndMessaging::SWP_ASYNCWINDOWPOS;
-        let _ = SetWindowPos(
-            workerw,
-            None,
-            vx,
-            vy,
-            vw,
-            vh,
-            SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS,
-        );
+        let mut class_buf = [0u16; 256];
+        let len = windows::Win32::UI::WindowsAndMessaging::GetClassNameW(workerw, &mut class_buf);
+        let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
+
+        let mut client_rect = windows::Win32::Foundation::RECT::default();
+        let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(workerw, &mut client_rect);
+        let client_w = client_rect.right - client_rect.left;
+        let client_h = client_rect.bottom - client_rect.top;
+
+        let visible = windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(workerw).as_bool();
+
         tracing::info!(
-            "Resized WorkerW HWND({:?}) to virtual desktop bounds: ({},{}) {}x{}",
+            "Attach target class='{}', hwnd={:?}, client_rect={}x{}, visible={}",
+            class_name,
             workerw.0,
-            vx,
-            vy,
-            vw,
-            vh
+            client_w,
+            client_h,
+            visible
         );
 
         let _ = ShowWindow(workerw, SW_SHOW);
