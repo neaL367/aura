@@ -69,18 +69,26 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
 
     // Create per-monitor windows + renderers (each renderer runs in its own thread).
     #[cfg(target_os = "windows")]
-    let monitor_contexts: Vec<MonitorContext> = {
+    let (monitor_contexts, wallpaper_txs, perf_counters) = {
         let mut contexts = Vec::with_capacity(monitors.len());
+        let mut txs = std::collections::HashMap::new();
+        let mut counters = Vec::with_capacity(monitors.len());
+
         for m in &monitors {
             match create_monitor_context(&vulkan_context, m, wallpaper_path.as_deref()) {
-                Ok(ctx) => contexts.push(ctx),
+                Ok((ctx, tx, counter)) => {
+                    contexts.push(ctx);
+                    txs.insert(m.id, tx);
+                    counters.push((m.id, counter));
+                }
                 Err(e) => tracing::error!("Failed to create monitor context: {}", e),
             }
         }
-        contexts
+        (contexts, txs, counters)
     };
     #[cfg(not(target_os = "windows"))]
-    let monitor_contexts: Vec<MonitorContext> = Vec::new();
+    let (monitor_contexts, wallpaper_txs, perf_counters) =
+        (Vec::new(), std::collections::HashMap::new(), Vec::new());
 
     let mut coordinator = RenderCoordinator::new(monitor_contexts);
 
@@ -94,8 +102,17 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
     let receiver = event_pump.receiver.clone();
     let _pump_handle = event_pump.spawn();
 
+    let monitor_summaries: Vec<aura_ipc::protocol::MonitorSummary> = monitors
+        .iter()
+        .enumerate()
+        .map(|(idx, m)| aura_ipc::protocol::MonitorSummary {
+            id: m.id,
+            name: format!("Display {} ({})", idx + 1, m.device_name),
+        })
+        .collect();
+
     let (ipc_shutdown_tx, ipc_shutdown_rx) = crossbeam_channel::bounded::<()>(1);
-    let orchestrator = Orchestrator::new(coordinator.monitor_count(), ipc_shutdown_tx);
+    let orchestrator = Orchestrator::new(monitor_summaries, wallpaper_txs, ipc_shutdown_tx);
 
     // Spawn async IPC server on a dedicated Tokio thread.
     let orchestrator_ipc = orchestrator.clone();
@@ -126,7 +143,7 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
         attach_state
     );
 
-    let mut perf_mon = PerfMonitor::new();
+    let mut perf_mon = PerfMonitor::new(perf_counters);
 
     // Main event dispatch loop (no rendering — render threads handle that).
     loop {
@@ -187,7 +204,7 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
             }
         }
 
-        perf_mon.record_frame();
+        perf_mon.log_if_interval();
     }
 
     // Shutdown: signal IPC server and render threads.
@@ -233,7 +250,14 @@ fn create_monitor_context(
     context: &Arc<VulkanContext>,
     info: &aura_core::monitor::MonitorInfo,
     wallpaper_path: Option<&Path>,
-) -> Result<MonitorContext, DaemonError> {
+) -> Result<
+    (
+        MonitorContext,
+        crossbeam_channel::Sender<PathBuf>,
+        Arc<std::sync::atomic::AtomicU64>,
+    ),
+    DaemonError,
+> {
     let host_window = HostWindow::create()?;
     let mut renderer = MonitorRenderer::create_win32(
         context,
@@ -259,12 +283,12 @@ fn create_monitor_context(
     }
 
     // Handle wallpaper path: static image or animated GIF.
-    let (frame_rx, width, height) = if let Some(path) = wallpaper_path {
+    let (initial_worker, initial_frame_rx) = if let Some(path) = wallpaper_path {
         match detect_media_kind(path) {
             Some(MediaKind::Gif) => {
                 let (tx, rx) = frame_channel();
-                let _handle = DecodeWorkerHandle::spawn_gif_worker(path.to_owned(), tx);
-                (Some(rx), info.width, info.height)
+                let handle = DecodeWorkerHandle::spawn_gif_worker(path.to_owned(), tx);
+                (Some(handle), Some(rx))
             }
             Some(MediaKind::Image) => {
                 let mut decoder = ImageDecoder::open(path)?;
@@ -276,27 +300,37 @@ fn create_monitor_context(
                         &frame.data,
                     )?;
                 }
-                (None, info.width, info.height) // static, no frame channel
+                (None, None)
             }
             _ => {
                 tracing::warn!("Unsupported wallpaper path: {}", path.display());
-                (None, info.width, info.height)
+                (None, None)
             }
         }
     } else {
-        (None, info.width, info.height)
+        (None, None)
     };
+
+    let (assign_tx, assign_rx) = crossbeam_channel::unbounded::<PathBuf>();
+    let frame_counter = Arc::new(std::sync::atomic::AtomicU64::new(0));
 
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let pause_flag = Arc::new(AtomicBool::new(false));
     let flag_clone = shutdown_flag.clone();
     let pause_clone = pause_flag.clone();
     let context_clone = context.clone();
+    let counter_clone = frame_counter.clone();
+
+    let width = info.width;
+    let height = info.height;
 
     let handle = std::thread::Builder::new()
         .name(format!("render-{}", info.id))
         .spawn(move || {
-            // Render loop: check for new frames, then draw (FIFO-gated by present mode).
+            let mut active_worker: Option<DecodeWorkerHandle> = initial_worker;
+            let mut current_frame_rx = initial_frame_rx;
+
+            // Render loop: check for wallpaper commands, new frames, then draw.
             loop {
                 if flag_clone.load(Ordering::Relaxed) {
                     break;
@@ -307,7 +341,46 @@ fn create_monitor_context(
                     continue;
                 }
 
-                if let Some(ref rx) = frame_rx
+                if let Ok(new_path) = assign_rx.try_recv() {
+                    tracing::info!("Render thread received new wallpaper path: {:?}", new_path);
+                    if let Some(worker) = active_worker.take() {
+                        worker.stop();
+                    }
+                    current_frame_rx = None;
+
+                    match detect_media_kind(&new_path) {
+                        Some(MediaKind::Gif) => {
+                            let (tx, rx) = frame_channel();
+                            let handle = DecodeWorkerHandle::spawn_gif_worker(new_path, tx);
+                            active_worker = Some(handle);
+                            current_frame_rx = Some(rx);
+                        }
+                        Some(MediaKind::Image) => match ImageDecoder::open(&new_path) {
+                            Ok(mut decoder) => {
+                                if let Ok(Some(frame)) = decoder.next_frame()
+                                    && let Err(e) = renderer.set_wallpaper_pixels(
+                                        &context_clone,
+                                        frame.width,
+                                        frame.height,
+                                        &frame.data,
+                                    )
+                                {
+                                    tracing::warn!(
+                                        "Texture upload failed for {:?}: {}",
+                                        new_path,
+                                        e
+                                    );
+                                }
+                            }
+                            Err(e) => tracing::warn!("Failed to open image {:?}: {}", new_path, e),
+                        },
+                        _ => {
+                            tracing::warn!("Unsupported or unhandled media path: {:?}", new_path);
+                        }
+                    }
+                }
+
+                if let Some(ref rx) = current_frame_rx
                     && let Some(frame) = rx.try_recv()
                     && let Err(e) = renderer.set_wallpaper_pixels(
                         &context_clone,
@@ -320,7 +393,9 @@ fn create_monitor_context(
                 }
 
                 match renderer.frame(&context_clone, [0.0, 0.0, 0.0, 1.0]) {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        counter_clone.fetch_add(1, Ordering::Relaxed);
+                    }
                     Err(VulkanError::SwapchainOutOfDate) => {
                         if let Err(e) = renderer.resize(&context_clone, width, height) {
                             tracing::warn!("Swapchain resize failed: {}", e);
@@ -332,20 +407,28 @@ fn create_monitor_context(
                 }
             }
 
+            if let Some(worker) = active_worker.take() {
+                worker.stop();
+            }
+
             unsafe {
                 renderer.destroy(&context_clone);
             }
         })
         .map_err(|_| DaemonError::ThreadSpawn)?;
 
-    Ok(MonitorContext::new(
-        host_window,
-        handle,
-        shutdown_flag,
-        pause_flag,
-        info.width,
-        info.height,
-        info.x,
-        info.y,
+    Ok((
+        MonitorContext::new(
+            host_window,
+            handle,
+            shutdown_flag,
+            pause_flag,
+            info.width,
+            info.height,
+            info.x,
+            info.y,
+        ),
+        assign_tx,
+        frame_counter,
     ))
 }

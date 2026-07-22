@@ -1,7 +1,10 @@
 use crate::assignment::AssignmentManager;
+use aura_core::monitor::MonitorId;
 use aura_core::wallpaper::WallpaperMeta;
-use aura_ipc::protocol::{DaemonStatus, PROTOCOL_VERSION, Request, Response};
+use aura_ipc::protocol::{DaemonStatus, MonitorSummary, PROTOCOL_VERSION, Request, Response};
 use aura_storage::{LibraryScanner, config_store::ConfigStore, library_store::LibraryStore};
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::info;
 
@@ -9,9 +12,11 @@ pub(crate) struct OrchestratorState {
     pub is_paused: bool,
     pub assignments: AssignmentManager,
     pub active_monitors: usize,
+    pub monitors: Vec<MonitorSummary>,
     pub library_items: Vec<WallpaperMeta>,
     pub config_store: ConfigStore,
     pub library_store: LibraryStore,
+    pub wallpaper_txs: HashMap<MonitorId, crossbeam_channel::Sender<PathBuf>>,
 }
 
 #[derive(Clone)]
@@ -21,7 +26,12 @@ pub(crate) struct Orchestrator {
 }
 
 impl Orchestrator {
-    pub fn new(active_monitors: usize, shutdown_tx: crossbeam_channel::Sender<()>) -> Self {
+    pub fn new(
+        monitors: Vec<MonitorSummary>,
+        wallpaper_txs: HashMap<MonitorId, crossbeam_channel::Sender<PathBuf>>,
+        shutdown_tx: crossbeam_channel::Sender<()>,
+    ) -> Self {
+        let active_monitors = monitors.len();
         let config_path = ConfigStore::default_path();
         let config_store = ConfigStore::new(&config_path);
         let mut config = config_store.load().unwrap_or_default();
@@ -40,8 +50,9 @@ impl Orchestrator {
         }
 
         info!(
-            "Orchestrator initialized — {} wallpaper(s) in library",
-            library_items.len()
+            "Orchestrator initialized — {} wallpaper(s) in library, {} monitor(s)",
+            library_items.len(),
+            monitors.len()
         );
 
         Self {
@@ -49,9 +60,11 @@ impl Orchestrator {
                 is_paused: false,
                 assignments: AssignmentManager::new(),
                 active_monitors,
+                monitors,
                 library_items,
                 config_store,
                 library_store,
+                wallpaper_txs,
             })),
             shutdown_tx,
         }
@@ -77,6 +90,7 @@ impl Orchestrator {
                 active_monitors: state.active_monitors,
                 assigned_wallpapers: state.assignments.all().len(),
                 is_paused: state.is_paused,
+                monitors: state.monitors.clone(),
             }),
             Request::ListWallpapers => {
                 info!(
@@ -89,8 +103,34 @@ impl Orchestrator {
                 monitor_id,
                 wallpaper_id,
             } => {
-                state.assignments.assign(monitor_id, wallpaper_id);
-                Response::Ok
+                let wallpaper_meta = state
+                    .library_items
+                    .iter()
+                    .find(|item| item.id == wallpaper_id)
+                    .cloned();
+                match wallpaper_meta {
+                    Some(meta) => {
+                        if meta.kind == aura_core::wallpaper::MediaKind::Video {
+                            return Response::Error {
+                                reason: "Video wallpapers are not yet supported".into(),
+                            };
+                        }
+                        state.assignments.assign(monitor_id, wallpaper_id);
+                        if let Some(tx) = state.wallpaper_txs.get(&monitor_id) {
+                            info!(
+                                "Assigning wallpaper {:?} to monitor {:?}",
+                                meta.path, monitor_id
+                            );
+                            let _ = tx.send(meta.path);
+                        } else {
+                            tracing::warn!("No channel found for monitor {:?}", monitor_id);
+                        }
+                        Response::Ok
+                    }
+                    None => Response::Error {
+                        reason: "wallpaper not found".into(),
+                    },
+                }
             }
             Request::RemoveAssignment { monitor_id } => {
                 state.assignments.remove(&monitor_id);

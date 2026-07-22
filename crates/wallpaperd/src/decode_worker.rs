@@ -10,6 +10,11 @@ pub struct DecodeWorkerHandle {
 }
 
 impl DecodeWorkerHandle {
+    /// Signal the decode worker thread to stop execution.
+    pub fn stop(&self) {
+        let _ = self.command_sender.send(PlaybackCommand::Stop);
+    }
+
     /// Spawn a dedicated background thread for GIF decoding.
     pub fn spawn_gif_worker(path: PathBuf, frame_sender: FrameSender) -> Self {
         let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
