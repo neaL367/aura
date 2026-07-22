@@ -74,8 +74,9 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
         let mut txs = std::collections::HashMap::new();
         let mut counters = Vec::with_capacity(monitors.len());
 
+        let workerw = workerw_manager.workerw();
         for m in &monitors {
-            match create_monitor_context(&vulkan_context, m, wallpaper_path.as_deref()) {
+            match create_monitor_context(&vulkan_context, m, workerw, wallpaper_path.as_deref()) {
                 Ok((ctx, tx, counter)) => {
                     contexts.push(ctx);
                     txs.insert(m.id, tx);
@@ -91,11 +92,6 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
         (Vec::new(), std::collections::HashMap::new(), Vec::new());
 
     let mut coordinator = RenderCoordinator::new(monitor_contexts);
-
-    // Attach windows to WorkerW if available.
-    if let AttachState::Attached = attach_state {
-        coordinator.attach_all(workerw_manager.workerw());
-    }
 
     // Spawn platform event pump thread.
     let event_pump = EventPump::new();
@@ -249,6 +245,7 @@ fn detect_media_kind(path: &Path) -> Option<MediaKind> {
 fn create_monitor_context(
     context: &Arc<VulkanContext>,
     info: &aura_core::monitor::MonitorInfo,
+    workerw: windows::Win32::Foundation::HWND,
     wallpaper_path: Option<&Path>,
 ) -> Result<
     (
@@ -259,6 +256,30 @@ fn create_monitor_context(
     DaemonError,
 > {
     let host_window = HostWindow::create()?;
+    if !workerw.0.is_null() {
+        if let Err(e) =
+            aura_platform_windows::workerw::attach_to_workerw(host_window.hwnd(), workerw)
+        {
+            tracing::error!("Failed to attach window to WorkerW: {}", e);
+        } else {
+            unsafe {
+                use windows::Win32::Graphics::Gdi::InvalidateRect;
+                use windows::Win32::UI::WindowsAndMessaging::{MoveWindow, SW_SHOW, ShowWindow};
+                let hwnd = host_window.hwnd();
+                let _ = MoveWindow(
+                    hwnd,
+                    info.x,
+                    info.y,
+                    info.width as i32,
+                    info.height as i32,
+                    true,
+                );
+                let _ = ShowWindow(hwnd, SW_SHOW);
+                let _ = InvalidateRect(Some(hwnd), None, true);
+            }
+        }
+    }
+
     let mut renderer = MonitorRenderer::create_win32(
         context,
         info.id,
@@ -267,20 +288,14 @@ fn create_monitor_context(
         info.height,
     )?;
 
-    // Upload a 1x1 white fallback so the descriptor set is valid.
+    // Upload a 1x1 white fallback so the descriptor set is valid before the render thread starts.
+    // NOTE: Do NOT wait+reset upload_fence here. The fence is submitted to the GPU with the
+    // 1x1 upload command. When the render thread later calls set_wallpaper_pixels(), step 2
+    // (wait_for_fences) will wait for this upload to complete and reset the fence correctly.
+    // Resetting the fence here would leave it unsignaled and deadlock the render thread's
+    // first set_wallpaper_pixels() call with u64::MAX timeout.
     let white = [255u8; 4];
     renderer.set_wallpaper_pixels(context, 1, 1, &white)?;
-    // Wait for fallback upload to complete.
-    unsafe {
-        context
-            .device
-            .wait_for_fences(std::slice::from_ref(&renderer.upload_fence), true, u64::MAX)
-            .ok();
-        context
-            .device
-            .reset_fences(std::slice::from_ref(&renderer.upload_fence))
-            .ok();
-    }
 
     // Handle wallpaper path: static image or animated GIF.
     let (initial_worker, initial_frame_rx) = if let Some(path) = wallpaper_path {

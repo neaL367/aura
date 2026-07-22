@@ -299,6 +299,9 @@ impl MonitorRenderer {
         };
 
         if needs_recreate {
+            unsafe {
+                context.device.device_wait_idle().ok();
+            }
             if let Some(mut old_t) = self.active_texture.take() {
                 unsafe { old_t.destroy(context) };
             }
@@ -367,15 +370,38 @@ impl MonitorRenderer {
         }
 
         // 4. Map and copy pixel data into staging buffer.
-        if let Some(ref alloc) = self.upload_staging_allocation
-            && let Some(mapped_ptr) = alloc.mapped_ptr()
-        {
+        if let Some(ref alloc) = self.upload_staging_allocation {
+            if let Some(mapped_ptr) = alloc.mapped_ptr() {
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        pixels.as_ptr(),
+                        mapped_ptr.as_ptr() as *mut u8,
+                        pixels.len(),
+                    );
+                }
+            } else {
+                unsafe {
+                    let ptr = context
+                        .device
+                        .map_memory(
+                            alloc.memory(),
+                            alloc.offset(),
+                            buffer_size,
+                            vk::MemoryMapFlags::empty(),
+                        )
+                        .map_err(|e| VulkanError::Upload(e.to_string()))?;
+                    std::ptr::copy_nonoverlapping(pixels.as_ptr(), ptr as *mut u8, pixels.len());
+                    context.device.unmap_memory(alloc.memory());
+                }
+            }
+
+            // Flush mapped memory range to ensure CPU writes are visible to GPU DMA transfer reads
             unsafe {
-                std::ptr::copy_nonoverlapping(
-                    pixels.as_ptr(),
-                    mapped_ptr.as_ptr() as *mut u8,
-                    pixels.len(),
-                );
+                let range = vk::MappedMemoryRange::default()
+                    .memory(alloc.memory())
+                    .offset(alloc.offset())
+                    .size(vk::WHOLE_SIZE);
+                let _ = context.device.flush_mapped_memory_ranges(&[range]);
             }
         }
 
@@ -517,6 +543,10 @@ impl MonitorRenderer {
             context
                 .device
                 .queue_submit(context.graphics_queue, &[submit_info], self.upload_fence)
+                .map_err(|e| VulkanError::Upload(e.to_string()))?;
+            context
+                .device
+                .wait_for_fences(std::slice::from_ref(&self.upload_fence), true, u64::MAX)
                 .map_err(|e| VulkanError::Upload(e.to_string()))?;
         }
 

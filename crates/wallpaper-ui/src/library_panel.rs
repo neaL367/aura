@@ -84,7 +84,6 @@ impl LibraryPanel {
             .inner_margin(8.0)
             .show(ui, |ui| {
                 ui.set_width(220.0);
-                ui.set_height(140.0);
 
                 ui.vertical(|ui| {
                     let filename = entry
@@ -102,15 +101,16 @@ impl LibraryPanel {
                     };
                     ui.label(badge);
 
-                    ui.label(
-                        egui::RichText::new(entry.path.to_string_lossy())
-                            .small()
-                            .color(egui::Color32::GRAY),
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(entry.path.to_string_lossy())
+                                .small()
+                                .color(egui::Color32::GRAY),
+                        )
+                        .truncate(),
                     );
 
-                    ui.add_space(8.0);
-
-                    ui.add_space(8.0);
+                    ui.add_space(6.0);
 
                     let status = ipc_client.status();
                     let monitors = match status {
@@ -131,7 +131,7 @@ impl LibraryPanel {
                         ],
                     };
 
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         for (idx, mon) in monitors.iter().enumerate() {
                             let btn_label = format!("Apply → Display {}", idx + 1);
                             if ui.button(btn_label).clicked() {

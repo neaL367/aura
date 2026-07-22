@@ -47,14 +47,19 @@ impl MonitorContext {
             return;
         }
         unsafe {
-            let _ = windows::Win32::UI::WindowsAndMessaging::MoveWindow(
-                self.host_window.hwnd(),
+            use windows::Win32::Graphics::Gdi::InvalidateRect;
+            use windows::Win32::UI::WindowsAndMessaging::{MoveWindow, SW_SHOW, ShowWindow};
+            let hwnd = self.host_window.hwnd();
+            let _ = MoveWindow(
+                hwnd,
                 self.x,
                 self.y,
                 self.width as i32,
                 self.height as i32,
                 true,
             );
+            let _ = ShowWindow(hwnd, SW_SHOW);
+            let _ = InvalidateRect(Some(hwnd), None, true);
         }
     }
 

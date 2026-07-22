@@ -145,6 +145,15 @@ pub(crate) fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformEr
         }
     }
 
+    // Step 4: Fallback to Progman for Windows 11 24H2+ desktop composition engine.
+    if !progman.0.is_null() {
+        tracing::warn!(
+            "WorkerW not found after timeout; falling back to Progman for Windows 11 24H2: {:?}",
+            progman
+        );
+        return Ok(progman);
+    }
+
     Err(PlatformError::WorkerWNotFound)
 }
 
@@ -165,26 +174,7 @@ unsafe extern "system" fn find_progman_callback(hwnd: HWND, lparam: LPARAM) -> B
 /// # Safety
 /// `lparam` must be a valid `*mut HWND` for the duration of `EnumWindows`.
 unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
-    let mut class_buf = [0u16; 256];
-    let len = unsafe { GetClassNameW(hwnd, &mut class_buf) };
-    let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
-
-    // Check 1: Is this a top-level WorkerW window without SHELLDLL_DefView?
-    if class_name == "WorkerW" {
-        let def_view = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) };
-        let has_def_view = match def_view {
-            Ok(h) => !h.0.is_null(),
-            Err(_) => false,
-        };
-
-        if !has_def_view {
-            let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
-            *slot = hwnd;
-            return BOOL::from(false);
-        }
-    }
-
-    // Check 2: Is this a top-level window hosting SHELLDLL_DefView? Check Z-order sibling below it.
+    // Primary Check: Find the window hosting SHELLDLL_DefView and get its next Z-order WorkerW sibling directly behind desktop icons.
     let def_view = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) };
     if matches!(def_view, Ok(h) if !h.0.is_null()) {
         let mut next = unsafe { GetWindow(hwnd, GW_HWNDNEXT) };
@@ -204,6 +194,24 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
         }
     }
 
+    // Fallback Check: Top-level WorkerW window without SHELLDLL_DefView
+    let mut class_buf = [0u16; 256];
+    let len = unsafe { GetClassNameW(hwnd, &mut class_buf) };
+    let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
+    if class_name == "WorkerW" {
+        let def_view = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) };
+        let has_def_view = match def_view {
+            Ok(h) => !h.0.is_null(),
+            Err(_) => false,
+        };
+
+        if !has_def_view {
+            let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
+            *slot = hwnd;
+            return BOOL::from(false);
+        }
+    }
+
     BOOL::from(true)
 }
 
@@ -212,13 +220,11 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
     unsafe {
         SetParent(host_hwnd, Some(workerw))?;
 
-        // Update style: remove WS_POPUP, add WS_CHILD.
         let style = GetWindowLongPtrW(host_hwnd, GWL_STYLE);
         let new_style =
             (style & !(WS_POPUP.0 as isize)) | WS_CHILD.0 as isize | WS_VISIBLE.0 as isize;
         SetWindowLongPtrW(host_hwnd, GWL_STYLE, new_style);
 
-        // Update window position and force frame update.
         let _ = SetWindowPos(
             host_hwnd,
             None,

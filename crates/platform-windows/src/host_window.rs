@@ -7,7 +7,7 @@ use windows::{
         UI::WindowsAndMessaging::{
             CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DestroyWindow, IDC_ARROW,
             LoadCursorW, RegisterClassExW, WM_DESTROY, WNDCLASSEXW, WS_CLIPCHILDREN,
-            WS_CLIPSIBLINGS, WS_EX_NOREDIRECTIONBITMAP, WS_POPUP,
+            WS_CLIPSIBLINGS, WS_POPUP,
         },
     },
     core::{Error, w},
@@ -52,7 +52,7 @@ impl HostWindow {
 
         let hwnd = unsafe {
             CreateWindowExW(
-                WS_EX_NOREDIRECTIONBITMAP,
+                windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE(0),
                 HOST_CLASS,
                 w!("AuraHost"),
                 WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
