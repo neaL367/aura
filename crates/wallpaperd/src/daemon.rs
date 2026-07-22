@@ -74,9 +74,25 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
         let mut txs = std::collections::HashMap::new();
         let mut counters = Vec::with_capacity(monitors.len());
 
+        let config_path = aura_storage::config_store::ConfigStore::default_path();
+        let config_store = aura_storage::config_store::ConfigStore::new(&config_path);
+        let config = config_store.load().unwrap_or_default();
+        let library_path = config_path.with_file_name("library.json");
+        let library_store = aura_storage::library_store::LibraryStore::new(&library_path);
+        let library_items = library_store.load().unwrap_or_default();
+
         let workerw = workerw_manager.workerw();
         for m in &monitors {
-            match create_monitor_context(&vulkan_context, m, workerw, wallpaper_path.as_deref()) {
+            let initial_path = wallpaper_path.as_deref().or_else(|| {
+                config
+                    .assignments
+                    .iter()
+                    .find(|a| a.monitor_id == m.id)
+                    .and_then(|a| library_items.iter().find(|item| item.id == a.wallpaper_id))
+                    .map(|item| item.path.as_path())
+            });
+
+            match create_monitor_context(&vulkan_context, m, workerw, initial_path) {
                 Ok((ctx, tx, counter)) => {
                     contexts.push(ctx);
                     txs.insert(m.id, tx);

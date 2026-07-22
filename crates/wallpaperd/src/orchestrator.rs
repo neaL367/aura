@@ -49,6 +49,11 @@ impl Orchestrator {
             let _ = library_store.save(&library_items);
         }
 
+        let mut assignments = AssignmentManager::new();
+        for a in &config.assignments {
+            assignments.assign(a.monitor_id, a.wallpaper_id);
+        }
+
         info!(
             "Orchestrator initialized — {} wallpaper(s) in library, {} monitor(s)",
             library_items.len(),
@@ -58,7 +63,7 @@ impl Orchestrator {
         Self {
             state: Arc::new(Mutex::new(OrchestratorState {
                 is_paused: false,
-                assignments: AssignmentManager::new(),
+                assignments,
                 active_monitors,
                 monitors,
                 library_items,
@@ -123,6 +128,23 @@ impl Orchestrator {
                                     meta.path, monitor_id
                                 );
                                 state.assignments.assign(monitor_id, wallpaper_id);
+                                let mut config = state.config_store.load().unwrap_or_default();
+                                if let Some(pos) = config
+                                    .assignments
+                                    .iter()
+                                    .position(|a| a.monitor_id == monitor_id)
+                                {
+                                    config.assignments[pos].wallpaper_id = wallpaper_id;
+                                } else {
+                                    config.assignments.push(
+                                        aura_core::monitor::MonitorAssignment {
+                                            monitor_id,
+                                            wallpaper_id,
+                                        },
+                                    );
+                                }
+                                let _ = state.config_store.save(&config);
+
                                 if tx.send(meta.path).is_err() {
                                     tracing::error!(
                                         "Render thread for monitor {:?} is gone",
@@ -152,6 +174,15 @@ impl Orchestrator {
             }
             Request::RemoveAssignment { monitor_id } => {
                 state.assignments.remove(&monitor_id);
+                let mut config = state.config_store.load().unwrap_or_default();
+                if let Some(pos) = config
+                    .assignments
+                    .iter()
+                    .position(|a| a.monitor_id == monitor_id)
+                {
+                    config.assignments.remove(pos);
+                    let _ = state.config_store.save(&config);
+                }
                 Response::Ok
             }
             Request::PauseAll => {

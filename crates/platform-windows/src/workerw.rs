@@ -387,29 +387,6 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
     Ok(())
 }
 
-/// Run `f` with this thread's DPI awareness context temporarily elevated to
-/// per-monitor-v2, restoring the previous context afterward.
-///
-/// Use this only around calls that need un-virtualized virtual-screen metrics
-/// (e.g. `GetSystemMetrics(SM_CXVIRTUALSCREEN, ...)`). Do NOT set this
-/// process-wide: `SetParent` fails with `ERROR_INVALID_PARAMETER`
-/// (0x80070057) when the child and new-parent windows have different DPI
-/// awareness contexts, which breaks reparenting into Explorer's `WorkerW`
-/// (Explorer's own windows are not per-monitor-v2 aware).
-pub fn with_virtual_screen_metrics<T>(f: impl FnOnce() -> T) -> T {
-    use windows::Win32::UI::HiDpi::{
-        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext,
-    };
-    unsafe {
-        let previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        let result = f();
-        if !previous.0.is_null() {
-            let _ = SetThreadDpiAwarenessContext(previous);
-        }
-        result
-    }
-}
-
 /// Fallback used when WorkerW/Progman/SHELLDLL_DefView discovery fails entirely.
 ///
 /// Does NOT reparent `host_hwnd` anywhere — keeps it as an ordinary top-level

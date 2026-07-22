@@ -64,3 +64,12 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 - **Atomic Write on Windows**: `std::fs::rename(tmp, dest)` fails with `ERROR_ALREADY_EXISTS` if `dest` already exists on Windows (unlike POSIX `rename`). Always call `let _ = std::fs::remove_file(&dest)` before `std::fs::rename(&tmp, &dest)` in `ConfigStore::save` and `LibraryStore::save`.
 - **Native File Pickers**: Use `rfd::FileDialog` for all folder/file selection dialogs. `pick_folder()` opens a native Windows folder-only picker; `pick_files()` with `.add_filter("Media Files", &["png", "jpg", "gif", "webp", "mp4", ...])` opens a native file multi-select dialog. Both are synchronous blocking calls on the egui UI thread — this is acceptable.
 - **LibraryScanner File vs Directory**: `LibraryScanner::scan_paths()` handles both directory paths (`is_dir()` → recursive scan) and individual file paths (`is_file()` → direct `inspect_file`). Always route `AddScanPath` requests through `LibraryScanner::scan_paths` after adding the path to `config.library.scan_paths`.
+
+---
+
+## 7. WorkerW & Windows Desktop Composition Rules
+
+- **WorkerW Candidate Filtering**: Top-level `WorkerW` fallback checks must filter candidates by client dimensions (`cw >= 300 && ch >= 300`). Windows 11 shell components (such as XAML Islands or Taskbar utility windows) reuse the `WorkerW` class for small internal windows (`120x0`); selecting these breaks desktop window placement.
+- **Never Mutate Shell Geometry**: Never call `SetWindowPos` to force-resize Explorer's `WorkerW` window across process boundaries. Explorer automatically sizes desktop-hosting `WorkerW` windows. Forcibly resizing `WorkerW` causes taskbar stalls, desktop UI corruption, and white screen artifacts upon daemon exit.
+- **Reject Raw Desktop Window (`#32769`)**: `GetDesktopWindow()` (`#32769`) must never be accepted as a valid `WorkerW` attach target. DWM does not composite `WS_CHILD` windows reparented into `#32769`, causing host windows to silently render nothing.
+- **DPI Awareness & `SetParent` Compatibility**: Avoid process-wide `SetProcessDpiAwarenessContext`. `SetParent` fails with `ERROR_INVALID_PARAMETER` (`0x80070057`) if child and parent windows have differing DPI awareness contexts. Use thread-scoped context switches strictly around DPI-dependent metric queries.
