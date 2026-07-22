@@ -22,9 +22,6 @@ pub mod swapchain;
 #[cfg(target_os = "windows")]
 pub mod texture;
 #[cfg(target_os = "windows")]
-pub mod upload;
-
-#[cfg(target_os = "windows")]
 pub use context::VulkanContext;
 #[cfg(target_os = "windows")]
 pub use error::VulkanError;
@@ -40,8 +37,6 @@ pub use surface::Surface;
 pub use swapchain::Swapchain;
 #[cfg(target_os = "windows")]
 pub use texture::GpuTexture;
-#[cfg(target_os = "windows")]
-pub use upload::TextureUploader;
 
 // Stubs for non-Windows platforms (e.g. Linux CI check/test)
 #[cfg(not(target_os = "windows"))]
