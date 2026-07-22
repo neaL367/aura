@@ -478,3 +478,44 @@ pub fn attach_topmost_bottom(
 
     Ok(())
 }
+
+/// Restore Windows native desktop wallpaper rendering.
+///
+/// Hides split `WorkerW` state and sends `SPI_SETDESKWALLPAPER` refresh so Windows
+/// Explorer restores native GDI desktop wallpaper rendering.
+pub fn restore_desktop_wallpaper() {
+    unsafe {
+        use windows::Win32::Foundation::{LPARAM, WPARAM};
+        use windows::Win32::Graphics::Gdi::InvalidateRect;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            FindWindowExW, FindWindowW, SEND_MESSAGE_TIMEOUT_FLAGS, SPI_SETDESKWALLPAPER,
+            SPIF_SENDCHANGE, SPIF_UPDATEINIFILE, SendMessageTimeoutW, SystemParametersInfoW,
+        };
+        use windows::core::w;
+
+        let mut progman = FindWindowExW(None, None, w!("Progman"), None).unwrap_or_default();
+        if progman.0.is_null() {
+            progman = FindWindowW(w!("Progman"), None).unwrap_or_default();
+        }
+        if !progman.0.is_null() {
+            let mut res = 0usize;
+            let _ = SendMessageTimeoutW(
+                progman,
+                0x052C,
+                WPARAM(0),
+                LPARAM(0),
+                SEND_MESSAGE_TIMEOUT_FLAGS(0),
+                1000,
+                Some(&raw mut res),
+            );
+            let _ = InvalidateRect(Some(progman), None, true);
+        }
+
+        let _ = SystemParametersInfoW(
+            SPI_SETDESKWALLPAPER,
+            0,
+            None,
+            SPIF_UPDATEINIFILE | SPIF_SENDCHANGE,
+        );
+    }
+}

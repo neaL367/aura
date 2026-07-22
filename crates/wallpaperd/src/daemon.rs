@@ -297,6 +297,9 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
     pump_handle.shutdown();
     let _ = pump_thread.join();
 
+    #[cfg(target_os = "windows")]
+    aura_platform_windows::workerw::restore_desktop_wallpaper();
+
     tracing::info!("wallpaperd daemon shutdown complete");
     Ok(())
 }

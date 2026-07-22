@@ -101,8 +101,10 @@ impl HostWindow {
 impl Drop for HostWindow {
     fn drop(&mut self) {
         if self.valid && !self.hwnd.0.is_null() {
-            // SAFETY: DestroyWindow on a valid HWND we own.
+            // SAFETY: Detach from parent and DestroyWindow on a valid HWND we own.
             unsafe {
+                use windows::Win32::UI::WindowsAndMessaging::SetParent;
+                let _ = SetParent(self.hwnd, None);
                 let _ = DestroyWindow(self.hwnd);
             }
         }
