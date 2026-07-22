@@ -47,7 +47,10 @@ impl Swapchain {
             .unwrap_or(vk::PresentModeKHR::FIFO);
 
         // Compute extent matching surface limits
-        let extent = if caps.current_extent.width != u32::MAX {
+        let extent = if caps.current_extent.width != u32::MAX
+            && caps.current_extent.width > 1
+            && caps.current_extent.height > 1
+        {
             caps.current_extent
         } else {
             vk::Extent2D {

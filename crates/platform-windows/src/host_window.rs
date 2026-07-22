@@ -50,6 +50,17 @@ impl HostWindow {
         let hmodule = unsafe { GetModuleHandleW(None)? };
         let hinstance = HINSTANCE(hmodule.0);
 
+        let w = unsafe {
+            windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(
+                windows::Win32::UI::WindowsAndMessaging::SM_CXSCREEN,
+            )
+        };
+        let h = unsafe {
+            windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(
+                windows::Win32::UI::WindowsAndMessaging::SM_CYSCREEN,
+            )
+        };
+
         let hwnd = unsafe {
             CreateWindowExW(
                 windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE(0),
@@ -58,8 +69,8 @@ impl HostWindow {
                 WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
                 0,
                 0,
-                1,
-                1, // positioned after WorkerW attach
+                if w > 0 { w } else { 1920 },
+                if h > 0 { h } else { 1080 },
                 None,
                 None,
                 Some(hinstance),
