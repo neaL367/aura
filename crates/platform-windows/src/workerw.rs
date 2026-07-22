@@ -92,12 +92,24 @@ fn find_workerw_once() -> std::result::Result<HWND, PlatformError> {
         let def_hwnd = FindWindowExW(None, None, w!("SHELLDLL_DefView"), None).unwrap_or_default();
         if !def_hwnd.0.is_null() {
             let parent_hwnd = GetParent(def_hwnd).unwrap_or_default();
-            if !parent_hwnd.0.is_null() {
+            let desktop = GetDesktopWindow();
+            if !parent_hwnd.0.is_null() && parent_hwnd.0 != desktop.0 {
                 tracing::info!(
                     "SHELLDLL_DefView host window resolved directly: HWND({:?})",
                     parent_hwnd.0
                 );
                 return Ok(parent_hwnd);
+            }
+            if parent_hwnd.0 == desktop.0 {
+                // GetParent() falls back to the desktop window when the queried
+                // window has no real parent/owner. A WS_CHILD reparented into the
+                // literal desktop window is never composited by DWM — treat this
+                // as "not found" rather than accepting an attach target that will
+                // silently never render.
+                tracing::warn!(
+                    "SHELLDLL_DefView GetParent() resolved to the raw Desktop Window (HWND {:?}) — rejecting as an invalid attach target",
+                    desktop.0
+                );
             }
         }
     }
@@ -174,17 +186,24 @@ pub(crate) fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformEr
         }
     }
 
-    // Step 4: Fallback to Progman / Desktop for Windows 11 24H2+ composition engine.
-    let target = if !progman.0.is_null() {
-        progman
-    } else {
-        unsafe { GetDesktopWindow() }
-    };
-    tracing::warn!(
-        "WorkerW split discovery timed out; FALLING BACK to desktop layer HWND({:?}) for Windows 11 24H2/25H2 composition",
-        target.0
+    // Step 4: Fallback to Progman for Windows 11 24H2+ composition engine.
+    // NOTE: deliberately do NOT fall back further to GetDesktopWindow() here —
+    // DWM does not composite children reparented into the raw desktop window,
+    // so that would be accepted as "Attached" while silently never rendering.
+    if !progman.0.is_null() {
+        tracing::warn!(
+            "WorkerW split discovery timed out; falling back to Progman HWND({:?})",
+            progman.0
+        );
+        return Ok(progman);
+    }
+
+    tracing::error!(
+        "WorkerW discovery failed completely: no dedicated WorkerW, no SHELLDLL_DefView \
+         parent, and no Progman window found. Refusing to fall back to the raw desktop \
+         window, since it is never composited by DWM."
     );
-    Ok(target)
+    Err(PlatformError::WorkerWNotFound)
 }
 
 unsafe extern "system" fn find_progman_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
@@ -299,7 +318,42 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
 pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<(), PlatformError> {
     unsafe {
         use windows::Win32::Graphics::Gdi::{InvalidateRect, UpdateWindow};
-        use windows::Win32::UI::WindowsAndMessaging::{HWND_BOTTOM, SWP_SHOWWINDOW};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetSystemMetrics, HWND_BOTTOM, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
+            SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW,
+        };
+
+        // The metrics query + resize is wrapped in a thread-scoped DPI context
+        // (see with_virtual_screen_metrics) so virtual-screen numbers aren't
+        // virtualized to the primary monitor — but the context is restored
+        // before SetParent below runs, since SetParent fails with
+        // ERROR_INVALID_PARAMETER if child/parent DPI awareness contexts differ.
+        let (vx, vy, vw, vh) = with_virtual_screen_metrics(|| {
+            (
+                GetSystemMetrics(SM_XVIRTUALSCREEN),
+                GetSystemMetrics(SM_YVIRTUALSCREEN),
+                GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                GetSystemMetrics(SM_CYVIRTUALSCREEN),
+            )
+        });
+        use windows::Win32::UI::WindowsAndMessaging::SWP_ASYNCWINDOWPOS;
+        let _ = SetWindowPos(
+            workerw,
+            None,
+            vx,
+            vy,
+            vw,
+            vh,
+            SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS,
+        );
+        tracing::info!(
+            "Resized WorkerW HWND({:?}) to virtual desktop bounds: ({},{}) {}x{}",
+            workerw.0,
+            vx,
+            vy,
+            vw,
+            vh
+        );
 
         let _ = ShowWindow(workerw, SW_SHOW);
 
@@ -327,6 +381,70 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
         let _ = InvalidateRect(Some(host_hwnd), None, true);
         let _ = InvalidateRect(Some(workerw), None, true);
     }
+
+    Ok(())
+}
+
+/// Run `f` with this thread's DPI awareness context temporarily elevated to
+/// per-monitor-v2, restoring the previous context afterward.
+///
+/// Use this only around calls that need un-virtualized virtual-screen metrics
+/// (e.g. `GetSystemMetrics(SM_CXVIRTUALSCREEN, ...)`). Do NOT set this
+/// process-wide: `SetParent` fails with `ERROR_INVALID_PARAMETER`
+/// (0x80070057) when the child and new-parent windows have different DPI
+/// awareness contexts, which breaks reparenting into Explorer's `WorkerW`
+/// (Explorer's own windows are not per-monitor-v2 aware).
+pub fn with_virtual_screen_metrics<T>(f: impl FnOnce() -> T) -> T {
+    use windows::Win32::UI::HiDpi::{
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext,
+    };
+    unsafe {
+        let previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        let result = f();
+        if !previous.0.is_null() {
+            let _ = SetThreadDpiAwarenessContext(previous);
+        }
+        result
+    }
+}
+
+/// Fallback used when WorkerW/Progman/SHELLDLL_DefView discovery fails entirely.
+///
+/// Does NOT reparent `host_hwnd` anywhere — keeps it as an ordinary top-level
+/// window, positions it at the monitor's real screen coordinates (no
+/// `ScreenToClient` needed, since it isn't a child of anything), and pushes it
+/// to the bottom of the *top-level* z-order so it sits behind `Progman` and
+/// the desktop icons without depending on any particular shell parenting
+/// structure.
+pub fn attach_topmost_bottom(
+    host_hwnd: HWND,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+) -> std::result::Result<(), PlatformError> {
+    use windows::Win32::Graphics::Gdi::InvalidateRect;
+    use windows::Win32::UI::WindowsAndMessaging::{HWND_BOTTOM, MoveWindow, SWP_SHOWWINDOW};
+
+    unsafe {
+        let _ = MoveWindow(host_hwnd, x, y, width, height, true);
+        let _ = SetWindowPos(
+            host_hwnd,
+            Some(HWND_BOTTOM),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_SHOWWINDOW,
+        );
+        let _ = ShowWindow(host_hwnd, SW_SHOW);
+        let _ = InvalidateRect(Some(host_hwnd), None, true);
+    }
+
+    tracing::warn!(
+        "Using top-level (unparented) fallback placement for HWND({:?}) — WorkerW/Progman discovery did not resolve a valid attach target",
+        host_hwnd.0
+    );
 
     Ok(())
 }

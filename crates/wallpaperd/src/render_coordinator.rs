@@ -66,6 +66,16 @@ impl MonitorContext {
             );
             let _ = ShowWindow(hwnd, SW_SHOW);
             let _ = InvalidateRect(Some(hwnd), None, true);
+
+            let visible = windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(hwnd).as_bool();
+            tracing::info!(
+                "Monitor host window placed at ({}, {}) {}x{}, visible={}",
+                pt.x,
+                pt.y,
+                self.width,
+                self.height,
+                visible
+            );
         }
     }
 

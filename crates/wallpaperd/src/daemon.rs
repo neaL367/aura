@@ -215,6 +215,24 @@ fn attach_or_detach(manager: &mut WorkerWManager) -> AttachState {
     match manager.find_workerw() {
         Ok(hwnd) => {
             tracing::info!("WorkerW attachment target resolved: HWND({:?})", hwnd.0);
+            unsafe {
+                use windows::Win32::Foundation::RECT;
+                use windows::Win32::UI::WindowsAndMessaging::{
+                    GetClassNameW, GetClientRect, IsWindowVisible,
+                };
+                let mut rect = RECT::default();
+                let _ = GetClientRect(hwnd, &mut rect);
+                let mut class_buf = [0u16; 256];
+                let len = GetClassNameW(hwnd, &mut class_buf);
+                let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
+                tracing::info!(
+                    "Attach target class='{}' client_rect={}x{} visible={}",
+                    class_name,
+                    rect.right - rect.left,
+                    rect.bottom - rect.top,
+                    IsWindowVisible(hwnd).as_bool(),
+                );
+            }
             AttachState::Attached
         }
         Err(PlatformError::WorkerWNotFound) => {
@@ -282,7 +300,40 @@ fn create_monitor_context(
                 );
                 let _ = ShowWindow(hwnd, SW_SHOW);
                 let _ = InvalidateRect(Some(hwnd), None, true);
+
+                let visible =
+                    windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(hwnd).as_bool();
+                use windows::Win32::Foundation::RECT;
+                use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+                let mut wrect = RECT::default();
+                let _ = GetWindowRect(hwnd, &mut wrect);
+                tracing::info!(
+                    "Monitor {} host window placed at client-relative ({}, {}), size {}x{}; resulting screen rect ({},{})-({},{}) visible={}",
+                    info.id,
+                    pt.x,
+                    pt.y,
+                    info.width,
+                    info.height,
+                    wrect.left,
+                    wrect.top,
+                    wrect.right,
+                    wrect.bottom,
+                    visible
+                );
             }
+        }
+    } else {
+        // No valid WorkerW/Progman target at all — fall back to an unparented
+        // top-level window positioned behind Progman in the top-level z-order,
+        // rather than leaving the monitor with no visible window whatsoever.
+        if let Err(e) = aura_platform_windows::workerw::attach_topmost_bottom(
+            host_window.hwnd(),
+            info.x,
+            info.y,
+            info.width as i32,
+            info.height as i32,
+        ) {
+            tracing::error!("Top-level fallback placement failed: {}", e);
         }
     }
 
