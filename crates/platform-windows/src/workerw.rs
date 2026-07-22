@@ -78,6 +78,7 @@ impl Default for WorkerWManager {
 /// Single pass: scan EnumWindows for empty WorkerW or SHELLDLL_DefView host.
 fn find_workerw_once() -> std::result::Result<HWND, PlatformError> {
     let mut found = HWND(ptr::null_mut());
+    // SAFETY: EnumWindows passes a valid raw pointer to local stack variable `found` via LPARAM.
     unsafe {
         let _ = EnumWindows(Some(find_workerw_callback), LPARAM(&raw mut found as isize));
     }
@@ -308,6 +309,8 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
         let new_style =
             (style & !(WS_POPUP.0 as isize)) | WS_CHILD.0 as isize | WS_VISIBLE.0 as isize;
         SetWindowLongPtrW(host_hwnd, GWL_STYLE, new_style);
+        use windows::Win32::UI::WindowsAndMessaging::GWL_EXSTYLE;
+        SetWindowLongPtrW(host_hwnd, GWL_EXSTYLE, 0);
 
         let _ = SetWindowPos(
             host_hwnd,

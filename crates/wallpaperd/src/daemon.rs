@@ -263,13 +263,19 @@ fn create_monitor_context(
             tracing::error!("Failed to attach window to WorkerW: {}", e);
         } else {
             unsafe {
-                use windows::Win32::Graphics::Gdi::InvalidateRect;
+                use windows::Win32::Foundation::POINT;
+                use windows::Win32::Graphics::Gdi::{InvalidateRect, ScreenToClient};
                 use windows::Win32::UI::WindowsAndMessaging::{MoveWindow, SW_SHOW, ShowWindow};
                 let hwnd = host_window.hwnd();
+                let mut pt = POINT {
+                    x: info.x,
+                    y: info.y,
+                };
+                let _ = ScreenToClient(workerw, &mut pt);
                 let _ = MoveWindow(
                     hwnd,
-                    info.x,
-                    info.y,
+                    pt.x,
+                    pt.y,
                     info.width as i32,
                     info.height as i32,
                     true,

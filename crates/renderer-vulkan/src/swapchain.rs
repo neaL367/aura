@@ -46,16 +46,18 @@ impl Swapchain {
             .find(|&m| m == vk::PresentModeKHR::FIFO)
             .unwrap_or(vk::PresentModeKHR::FIFO);
 
-        // Compute extent matching surface limits
-        let extent = if caps.current_extent.width != u32::MAX
-            && caps.current_extent.width > 1
-            && caps.current_extent.height > 1
-        {
-            caps.current_extent
-        } else {
+        // Compute extent matching requested monitor dimensions and surface capabilities
+        let extent = if width > 0 && height > 0 {
             vk::Extent2D {
                 width: width.clamp(caps.min_image_extent.width, caps.max_image_extent.width),
                 height: height.clamp(caps.min_image_extent.height, caps.max_image_extent.height),
+            }
+        } else if caps.current_extent.width != u32::MAX {
+            caps.current_extent
+        } else {
+            vk::Extent2D {
+                width: 1920,
+                height: 1080,
             }
         };
 

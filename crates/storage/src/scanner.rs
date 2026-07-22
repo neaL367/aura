@@ -11,7 +11,7 @@ pub struct LibraryScanner;
 impl LibraryScanner {
     /// Scan a set of directory paths and return all discovered `WallpaperMeta` items.
     pub fn scan_paths(paths: &[PathBuf]) -> Vec<WallpaperMeta> {
-        let mut results = Vec::new();
+        let mut results = Vec::with_capacity(32);
         let mut visited = HashSet::new();
         for path in paths {
             if path.is_dir() {

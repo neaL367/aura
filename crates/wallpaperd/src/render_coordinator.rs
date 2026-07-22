@@ -47,13 +47,19 @@ impl MonitorContext {
             return;
         }
         unsafe {
-            use windows::Win32::Graphics::Gdi::InvalidateRect;
+            use windows::Win32::Foundation::POINT;
+            use windows::Win32::Graphics::Gdi::{InvalidateRect, ScreenToClient};
             use windows::Win32::UI::WindowsAndMessaging::{MoveWindow, SW_SHOW, ShowWindow};
             let hwnd = self.host_window.hwnd();
+            let mut pt = POINT {
+                x: self.x,
+                y: self.y,
+            };
+            let _ = ScreenToClient(workerw, &mut pt);
             let _ = MoveWindow(
                 hwnd,
-                self.x,
-                self.y,
+                pt.x,
+                pt.y,
                 self.width as i32,
                 self.height as i32,
                 true,

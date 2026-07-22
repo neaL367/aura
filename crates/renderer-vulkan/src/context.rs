@@ -134,7 +134,7 @@ fn select_physical_device(
             _ => 0,
         };
 
-        if best.is_none() || score > best.unwrap().2 {
+        if best.is_none_or(|(_, _, best_score)| score > best_score) {
             best = Some((device, qf_idx as u32, score));
         }
     }

@@ -154,17 +154,26 @@ impl UiIpcClient {
     }
 
     pub fn status(&self) -> ConnectionStatus {
-        self.status.lock().unwrap().clone()
+        self.status
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     pub fn wallpapers(&self) -> Vec<WallpaperEntry> {
-        self.wallpapers.lock().unwrap().clone()
+        self.wallpapers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Reason the most recent command failed, if any. Cleared on the next
     /// successful command.
     pub fn last_error(&self) -> Option<String> {
-        self.last_error.lock().unwrap().clone()
+        self.last_error
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     pub fn fetch_wallpapers(&self) {

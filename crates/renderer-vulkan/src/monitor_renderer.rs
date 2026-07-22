@@ -488,9 +488,13 @@ impl MonitorRenderer {
                     depth: 1,
                 });
 
+            let staging_buf = self
+                .upload_staging_buffer
+                .ok_or_else(|| VulkanError::Upload("No staging buffer available".to_string()))?;
+
             context.device.cmd_copy_buffer_to_image(
                 self.upload_command_buffer,
-                self.upload_staging_buffer.unwrap(),
+                staging_buf,
                 texture.image,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 &[copy_region],
@@ -551,8 +555,9 @@ impl MonitorRenderer {
         }
 
         // 7. Update descriptor set to point at the (now-populated) texture.
-        let some_texture = self.active_texture.as_ref().unwrap();
-        update_descriptor_set(context, self.descriptor_set, some_texture);
+        if let Some(some_texture) = self.active_texture.as_ref() {
+            update_descriptor_set(context, self.descriptor_set, some_texture);
+        }
 
         Ok(())
     }
