@@ -109,7 +109,10 @@ pub(crate) fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformEr
         unsafe { GetDesktopWindow() }
     };
 
-    // Step 2: Send 0x052C (idempotent).
+    // Step 2: Send 0x052C (idempotent double-dispatch).
+    // Note: WPARAM(0x0D), LPARAM(1) forces Windows 11 desktop composition to spawn/split
+    // the secondary WorkerW layer behind icons on newer Windows 11 builds (e.g., 24H2/25H2),
+    // followed by standard WPARAM(0), LPARAM(0) for classic Progman composition triggers.
     let mut _result: usize = 0;
     unsafe {
         SendMessageTimeoutW(
