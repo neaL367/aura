@@ -398,15 +398,28 @@ impl MonitorRenderer {
         let begin_info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
+        let current_layout = texture.layout;
+        let (src_stage, src_access) = if current_layout == vk::ImageLayout::UNDEFINED {
+            (
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::AccessFlags::empty(),
+            )
+        } else {
+            (
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::AccessFlags::SHADER_READ,
+            )
+        };
+
         unsafe {
             context
                 .device
                 .begin_command_buffer(self.upload_command_buffer, &begin_info)
                 .map_err(|e| VulkanError::Upload(e.to_string()))?;
 
-            // Transition image: UNDEFINED -> TRANSFER_DST_OPTIMAL
+            // Transition image: current_layout -> TRANSFER_DST_OPTIMAL
             let barrier_to_transfer = vk::ImageMemoryBarrier::default()
-                .old_layout(vk::ImageLayout::UNDEFINED)
+                .old_layout(current_layout)
                 .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
                 .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                 .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
@@ -418,12 +431,12 @@ impl MonitorRenderer {
                     base_array_layer: 0,
                     layer_count: 1,
                 })
-                .src_access_mask(vk::AccessFlags::empty())
+                .src_access_mask(src_access)
                 .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE);
 
             context.device.cmd_pipeline_barrier(
                 self.upload_command_buffer,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
+                src_stage,
                 vk::PipelineStageFlags::TRANSFER,
                 vk::DependencyFlags::empty(),
                 &[],
@@ -488,6 +501,10 @@ impl MonitorRenderer {
                 .device
                 .end_command_buffer(self.upload_command_buffer)
                 .map_err(|e| VulkanError::Upload(e.to_string()))?;
+        }
+
+        if let Some(t) = self.active_texture.as_mut() {
+            t.layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
         }
 
         // 6. Submit with upload_fence (no wait_idle).

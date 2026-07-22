@@ -10,6 +10,7 @@ pub struct GpuTexture {
     pub sampler: vk::Sampler,
     pub width: u32,
     pub height: u32,
+    pub layout: vk::ImageLayout,
 }
 
 impl GpuTexture {
@@ -116,6 +117,7 @@ impl GpuTexture {
             sampler,
             width,
             height,
+            layout: vk::ImageLayout::UNDEFINED,
         })
     }
 
