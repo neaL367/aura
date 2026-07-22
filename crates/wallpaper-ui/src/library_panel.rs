@@ -47,13 +47,15 @@ impl LibraryPanel {
                 return;
             }
 
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    for entry in &wallpapers {
-                        self.show_card(ui, entry, ipc_client);
-                    }
+            egui::ScrollArea::both()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        for entry in &wallpapers {
+                            self.show_card(ui, entry, ipc_client);
+                        }
+                    });
                 });
-            });
         });
     }
 

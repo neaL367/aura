@@ -65,7 +65,7 @@ impl eframe::App for AuraApp {
                 self.library.show(ui, &self.ipc_client);
             }
             Tab::Monitors => {
-                self.monitor.show(ui);
+                self.monitor.show(ui, &self.ipc_client);
             }
             Tab::Settings => {
                 self.settings.show(ui, &self.ipc_client);
