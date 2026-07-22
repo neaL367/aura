@@ -410,6 +410,13 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
         let _ = ShowWindow(workerw, SW_SHOW);
 
         let _dpi_guard = ScopedDpiHostingBehavior::allow_mixed();
+
+        // Set WorkerW class background brush to BLACK_BRUSH so empty/unpainted
+        // WorkerW surfaces erase to black instead of DWM default white if wallpaperd is killed.
+        use windows::Win32::Graphics::Gdi::{BLACK_BRUSH, GetStockObject};
+        use windows::Win32::UI::WindowsAndMessaging::{GCLP_HBRBACKGROUND, SetClassLongPtrW};
+        let black_brush = GetStockObject(BLACK_BRUSH);
+        let _ = SetClassLongPtrW(workerw, GCLP_HBRBACKGROUND, black_brush.0 as isize);
         SetParent(host_hwnd, Some(workerw))?;
 
         let style = GetWindowLongPtrW(host_hwnd, GWL_STYLE);

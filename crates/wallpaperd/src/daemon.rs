@@ -427,7 +427,7 @@ fn reconcile_monitors(
                     coordinator.add_monitor(ctx);
                 }
                 Err(e) => {
-                    tracing::error!("Failed to create monitor context for new monitor: {}", e)
+                    tracing::error!("Failed to create monitor context for new monitor: {}", e);
                 }
             }
         }
