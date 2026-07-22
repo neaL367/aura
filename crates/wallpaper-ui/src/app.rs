@@ -53,7 +53,11 @@ impl eframe::App for AuraApp {
         });
 
         egui::Panel::bottom("status_bar").show(ui, |ui| {
-            self.status.show(ui, &self.ipc_client.status());
+            self.status.show(
+                ui,
+                &self.ipc_client.status(),
+                self.ipc_client.last_error().as_deref(),
+            );
         });
 
         match self.active_tab {

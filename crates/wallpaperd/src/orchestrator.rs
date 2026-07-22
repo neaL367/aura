@@ -115,17 +115,35 @@ impl Orchestrator {
                                 reason: "Video wallpapers are not yet supported".into(),
                             };
                         }
-                        state.assignments.assign(monitor_id, wallpaper_id);
-                        if let Some(tx) = state.wallpaper_txs.get(&monitor_id) {
-                            info!(
-                                "Assigning wallpaper {:?} to monitor {:?}",
-                                meta.path, monitor_id
-                            );
-                            let _ = tx.send(meta.path);
-                        } else {
-                            tracing::warn!("No channel found for monitor {:?}", monitor_id);
+                        let tx = state.wallpaper_txs.get(&monitor_id).cloned();
+                        match tx {
+                            Some(tx) => {
+                                info!(
+                                    "Assigning wallpaper {:?} to monitor {:?}",
+                                    meta.path, monitor_id
+                                );
+                                state.assignments.assign(monitor_id, wallpaper_id);
+                                if tx.send(meta.path).is_err() {
+                                    tracing::error!(
+                                        "Render thread for monitor {:?} is gone",
+                                        monitor_id
+                                    );
+                                    return Response::Error {
+                                        reason: format!(
+                                            "render thread for monitor {:?} is not running",
+                                            monitor_id
+                                        ),
+                                    };
+                                }
+                                Response::Ok
+                            }
+                            None => {
+                                tracing::warn!("No channel found for monitor {:?}", monitor_id);
+                                Response::Error {
+                                    reason: format!("unknown monitor {:?}", monitor_id),
+                                }
+                            }
                         }
-                        Response::Ok
                     }
                     None => Response::Error {
                         reason: "wallpaper not found".into(),

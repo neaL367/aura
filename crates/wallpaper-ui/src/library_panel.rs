@@ -1,4 +1,3 @@
-use aura_core::monitor::MonitorId;
 use aura_core::wallpaper::MediaKind;
 use aura_ipc::protocol::{Request, WallpaperEntry};
 
@@ -113,35 +112,36 @@ impl LibraryPanel {
                     ui.add_space(6.0);
 
                     let status = ipc_client.status();
-                    let monitors = match status {
+                    match status {
                         crate::ipc_client::ConnectionStatus::Connected(ref s)
                             if !s.monitors.is_empty() =>
                         {
-                            s.monitors.clone()
+                            ui.horizontal_wrapped(|ui| {
+                                for (idx, mon) in s.monitors.iter().enumerate() {
+                                    let btn_label = format!("Apply → Display {}", idx + 1);
+                                    if ui.button(btn_label).clicked() {
+                                        ipc_client.send(Request::AssignWallpaper {
+                                            monitor_id: mon.id,
+                                            wallpaper_id: entry.id,
+                                        });
+                                    }
+                                }
+                            });
                         }
-                        _ => vec![
-                            aura_ipc::protocol::MonitorSummary {
-                                id: MonitorId::from_device_path(r"\\.\DISPLAY1"),
-                                name: "Display 1".into(),
-                            },
-                            aura_ipc::protocol::MonitorSummary {
-                                id: MonitorId::from_device_path(r"\\.\DISPLAY2"),
-                                name: "Display 2".into(),
-                            },
-                        ],
+                        crate::ipc_client::ConnectionStatus::Connected(_) => {
+                            ui.label(
+                                egui::RichText::new("No monitors reported by daemon")
+                                    .small()
+                                    .color(egui::Color32::GRAY),
+                            );
+                        }
+                        _ => {
+                            ui.add_enabled(
+                                false,
+                                egui::Button::new("Apply (waiting for daemon...)"),
+                            );
+                        }
                     };
-
-                    ui.horizontal_wrapped(|ui| {
-                        for (idx, mon) in monitors.iter().enumerate() {
-                            let btn_label = format!("Apply → Display {}", idx + 1);
-                            if ui.button(btn_label).clicked() {
-                                ipc_client.send(Request::AssignWallpaper {
-                                    monitor_id: mon.id,
-                                    wallpaper_id: entry.id,
-                                });
-                            }
-                        }
-                    });
                 });
             });
     }

@@ -14,6 +14,7 @@ pub enum ConnectionStatus {
 pub struct UiIpcClient {
     status: Arc<Mutex<ConnectionStatus>>,
     wallpapers: Arc<Mutex<Vec<WallpaperEntry>>>,
+    last_error: Arc<Mutex<Option<String>>>,
     cmd_tx: tokio::sync::mpsc::UnboundedSender<(
         Request,
         tokio::sync::oneshot::Sender<Result<Response, String>>,
@@ -24,8 +25,10 @@ impl UiIpcClient {
     pub fn new(ctx: egui::Context) -> Self {
         let status = Arc::new(Mutex::new(ConnectionStatus::Connecting));
         let wallpapers = Arc::new(Mutex::new(Vec::new()));
+        let last_error = Arc::new(Mutex::new(None));
         let status_clone = status.clone();
         let wallpapers_clone = wallpapers.clone();
+        let last_error_clone = last_error.clone();
 
         let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<(
             Request,
@@ -89,11 +92,25 @@ impl UiIpcClient {
                                                  Some((req, resp_tx)) => {
                                                      tracing::info!("UI sending IPC request: {:?}", req);
                                                      let res = client.send(req).await;
-                                                     if let Ok(Response::WallpaperList(ref list)) = res {
-                                                         tracing::info!("UI received WallpaperList with {} wallpaper(s)", list.len());
-                                                         *wallpapers_clone.lock().unwrap() = list.clone();
-                                                         ctx.request_repaint();
+                                                     match &res {
+                                                         Ok(Response::WallpaperList(list)) => {
+                                                             tracing::info!("UI received WallpaperList with {} wallpaper(s)", list.len());
+                                                             *wallpapers_clone.lock().unwrap() = list.clone();
+                                                             *last_error_clone.lock().unwrap() = None;
+                                                         }
+                                                         Ok(Response::Error { reason }) => {
+                                                             tracing::warn!("Daemon returned error: {}", reason);
+                                                             *last_error_clone.lock().unwrap() = Some(reason.clone());
+                                                         }
+                                                         Ok(_) => {
+                                                             *last_error_clone.lock().unwrap() = None;
+                                                         }
+                                                         Err(e) => {
+                                                             tracing::warn!("IPC transport error: {}", e);
+                                                             *last_error_clone.lock().unwrap() = Some(e.to_string());
+                                                         }
                                                      }
+                                                     ctx.request_repaint();
                                                      let _ = resp_tx.send(res.map_err(|e| e.to_string()));
                                                      ctx.request_repaint();
                                                  }
@@ -131,6 +148,7 @@ impl UiIpcClient {
         Self {
             status,
             wallpapers,
+            last_error,
             cmd_tx,
         }
     }
@@ -141,6 +159,12 @@ impl UiIpcClient {
 
     pub fn wallpapers(&self) -> Vec<WallpaperEntry> {
         self.wallpapers.lock().unwrap().clone()
+    }
+
+    /// Reason the most recent command failed, if any. Cleared on the next
+    /// successful command.
+    pub fn last_error(&self) -> Option<String> {
+        self.last_error.lock().unwrap().clone()
     }
 
     pub fn fetch_wallpapers(&self) {
