@@ -110,18 +110,36 @@ impl LibraryPanel {
 
                     ui.add_space(8.0);
 
-                    ui.horizontal(|ui| {
-                        if ui.button("Apply → Display 1").clicked() {
-                            ipc_client.send(Request::AssignWallpaper {
-                                monitor_id: MonitorId::from_device_path(r"\\.\DISPLAY1"),
-                                wallpaper_id: entry.id,
-                            });
+                    ui.add_space(8.0);
+
+                    let status = ipc_client.status();
+                    let monitors = match status {
+                        crate::ipc_client::ConnectionStatus::Connected(ref s)
+                            if !s.monitors.is_empty() =>
+                        {
+                            s.monitors.clone()
                         }
-                        if ui.button("Apply → Display 2").clicked() {
-                            ipc_client.send(Request::AssignWallpaper {
-                                monitor_id: MonitorId::from_device_path(r"\\.\DISPLAY2"),
-                                wallpaper_id: entry.id,
-                            });
+                        _ => vec![
+                            aura_ipc::protocol::MonitorSummary {
+                                id: MonitorId::from_device_path(r"\\.\DISPLAY1"),
+                                name: "Display 1".into(),
+                            },
+                            aura_ipc::protocol::MonitorSummary {
+                                id: MonitorId::from_device_path(r"\\.\DISPLAY2"),
+                                name: "Display 2".into(),
+                            },
+                        ],
+                    };
+
+                    ui.horizontal(|ui| {
+                        for (idx, mon) in monitors.iter().enumerate() {
+                            let btn_label = format!("Apply → Display {}", idx + 1);
+                            if ui.button(btn_label).clicked() {
+                                ipc_client.send(Request::AssignWallpaper {
+                                    monitor_id: mon.id,
+                                    wallpaper_id: entry.id,
+                                });
+                            }
                         }
                     });
                 });

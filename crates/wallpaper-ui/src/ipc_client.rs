@@ -63,6 +63,7 @@ impl UiIpcClient {
                                             active_monitors: 0,
                                             assigned_wallpapers: 0,
                                             is_paused: false,
+                                            monitors: vec![],
                                         });
                                     }
                                     Err(e) => {
