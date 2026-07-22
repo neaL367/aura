@@ -11,6 +11,13 @@ impl WallpaperId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
+
+    /// Create a stable, deterministic wallpaper ID from a file path (UUID v5).
+    pub fn from_path(path: &std::path::Path) -> Self {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let path_str = canonical.to_string_lossy();
+        Self(Uuid::new_v5(&Uuid::NAMESPACE_URL, path_str.as_bytes()))
+    }
 }
 
 impl Default for WallpaperId {
@@ -169,5 +176,16 @@ mod tests {
         let a = WallpaperId::new();
         let b = WallpaperId::new();
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn wallpaper_id_from_path_is_deterministic() {
+        let path_a = std::path::Path::new("C:/Wallpapers/bg1.png");
+        let path_b = std::path::Path::new("C:/Wallpapers/bg2.png");
+        let id_a1 = WallpaperId::from_path(path_a);
+        let id_a2 = WallpaperId::from_path(path_a);
+        let id_b = WallpaperId::from_path(path_b);
+        assert_eq!(id_a1, id_a2);
+        assert_ne!(id_a1, id_b);
     }
 }
