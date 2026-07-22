@@ -25,7 +25,7 @@ use windows::{
             WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_POPUP, WS_VISIBLE,
         },
     },
-    core::{BOOL, Error, HRESULT, Result, w},
+    core::{BOOL, Error, Result, w},
 };
 
 // ---------------------------------------------------------------------------
@@ -273,6 +273,16 @@ fn ensure_attached(render_hwnd: HWND) -> Result<HWND> {
     };
     println!("  Progman / Shell Window : {:?}", target_msg_hwnd.0);
 
+    // Dump Progman children
+    println!(
+        "  --- Dumping Progman (0x{:x}) children ---",
+        target_msg_hwnd.0 as usize
+    );
+    unsafe {
+        use windows::Win32::UI::WindowsAndMessaging::EnumChildWindows;
+        let _ = EnumChildWindows(Some(target_msg_hwnd), Some(dump_child_proc), LPARAM(0));
+    }
+
     // Step 2: Send 0x052C to Progman/Desktop (idempotent).
     let mut _result: usize = 0;
     unsafe {
@@ -298,16 +308,18 @@ fn ensure_attached(render_hwnd: HWND) -> Result<HWND> {
 
     // Step 3: Find the target WorkerW with retry (~2s timeout).
     let workerw = match find_workerw_retry() {
-        Some(hwnd) => hwnd,
+        Some(hwnd) => {
+            println!("  [✓] Target WorkerW found: {:?}", hwnd.0);
+            hwnd
+        }
         None => {
-            eprintln!("  [!] Target WorkerW not found after 2s timeout");
-            return Err(Error::new(
-                HRESULT(0x80004005u32 as i32),
-                "WorkerW not found after retry",
-            ));
+            println!(
+                "  [!] Target WorkerW not found after 2s timeout; falling back to Progman {:?}",
+                target_msg_hwnd.0
+            );
+            target_msg_hwnd
         }
     };
-    println!("  Target WorkerW : {:?}", workerw.0);
 
     // Step 4: SetParent render window into WorkerW.
     unsafe {
@@ -354,6 +366,18 @@ unsafe extern "system" fn find_progman_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
     BOOL::from(true)
 }
 
+unsafe extern "system" fn dump_child_proc(hwnd: HWND, _lparam: LPARAM) -> BOOL {
+    let mut class_buf = [0u16; 256];
+    let len =
+        unsafe { windows::Win32::UI::WindowsAndMessaging::GetClassNameW(hwnd, &mut class_buf) };
+    let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
+    println!(
+        "     -> Progman Child HWND(0x{:x}) Class='{}'",
+        hwnd.0 as usize, class_name
+    );
+    BOOL::from(true)
+}
+
 /// Poll EnumWindows for the target WorkerW, up to ~2s (8 × 250ms).
 fn find_workerw_retry() -> Option<HWND> {
     for i in 0..8 {
@@ -388,24 +412,21 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
     let len = unsafe { GetClassNameW(hwnd, &mut class_buf) };
     let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
 
-    // Check 1: Is this a top-level WorkerW window without SHELLDLL_DefView?
-    if class_name == "WorkerW" {
-        let def_view = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) };
-        let has_def_view = match def_view {
-            Ok(h) => !h.0.is_null(),
-            Err(_) => false,
-        };
+    let def_view = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) };
+    let has_def_view = match def_view {
+        Ok(h) => !h.0.is_null(),
+        Err(_) => false,
+    };
 
-        if !has_def_view {
-            let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
-            *slot = hwnd;
-            return BOOL::from(false);
-        }
+    // Check 1: Is this a top-level WorkerW window without SHELLDLL_DefView?
+    if class_name == "WorkerW" && !has_def_view {
+        let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
+        *slot = hwnd;
+        return BOOL::from(false);
     }
 
     // Check 2: Is this a top-level window hosting SHELLDLL_DefView? Check Z-order sibling below it.
-    let def_view = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) };
-    if matches!(def_view, Ok(h) if !h.0.is_null()) {
+    if has_def_view {
         let mut next = unsafe { GetWindow(hwnd, GW_HWNDNEXT) };
         while let Ok(next_hwnd) = next {
             if next_hwnd.0.is_null() {

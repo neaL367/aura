@@ -213,8 +213,8 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
 
 fn attach_or_detach(manager: &mut WorkerWManager) -> AttachState {
     match manager.find_workerw() {
-        Ok(_) => {
-            tracing::info!("WorkerW attachment established");
+        Ok(hwnd) => {
+            tracing::info!("WorkerW attachment target resolved: HWND({:?})", hwnd.0);
             AttachState::Attached
         }
         Err(PlatformError::WorkerWNotFound) => {

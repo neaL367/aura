@@ -63,7 +63,8 @@ impl HostWindow {
 
         let hwnd = unsafe {
             CreateWindowExW(
-                windows::Win32::UI::WindowsAndMessaging::WS_EX_TOOLWINDOW,
+                windows::Win32::UI::WindowsAndMessaging::WS_EX_TOOLWINDOW
+                    | windows::Win32::UI::WindowsAndMessaging::WS_EX_NOREDIRECTIONBITMAP,
                 HOST_CLASS,
                 w!("AuraHost"),
                 WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
