@@ -218,6 +218,11 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
 /// Reparent `host_hwnd` into `workerw` and apply the correct window style.
 pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<(), PlatformError> {
     unsafe {
+        use windows::Win32::Graphics::Gdi::{InvalidateRect, UpdateWindow};
+        use windows::Win32::UI::WindowsAndMessaging::{HWND_BOTTOM, SWP_SHOWWINDOW};
+
+        let _ = ShowWindow(workerw, SW_SHOW);
+
         SetParent(host_hwnd, Some(workerw))?;
 
         let style = GetWindowLongPtrW(host_hwnd, GWL_STYLE);
@@ -227,15 +232,18 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
 
         let _ = SetWindowPos(
             host_hwnd,
-            None,
+            Some(HWND_BOTTOM),
             0,
             0,
             0,
             0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_SHOWWINDOW,
         );
 
         let _ = ShowWindow(host_hwnd, SW_SHOW);
+        let _ = UpdateWindow(host_hwnd);
+        let _ = InvalidateRect(Some(host_hwnd), None, true);
+        let _ = InvalidateRect(Some(workerw), None, true);
     }
 
     Ok(())

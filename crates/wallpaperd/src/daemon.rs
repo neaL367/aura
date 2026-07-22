@@ -294,8 +294,8 @@ fn create_monitor_context(
     // (wait_for_fences) will wait for this upload to complete and reset the fence correctly.
     // Resetting the fence here would leave it unsignaled and deadlock the render thread's
     // first set_wallpaper_pixels() call with u64::MAX timeout.
-    let white = [255u8; 4];
-    renderer.set_wallpaper_pixels(context, 1, 1, &white)?;
+    let black = [0u8, 0u8, 0u8, 255u8];
+    renderer.set_wallpaper_pixels(context, 1, 1, &black)?;
 
     // Handle wallpaper path: static image or animated GIF.
     let (initial_worker, initial_frame_rx) = if let Some(path) = wallpaper_path {
@@ -371,22 +371,42 @@ fn create_monitor_context(
                             current_frame_rx = Some(rx);
                         }
                         Some(MediaKind::Image) => match ImageDecoder::open(&new_path) {
-                            Ok(mut decoder) => {
-                                if let Ok(Some(frame)) = decoder.next_frame()
-                                    && let Err(e) = renderer.set_wallpaper_pixels(
+                            Ok(mut decoder) => match decoder.next_frame() {
+                                Ok(Some(frame)) => {
+                                    if let Err(e) = renderer.set_wallpaper_pixels(
                                         &context_clone,
                                         frame.width,
                                         frame.height,
                                         &frame.data,
-                                    )
-                                {
+                                    ) {
+                                        tracing::warn!(
+                                            "Texture upload failed for {:?}: {}",
+                                            new_path,
+                                            e
+                                        );
+                                    } else {
+                                        tracing::info!(
+                                            "Texture upload succeeded for {:?} ({}x{})",
+                                            new_path,
+                                            frame.width,
+                                            frame.height
+                                        );
+                                    }
+                                }
+                                Ok(None) => {
                                     tracing::warn!(
-                                        "Texture upload failed for {:?}: {}",
+                                        "ImageDecoder produced no frames for {:?}",
+                                        new_path
+                                    );
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "ImageDecoder next_frame error for {:?}: {}",
                                         new_path,
                                         e
                                     );
                                 }
-                            }
+                            },
                             Err(e) => tracing::warn!("Failed to open image {:?}: {}", new_path, e),
                         },
                         _ => {
