@@ -50,6 +50,7 @@ fn test_response_serialization_roundtrip() {
             active_monitors: 2,
             assigned_wallpapers: 1,
             is_paused: false,
+            monitors: vec![],
         }),
         Response::WallpaperList(vec![
             WallpaperEntry {

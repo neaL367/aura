@@ -63,11 +63,18 @@ pub enum Response {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MonitorSummary {
+    pub id: MonitorId,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DaemonStatus {
     pub protocol_version: u16,
     pub active_monitors: usize,
     pub assigned_wallpapers: usize,
     pub is_paused: bool,
+    pub monitors: Vec<MonitorSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
