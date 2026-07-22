@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -11,13 +12,17 @@ impl LibraryScanner {
     /// Scan a set of directory paths and return all discovered `WallpaperMeta` items.
     pub fn scan_paths(paths: &[PathBuf]) -> Vec<WallpaperMeta> {
         let mut results = Vec::new();
+        let mut visited = HashSet::new();
         for path in paths {
             if path.is_dir() {
-                Self::scan_directory(path, &mut results);
+                Self::scan_directory(path, &mut results, &mut visited, 0);
             } else if path.is_file() {
-                let meta = Self::inspect_file(path);
-                if let Some(meta) = meta {
-                    results.push(meta);
+                let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+                if visited.insert(canonical) {
+                    let meta = Self::inspect_file(path);
+                    if let Some(meta) = meta {
+                        results.push(meta);
+                    }
                 }
             } else {
                 warn!("Scan path {:?} is not a valid file or directory", path);
@@ -30,7 +35,22 @@ impl LibraryScanner {
         results
     }
 
-    fn scan_directory(dir: &Path, results: &mut Vec<WallpaperMeta>) {
+    fn scan_directory(
+        dir: &Path,
+        results: &mut Vec<WallpaperMeta>,
+        visited: &mut HashSet<PathBuf>,
+        depth: u32,
+    ) {
+        if depth > 16 {
+            warn!("Maximum directory recursion depth reached at {:?}", dir);
+            return;
+        }
+
+        let canonical_dir = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+        if !visited.insert(canonical_dir) {
+            return;
+        }
+
         let read_dir = match std::fs::read_dir(dir) {
             Ok(rd) => rd,
             Err(e) => {
@@ -42,11 +62,14 @@ impl LibraryScanner {
         for entry in read_dir.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                Self::scan_directory(&path, results);
+                Self::scan_directory(&path, results, visited, depth + 1);
             } else if path.is_file() {
-                let meta = Self::inspect_file(&path);
-                if let Some(meta) = meta {
-                    results.push(meta);
+                let canonical_file = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+                if visited.insert(canonical_file) {
+                    let meta = Self::inspect_file(&path);
+                    if let Some(meta) = meta {
+                        results.push(meta);
+                    }
                 }
             }
         }
@@ -75,7 +98,7 @@ impl LibraryScanner {
         let scanned_at = chrono_iso8601_now();
 
         Some(WallpaperMeta {
-            id: WallpaperId::new(),
+            id: WallpaperId::from_path(path),
             path: path.to_path_buf(),
             kind,
             width,
