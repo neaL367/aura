@@ -40,6 +40,7 @@ fn test_request_serialization_roundtrip() {
             serde_json::from_str(&serialized).expect("deserialization failed");
 
         assert_eq!(deserialized.version, PROTOCOL_VERSION);
+        assert_eq!(deserialized.payload, msg.payload);
     }
 }
 
@@ -80,5 +81,6 @@ fn test_response_serialization_roundtrip() {
             serde_json::from_str(&serialized).expect("deserialization failed");
 
         assert_eq!(deserialized.version, PROTOCOL_VERSION);
+        assert_eq!(deserialized.payload, msg.payload);
     }
 }

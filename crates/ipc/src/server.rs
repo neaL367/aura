@@ -13,12 +13,22 @@ pub type RequestHandler = Box<dyn Fn(Request) -> Response + Send + Sync + 'stati
 /// Async IPC server — listens on the named pipe and dispatches requests.
 pub struct IpcServer {
     handler: std::sync::Arc<RequestHandler>,
+    pipe_name: String,
 }
 
 impl IpcServer {
     pub fn new(handler: RequestHandler) -> Self {
         Self {
             handler: std::sync::Arc::new(handler),
+            pipe_name: PIPE_NAME.to_owned(),
+        }
+    }
+
+    /// Create a server on a custom pipe name (for testing).
+    pub fn on_pipe(handler: RequestHandler, pipe_name: impl Into<String>) -> Self {
+        Self {
+            handler: std::sync::Arc::new(handler),
+            pipe_name: pipe_name.into(),
         }
     }
 
@@ -27,13 +37,12 @@ impl IpcServer {
         self,
         mut shutdown: tokio::sync::watch::Receiver<bool>,
     ) -> Result<(), IpcError> {
-        info!("IPC server listening on {}", PIPE_NAME);
+        info!("IPC server listening on {}", self.pipe_name);
 
         loop {
-            // Create a new pipe instance for the next client.
             let server = ServerOptions::new()
                 .first_pipe_instance(false)
-                .create(PIPE_NAME)
+                .create(&self.pipe_name)
                 .map_err(IpcError::Io)?;
 
             // Wait for a connection or shutdown.

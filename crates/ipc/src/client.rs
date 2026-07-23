@@ -13,15 +13,17 @@ pub struct IpcClient {
 }
 
 impl IpcClient {
-    /// Connect to the wallpaperd named pipe.
-    ///
-    /// Retries once if the server is busy (ERROR_PIPE_BUSY).
+    /// Connect to the wallpaperd named pipe (uses `PIPE_NAME`).
     pub async fn connect() -> Result<Self, IpcError> {
+        Self::connect_to(PIPE_NAME).await
+    }
+
+    /// Connect to a custom named pipe (for testing).
+    pub async fn connect_to(pipe_name: &str) -> Result<Self, IpcError> {
         let pipe = loop {
-            match ClientOptions::new().open(PIPE_NAME) {
+            match ClientOptions::new().open(pipe_name) {
                 Ok(p) => break p,
                 Err(e) if e.raw_os_error() == Some(231) => {
-                    // ERROR_PIPE_BUSY — server has no free instances; wait briefly.
                     debug!("Pipe busy, waiting…");
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 }

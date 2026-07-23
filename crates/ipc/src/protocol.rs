@@ -15,7 +15,7 @@ pub const PROTOCOL_VERSION: u16 = 1;
 // ---------------------------------------------------------------------------
 
 /// Commands sent from `wallpaper-ui` to `wallpaperd`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Request {
     /// Query daemon status.
@@ -55,7 +55,7 @@ pub enum Request {
 // ---------------------------------------------------------------------------
 
 /// Responses sent from `wallpaperd` to `wallpaper-ui`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum Response {
     /// Operation succeeded with no payload.
@@ -87,7 +87,7 @@ pub struct DaemonStatus {
     pub monitors: Vec<MonitorSummary>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WallpaperEntry {
     pub id: WallpaperId,
     pub path: std::path::PathBuf,
@@ -112,7 +112,7 @@ impl From<&aura_core::wallpaper::WallpaperMeta> for WallpaperEntry {
 // ---------------------------------------------------------------------------
 
 /// Framed, versioned IPC message.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IpcMessage<T> {
     pub version: u16,
     pub payload: T,
