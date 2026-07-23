@@ -43,11 +43,8 @@ impl Orchestrator {
         let library_path = config_path.with_file_name("library.json");
         let library_store = LibraryStore::new(&library_path);
 
-        let mut library_items = Vec::new();
-        if !config.library.scan_paths.is_empty() {
-            library_items = LibraryScanner::scan_paths(&config.library.scan_paths);
-            let _ = library_store.save(&library_items);
-        }
+        // Load cached library metadata immediately for sub-millisecond startup
+        let library_items = library_store.load().unwrap_or_default();
 
         let mut assignments = AssignmentManager::new();
         for a in &config.assignments {
@@ -55,12 +52,12 @@ impl Orchestrator {
         }
 
         info!(
-            "Orchestrator initialized — {} wallpaper(s) in library, {} monitor(s)",
+            "Orchestrator initialized — {} wallpaper(s) in cached library, {} monitor(s)",
             library_items.len(),
             monitors.len()
         );
 
-        Self {
+        let orchestrator = Self {
             state: Arc::new(Mutex::new(OrchestratorState {
                 is_paused: false,
                 assignments,
@@ -72,7 +69,35 @@ impl Orchestrator {
                 wallpaper_txs,
             })),
             shutdown_tx,
-        }
+        };
+
+        // Asynchronously rescan configured library scan paths in a background thread
+        // so daemon startup and IPC server initialization are never blocked by filesystem I/O.
+        let orch_bg = orchestrator.clone();
+        std::thread::Builder::new()
+            .name("library-rescan".into())
+            .spawn(move || {
+                let scan_paths = {
+                    let state = orch_bg.state.lock().unwrap();
+                    let config = state.config_store.load().unwrap_or_default();
+                    config.library.scan_paths
+                };
+                if !scan_paths.is_empty() {
+                    info!("Background library rescan starting...");
+                    let scanned = LibraryScanner::scan_paths(&scan_paths);
+                    if let Ok(mut state) = orch_bg.state.lock() {
+                        state.library_items = scanned;
+                        let _ = state.library_store.save(&state.library_items);
+                        info!(
+                            "Background library rescan complete — {} wallpaper(s) in library",
+                            state.library_items.len()
+                        );
+                    }
+                }
+            })
+            .expect("failed to spawn library rescan thread");
+
+        orchestrator
     }
 
     pub fn is_paused(&self) -> bool {

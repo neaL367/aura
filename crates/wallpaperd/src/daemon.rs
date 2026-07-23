@@ -43,13 +43,56 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
     let _singleton = ProcessSingleton::acquire().map_err(|_| DaemonError::AlreadyRunning)?;
     tracing::info!("Process singleton acquired successfully");
 
-    #[cfg(target_os = "windows")]
-    let vulkan_context = Arc::new(VulkanContext::new()?);
+    // Spawn async IPC server on a dedicated Tokio thread IMMEDIATELY at process startup (<2ms)
+    // so UI client connections are accepted instantly without waiting for GPU or WorkerW init.
+    let (ipc_shutdown_tx, ipc_shutdown_rx) = crossbeam_channel::bounded::<()>(1);
 
     #[cfg(target_os = "windows")]
     let monitors = MonitorEnumerator::enumerate()?;
     #[cfg(not(target_os = "windows"))]
     let monitors: Vec<aura_core::monitor::MonitorInfo> = Vec::new();
+
+    let initial_monitor_summaries: Vec<aura_ipc::protocol::MonitorSummary> = monitors
+        .iter()
+        .enumerate()
+        .map(|(idx, m)| aura_ipc::protocol::MonitorSummary {
+            id: m.id,
+            name: format!("Display {} ({})", idx + 1, m.device_name),
+        })
+        .collect();
+
+    let orchestrator = Orchestrator::new(
+        initial_monitor_summaries,
+        std::collections::HashMap::new(),
+        ipc_shutdown_tx,
+    );
+
+    let orchestrator_ipc = orchestrator.clone();
+    let (ipc_server_shutdown_tx, ipc_server_shutdown_rx) = tokio::sync::watch::channel(false);
+    let _ipc_thread = std::thread::Builder::new()
+        .name("ipc-server".into())
+        .spawn(move || {
+            let rt = match tokio::runtime::Runtime::new() {
+                Ok(rt) => rt,
+                Err(e) => {
+                    tracing::error!("Failed to create Tokio runtime for IPC: {}", e);
+                    return;
+                }
+            };
+            rt.block_on(async move {
+                let handler = Box::new(move |req| orchestrator_ipc.handle_request(req));
+                let server = aura_ipc::server::IpcServer::new(handler);
+                if let Err(e) = server.serve(ipc_server_shutdown_rx).await {
+                    tracing::error!("IPC server error: {}", e);
+                }
+            });
+        })
+        .map_err(|_| DaemonError::ThreadSpawn)?;
+
+    tracing::info!("IPC server listening on \\\\.\\pipe\\aura-wallpaperd");
+
+    #[cfg(target_os = "windows")]
+    let vulkan_context = Arc::new(VulkanContext::new()?);
 
     let mut workerw_manager = WorkerWManager::new();
     let mut attach_state = attach_or_detach(&mut workerw_manager);
@@ -99,13 +142,6 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
     let (monitor_contexts, mut wallpaper_txs, perf_counters) =
         (Vec::new(), std::collections::HashMap::new(), Vec::new());
 
-    let mut coordinator = RenderCoordinator::new(monitor_contexts);
-
-    // Spawn platform event pump thread.
-    let event_pump = EventPump::new();
-    let receiver = event_pump.receiver.clone();
-    let _pump_handle = event_pump.spawn();
-
     let monitor_summaries: Vec<aura_ipc::protocol::MonitorSummary> = monitors
         .iter()
         .enumerate()
@@ -115,31 +151,15 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
         })
         .collect();
 
-    let (ipc_shutdown_tx, ipc_shutdown_rx) = crossbeam_channel::bounded::<()>(1);
-    let orchestrator = Orchestrator::new(monitor_summaries, wallpaper_txs.clone(), ipc_shutdown_tx);
+    // Update Orchestrator with monitor summaries and wallpaper channels once monitor contexts are ready.
+    orchestrator.update_monitors(monitor_summaries, wallpaper_txs.clone());
 
-    // Spawn async IPC server on a dedicated Tokio thread.
-    let orchestrator_ipc = orchestrator.clone();
-    let (ipc_server_shutdown_tx, ipc_server_shutdown_rx) = tokio::sync::watch::channel(false);
-    let _ipc_thread = std::thread::Builder::new()
-        .name("ipc-server".into())
-        .spawn(move || {
-            let rt = match tokio::runtime::Runtime::new() {
-                Ok(rt) => rt,
-                Err(e) => {
-                    tracing::error!("Failed to create Tokio runtime for IPC: {}", e);
-                    return;
-                }
-            };
-            rt.block_on(async move {
-                let handler = Box::new(move |req| orchestrator_ipc.handle_request(req));
-                let server = aura_ipc::server::IpcServer::new(handler);
-                if let Err(e) = server.serve(ipc_server_shutdown_rx).await {
-                    tracing::error!("IPC server error: {}", e);
-                }
-            });
-        })
-        .map_err(|_| DaemonError::ThreadSpawn)?;
+    let mut coordinator = RenderCoordinator::new(monitor_contexts);
+
+    // Spawn platform event pump thread.
+    let event_pump = EventPump::new();
+    let receiver = event_pump.receiver.clone();
+    let _pump_handle = event_pump.spawn();
 
     tracing::info!(
         "wallpaperd orchestrator running — {} monitors, WorkerW: {:?}",
