@@ -6,9 +6,18 @@ on:
   pull_request:
     branches: [ "main" ]
 
+# Cancel outdated workflow runs for the same branch or PR to conserve runner quota
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Restrict permissions to read-only for security best practices
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
-  # Force clippy and build to treat warnings as errors to keep code clean.
+  # Force clippy and build to treat warnings as errors to maintain code quality
   RUSTFLAGS: "-D warnings"
 
 jobs:
@@ -25,16 +34,17 @@ jobs:
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
+          toolchain: 1.97.1
           components: rustfmt
 
       - name: Check Formatting
         run: cargo fmt --all -- --check
 
   # ---------------------------------------------------------------------------
-  # 2. Consolidated Windows Pipeline (Clippy, Test & Release Build)
-  #    Consolidating into a single Windows runner eliminates redundant VM startups
-  #    and duplicate Vulkan SDK downloads, dropping run time from ~16m to ~4m.
+  # 2. Windows CI Pipeline (Clippy, Test & Release Build)
+  #    Consolidated into a single Windows runner to eliminate redundant VM
+  #    bootstrapping and Vulkan SDK setup overhead. Uses Swatinem/rust-cache for
+  #    optimal dependency build caching.
   # ---------------------------------------------------------------------------
   windows-ci:
     name: Windows CI Pipeline (Clippy, Test, Build)
@@ -49,17 +59,10 @@ jobs:
           toolchain: 1.97.1
           components: clippy
 
-      - name: Cache Cargo Registry & Target
-        uses: actions/cache@v4
+      - name: Rust Dependency Cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          prefix-key: "v1-rust"
 
       - name: Install Vulkan SDK
         uses: jakoch/install-vulkan-sdk-action@v1
@@ -70,29 +73,18 @@ jobs:
       - name: Run Clippy Lints
         run: cargo clippy --workspace --all-targets
 
-      - name: Run Unit Tests
+      - name: Run Unit & Integration Tests
         run: cargo test --workspace --all-targets
 
       - name: Build Release Binaries
         run: cargo build --workspace --release
 
-      - name: Upload Wallpaperd Daemon Artifact
+      - name: Upload Binaries Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: aura-wallpaperd
-          path: target/release/wallpaperd.exe
-          if-no-files-found: error
-
-      - name: Upload UI Control Panel Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: aura-wallpaper-ui
-          path: target/release/wallpaper-ui.exe
-          if-no-files-found: error
-
-      - name: Upload WorkerW Proof Tool Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: aura-workerw-proof
-          path: target/release/workerw-proof.exe
+          name: aura-windows-x64-binaries
+          path: |
+            target/release/wallpaperd.exe
+            target/release/wallpaper-ui.exe
+            target/release/workerw-proof.exe
           if-no-files-found: error
