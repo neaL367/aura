@@ -32,7 +32,7 @@ pub mod workerw;
 #[cfg(target_os = "windows")]
 pub use error::PlatformError;
 #[cfg(target_os = "windows")]
-pub use mf_video::MfVideoDecoder;
+pub use mf_video::{MfH264Demuxer, MfVideoDecoder};
 
 #[cfg(target_os = "windows")]
 pub fn enable_dpi_awareness() -> Result<(), PlatformError> {
