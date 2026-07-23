@@ -14,6 +14,27 @@ use thiserror::Error;
 
 static CTRLC_REQUESTED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(target_os = "windows")]
+type ConsoleHandlerRoutine = Option<unsafe extern "system" fn(u32) -> i32>;
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" {
+    fn SetConsoleCtrlHandler(handler: ConsoleHandlerRoutine, add: i32) -> i32;
+}
+
+#[cfg(target_os = "windows")]
+const CTRL_C_EVENT: u32 = 0;
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn console_ctrl_handler(ctrl_type: u32) -> i32 {
+    if ctrl_type == CTRL_C_EVENT {
+        CTRLC_REQUESTED.store(true, Ordering::Relaxed);
+        1 // TRUE = handled, don't terminate
+    } else {
+        0 // FALSE = pass to next handler
+    }
+}
+
 use crate::orchestrator::Orchestrator;
 use crate::perf::PerfMonitor;
 use crate::recovery::RecoveryManager;
@@ -97,10 +118,14 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
     tracing::info!("IPC server listening on \\\\.\\pipe\\aura-wallpaperd");
 
     // Install Ctrl+C handler for graceful shutdown.
-    if let Err(e) = ctrlc::set_handler(move || {
-        CTRLC_REQUESTED.store(true, Ordering::Relaxed);
-    }) {
-        tracing::warn!("Failed to install Ctrl+C handler: {}", e);
+    #[cfg(target_os = "windows")]
+    {
+        let result = unsafe { SetConsoleCtrlHandler(Some(console_ctrl_handler), 1) };
+        if result == 0 {
+            tracing::warn!("Failed to install Ctrl+C handler via SetConsoleCtrlHandler");
+        } else {
+            tracing::info!("Console Ctrl+C handler installed");
+        }
     }
 
     #[cfg(target_os = "windows")]
