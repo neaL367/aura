@@ -110,4 +110,15 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 - **Debounced Filesystem Watcher & Cache Exclusion**: Filesystem watchers MUST use `notify-debouncer-full` with a quiet-period buffer (500ms) to coalesce file event bursts. Events originating within `ThumbnailStore::thumbs_dir()` (`%APPDATA%/aura/thumbs`) MUST be filtered out to prevent self-triggering auto-refresh feedback loops.
 - **Win32 Session & Power Notification Lifecycles**: `PowerManager` MUST store its `power_notify_handle: HPOWERNOTIFY` and call `UnregisterPowerSettingNotification` and `WTSUnRegisterSessionNotification` when event pump message windows exit.
 
+---
+
+## 12. Tier 2 Vulkan Video Decoding & Bitstream Rules
+
+- **AVCC to Annex-B Conversion**: Media Foundation NAL samples handing H.264 data MUST pass through `avcc_to_annex_b` to convert 4-byte length prefixes into `0x00000001` start codes for Vulkan Video ingestion.
+- **POC Display-Order Reordering**: Decoded H.264 frames MUST pass through `PocReorderBuffer` to sort frames by Picture Order Count (POC) before rendering to prevent scrambled B-frame playback.
+- **Dynamic DPB Allocation**: `VulkanVideoSession` MUST dynamically size its Decoded Picture Buffer (DPB) `VkImage` array to `max_num_ref_frames + 1` parsed from the stream's Sequence Parameter Set (SPS).
+- **Timeline Semaphore Synchronization**: Queue family ownership transfers between Video Decode Queue (`VIDEO_DECODE_DST`) and Graphics Queue (`SHADER_READ_ONLY`) MUST be synchronized using a Vulkan Timeline Semaphore (`SemaphoreType::TIMELINE`).
+- **Session Reset on Loop**: When stream loops or seeks occur, `vkCmdControlVideoCodingKHR` reset flags MUST be submitted to clear reference frame history.
+
+
 
