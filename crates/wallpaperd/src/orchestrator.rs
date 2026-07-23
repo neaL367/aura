@@ -208,9 +208,41 @@ impl Orchestrator {
                                 Response::Ok
                             }
                             None => {
-                                tracing::warn!("No channel found for monitor {:?}", monitor_id);
-                                Response::Error {
-                                    reason: format!("unknown monitor {:?}", monitor_id),
+                                let monitor_exists =
+                                    state.monitors.iter().any(|m| m.id == monitor_id);
+                                if monitor_exists {
+                                    info!(
+                                        "Saved assignment for monitor {:?} (render channel initializing): {:?}",
+                                        monitor_id, meta.path
+                                    );
+                                    state.assignments.assign(monitor_id, wallpaper_id);
+                                    let mut config = state.config_store.load().unwrap_or_default();
+                                    let effective_fit = fit_mode.unwrap_or_default();
+                                    if let Some(pos) = config
+                                        .assignments
+                                        .iter()
+                                        .position(|a| a.monitor_id == monitor_id)
+                                    {
+                                        config.assignments[pos].wallpaper_id = wallpaper_id;
+                                        if fit_mode.is_some() {
+                                            config.assignments[pos].fit_mode = effective_fit;
+                                        }
+                                    } else {
+                                        config.assignments.push(
+                                            aura_core::monitor::MonitorAssignment {
+                                                monitor_id,
+                                                wallpaper_id,
+                                                fit_mode: effective_fit,
+                                            },
+                                        );
+                                    }
+                                    let _ = state.config_store.save(&config);
+                                    Response::Ok
+                                } else {
+                                    tracing::warn!("No channel found for monitor {:?}", monitor_id);
+                                    Response::Error {
+                                        reason: format!("unknown monitor {:?}", monitor_id),
+                                    }
                                 }
                             }
                         }
