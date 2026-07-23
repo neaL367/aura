@@ -85,11 +85,15 @@ impl Orchestrator {
                 if !scan_paths.is_empty() {
                     info!("Background library rescan starting...");
                     let scanned = LibraryScanner::scan_paths(&scan_paths);
+                    // Generate thumbnails before moving scanned into state (avoids clone).
+                    for meta in &scanned {
+                        aura_storage::ThumbnailStore::get_or_create(meta);
+                    }
                     if let Ok(mut state) = orch_bg.state.lock() {
                         state.library_items = scanned;
                         let _ = state.library_store.save(&state.library_items);
                         info!(
-                            "Background library rescan complete — {} wallpaper(s) in library",
+                            "Background library rescan complete — {} wallpaper(s), thumbnails ready",
                             state.library_items.len()
                         );
                     }
