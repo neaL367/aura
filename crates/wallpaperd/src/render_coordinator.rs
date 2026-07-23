@@ -10,8 +10,8 @@ use std::sync::{
 /// Per-monitor state owned by RenderCoordinator.
 pub struct MonitorContext {
     pub monitor_id: aura_core::monitor::MonitorId,
-    pub host_window: HostWindow,
     pub render_thread: Option<std::thread::JoinHandle<()>>,
+    pub host_window: HostWindow,
     pub shutdown_flag: Arc<AtomicBool>,
     pub pause_flag: Arc<AtomicBool>,
     pub width: u32,
