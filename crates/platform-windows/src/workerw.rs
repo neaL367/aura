@@ -75,15 +75,38 @@ impl Default for WorkerWManager {
 // Core functions (also used by host_window.rs)
 // ---------------------------------------------------------------------------
 
+struct ScanResult {
+    target: Option<HWND>,
+    candidates: Vec<isize>,
+}
+
+struct ScanContext {
+    target: Option<HWND>,
+    candidates: Vec<isize>,
+}
+
+fn find_workerw_pass() -> ScanResult {
+    let mut ctx = ScanContext {
+        target: None,
+        candidates: Vec::new(),
+    };
+
+    // SAFETY: EnumWindows passes a valid raw pointer to local stack variable `ctx` via LPARAM.
+    unsafe {
+        let _ = EnumWindows(Some(find_workerw_callback), LPARAM(&raw mut ctx as isize));
+    }
+
+    ScanResult {
+        target: ctx.target,
+        candidates: ctx.candidates,
+    }
+}
+
 /// Single pass: scan EnumWindows for empty WorkerW or SHELLDLL_DefView host.
 fn find_workerw_once() -> std::result::Result<HWND, PlatformError> {
-    let mut found = HWND(ptr::null_mut());
-    // SAFETY: EnumWindows passes a valid raw pointer to local stack variable `found` via LPARAM.
-    unsafe {
-        let _ = EnumWindows(Some(find_workerw_callback), LPARAM(&raw mut found as isize));
-    }
-    if !found.0.is_null() {
-        return Ok(found);
+    let scan = find_workerw_pass();
+    if let Some(target) = scan.target {
+        return Ok(target);
     }
 
     // Direct resolution: Find SHELLDLL_DefView and obtain its host parent window directly.
@@ -119,7 +142,8 @@ fn find_workerw_once() -> std::result::Result<HWND, PlatformError> {
 
 /// Send 0x052C to Progman/Desktop, locate the target WorkerW with retry.
 ///
-/// Polls for the WorkerW up to ~2 seconds (8 × 250ms).
+/// Polls for the WorkerW up to ~2 seconds (8 × 250ms), automatically
+/// short-circuiting if the candidate set remains stable across attempts.
 pub(crate) fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformError> {
     // Step 1: Find Progman or Desktop.
     let mut progman = unsafe { FindWindowExW(None, None, w!("Progman"), None) }.unwrap_or_default();
@@ -147,9 +171,6 @@ pub(crate) fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformEr
     );
 
     // Step 2: Send 0x052C (idempotent double-dispatch).
-    // Note: WPARAM(0x0D), LPARAM(1) forces Windows 11 desktop composition to spawn/split
-    // the secondary WorkerW layer behind icons on newer Windows 11 builds (e.g., 24H2/25H2),
-    // followed by standard WPARAM(0), LPARAM(0) for classic Progman composition triggers.
     let mut _result: usize = 0;
     unsafe {
         SendMessageTimeoutW(
@@ -172,27 +193,40 @@ pub(crate) fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformEr
         );
     }
 
-    // Step 3: Poll for WorkerW up to ~2s.
+    // Step 3: Poll for WorkerW up to ~2s, with candidate set stability detection.
+    let mut prev_candidates: Option<Vec<isize>> = None;
+
     for i in 0..8 {
-        if let Ok(workerw) = find_workerw_once() {
+        let scan = find_workerw_pass();
+        if let Some(target) = scan.target {
             tracing::info!(
-                "WorkerW split discovery succeeded: found dedicated WorkerW window HWND({:?})",
-                workerw.0
+                "WorkerW split discovery succeeded (attempt {}/8): found dedicated WorkerW window HWND({:?})",
+                i + 1,
+                target.0
             );
-            return Ok(workerw);
+            return Ok(target);
         }
+
+        if prev_candidates.as_ref() == Some(&scan.candidates) {
+            tracing::info!(
+                "WorkerW candidate set unchanged between attempts {} and {} ({} candidates inspected); short-circuiting to Progman fallback",
+                i,
+                i + 1,
+                scan.candidates.len()
+            );
+            break;
+        }
+        prev_candidates = Some(scan.candidates);
+
         if i < 7 {
             std::thread::sleep(std::time::Duration::from_millis(250));
         }
     }
 
     // Step 4: Fallback to Progman for Windows 11 24H2+ composition engine.
-    // NOTE: deliberately do NOT fall back further to GetDesktopWindow() here —
-    // DWM does not composite children reparented into the raw desktop window,
-    // so that would be accepted as "Attached" while silently never rendering.
     if !progman.0.is_null() {
-        tracing::warn!(
-            "WorkerW split discovery timed out; falling back to Progman HWND({:?})",
+        tracing::info!(
+            "Falling back to Progman HWND({:?}) for desktop composition",
             progman.0
         );
         return Ok(progman);
@@ -203,6 +237,7 @@ pub(crate) fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformEr
          parent, and no Progman window found. Refusing to fall back to the raw desktop \
          window, since it is never composited by DWM."
     );
+
     Err(PlatformError::WorkerWNotFound)
 }
 
@@ -246,43 +281,19 @@ fn find_defview_child(parent: HWND) -> Option<HWND> {
 /// EnumWindows callback: locates the empty WorkerW below the icon layer.
 ///
 /// # Safety
-/// `lparam` must be a valid `*mut HWND` for the duration of `EnumWindows`.
+/// `lparam` must be a valid `*mut ScanContext` for the duration of `EnumWindows`.
 unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let ctx = unsafe { &mut *(lparam.0 as *mut ScanContext) };
+
     let mut class_buf = [0u16; 256];
     let len = unsafe { GetClassNameW(hwnd, &mut class_buf) };
     let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
 
-    let def_view = find_defview_child(hwnd);
-    if def_view.is_some() {
-        tracing::info!(
-            "EnumWindows diagnostic: HWND({:?}) Class='{}' contains SHELLDLL_DefView",
-            hwnd.0,
-            class_name,
-        );
-
-        let mut next = unsafe { GetWindow(hwnd, GW_HWNDNEXT) };
-        while let Ok(next_hwnd) = next {
-            if next_hwnd.0.is_null() {
-                break;
-            }
-            let mut c_buf = [0u16; 256];
-            let c_len = unsafe { GetClassNameW(next_hwnd, &mut c_buf) };
-            let c_name = String::from_utf16_lossy(&c_buf[..c_len as usize]);
-            if c_name == "WorkerW" {
-                let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
-                *slot = next_hwnd;
-                tracing::info!(
-                    "Found target WorkerW sibling directly behind SHELLDLL_DefView parent: HWND({:?})",
-                    next_hwnd.0
-                );
-                return BOOL::from(false);
-            }
-            next = unsafe { GetWindow(next_hwnd, GW_HWNDNEXT) };
-        }
-
+    if class_name == "WorkerW" || class_name == "Progman" {
+        ctx.candidates.push(hwnd.0 as isize);
     }
 
-    // Fallback Check: Top-level WorkerW window without SHELLDLL_DefView
+    // Check 1: Top-level WorkerW window without SHELLDLL_DefView
     if class_name == "WorkerW" {
         let def_view = unsafe { FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None) };
         let has_def_view = match def_view {
@@ -298,15 +309,14 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
             let cw = client_rect.right - client_rect.left;
             let ch = client_rect.bottom - client_rect.top;
             if cw < 300 || ch < 300 {
-                tracing::warn!(
+                tracing::debug!(
                     "Skipping small internal WorkerW candidate HWND({:?}) with rect {}x{}",
                     hwnd.0,
                     cw,
                     ch
                 );
             } else {
-                let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
-                *slot = hwnd;
+                ctx.target = Some(hwnd);
                 tracing::info!(
                     "Found top-level empty WorkerW (no SHELLDLL_DefView): HWND({:?}) rect {}x{}",
                     hwnd.0,
@@ -315,6 +325,35 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
                 );
                 return BOOL::from(false);
             }
+        }
+    }
+
+    // Check 2: Window containing SHELLDLL_DefView -> check its Z-order sibling below it
+    let def_view = find_defview_child(hwnd);
+    if def_view.is_some() {
+        tracing::debug!(
+            "EnumWindows diagnostic: HWND({:?}) Class='{}' contains SHELLDLL_DefView",
+            hwnd.0,
+            class_name,
+        );
+
+        let mut next = unsafe { GetWindow(hwnd, GW_HWNDNEXT) };
+        while let Ok(next_hwnd) = next {
+            if next_hwnd.0.is_null() {
+                break;
+            }
+            let mut c_buf = [0u16; 256];
+            let c_len = unsafe { GetClassNameW(next_hwnd, &mut c_buf) };
+            let c_name = String::from_utf16_lossy(&c_buf[..c_len as usize]);
+            if c_name == "WorkerW" {
+                ctx.target = Some(next_hwnd);
+                tracing::info!(
+                    "Found target WorkerW sibling directly behind SHELLDLL_DefView parent: HWND({:?})",
+                    next_hwnd.0
+                );
+                return BOOL::from(false);
+            }
+            next = unsafe { GetWindow(next_hwnd, GW_HWNDNEXT) };
         }
     }
 
