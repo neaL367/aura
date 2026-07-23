@@ -1,5 +1,6 @@
 use aura_core::{
     monitor::MonitorId,
+    playback::PlaybackCommand,
     wallpaper::{FitMode, WallpaperId},
 };
 use serde::{Deserialize, Serialize};
@@ -36,6 +37,11 @@ pub enum Request {
     },
     /// Remove the wallpaper from a monitor.
     RemoveAssignment { monitor_id: MonitorId },
+    /// Control playback of an animated wallpaper (play/pause) on a monitor.
+    SetPlayback {
+        monitor_id: MonitorId,
+        command: PlaybackCommand,
+    },
     /// Pause rendering on all monitors.
     PauseAll,
     /// Resume rendering on all monitors.

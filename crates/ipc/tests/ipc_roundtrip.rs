@@ -1,4 +1,5 @@
 use aura_core::monitor::MonitorId;
+use aura_core::playback::PlaybackCommand;
 use aura_core::wallpaper::{FitMode, MediaKind, WallpaperId};
 use aura_ipc::protocol::{
     DaemonStatus, IpcMessage, PROTOCOL_VERSION, Request, Response, WallpaperEntry,
@@ -31,6 +32,10 @@ fn test_request_serialization_roundtrip() {
             path: std::path::PathBuf::from(r"C:\Wallpapers"),
         },
         Request::Shutdown,
+        Request::SetPlayback {
+            monitor_id: MonitorId::from_device_path(r"\\.\DISPLAY1"),
+            command: PlaybackCommand::Pause,
+        },
     ];
 
     for req in requests {

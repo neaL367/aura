@@ -21,7 +21,7 @@ pub enum PlaybackState {
 // ---------------------------------------------------------------------------
 
 /// Commands sent to a decode worker thread to control playback.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlaybackCommand {
     /// Start or resume decoding.
     Play,

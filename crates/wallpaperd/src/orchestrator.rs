@@ -300,6 +300,30 @@ impl Orchestrator {
                 }
                 Response::Ok
             }
+            Request::SetPlayback {
+                monitor_id,
+                command,
+            } => {
+                let tx = state.wallpaper_txs.get(&monitor_id).cloned();
+                match tx {
+                    Some(tx) => {
+                        info!("Forwarding playback command {:?} to monitor {:?}", command, monitor_id);
+                        if tx.send(RenderCommand::Playback(command)).is_err() {
+                            Response::Error {
+                                reason: format!(
+                                    "render thread for monitor {:?} is not running",
+                                    monitor_id
+                                ),
+                            }
+                        } else {
+                            Response::Ok
+                        }
+                    }
+                    None => Response::Error {
+                        reason: format!("unknown monitor {:?}", monitor_id),
+                    },
+                }
+            }
             Request::PauseAll => {
                 state.is_paused = true;
                 Response::Ok

@@ -7,6 +7,7 @@ use std::{
     time::Duration,
 };
 
+use aura_core::playback::PlaybackCommand;
 use aura_core::wallpaper::MediaKind;
 use aura_media::{ImageDecoder, MediaDecoder, frame_channel};
 use aura_platform_windows::host_window::HostWindow;
@@ -27,6 +28,7 @@ pub(crate) enum RenderCommand {
         width: u32,
         height: u32,
     },
+    Playback(PlaybackCommand),
 }
 
 pub(crate) fn detect_media_kind(path: &Path) -> Option<MediaKind> {
@@ -294,6 +296,11 @@ pub(crate) fn create_monitor_context(
                                         new_path
                                     );
                                 }
+                            }
+                        }
+                        RenderCommand::Playback(cmd) => {
+                            if let Some(ref worker) = active_worker {
+                                let _ = worker.command_sender.send(cmd);
                             }
                         }
                     }

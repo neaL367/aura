@@ -1,3 +1,4 @@
+use aura_core::playback::PlaybackCommand;
 use aura_core::wallpaper::FitMode;
 use aura_ipc::protocol::Request;
 
@@ -180,6 +181,28 @@ impl MonitorPanel {
                                                         monitor_id: mon.id,
                                                     });
                                                     self.selected_wallpapers.remove(&mon.id);
+                                                }
+                                            });
+
+                                            ui.add_space(4.0);
+                                            ui.horizontal(|ui| {
+                                                if ui.button("⏸ Pause").clicked() {
+                                                    ipc_client.send(Request::SetPlayback {
+                                                        monitor_id: mon.id,
+                                                        command: PlaybackCommand::Pause,
+                                                    });
+                                                }
+                                                if ui.button("▶ Play").clicked() {
+                                                    ipc_client.send(Request::SetPlayback {
+                                                        monitor_id: mon.id,
+                                                        command: PlaybackCommand::Play,
+                                                    });
+                                                }
+                                                if ui.button("🔄 Restart").clicked() {
+                                                    ipc_client.send(Request::SetPlayback {
+                                                        monitor_id: mon.id,
+                                                        command: PlaybackCommand::Loop,
+                                                    });
                                                 }
                                             });
                                         }
