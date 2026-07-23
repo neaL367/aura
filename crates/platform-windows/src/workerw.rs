@@ -331,6 +331,27 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
     BOOL::from(true)
 }
 
+struct ScopedDpiHostingBehavior {
+    previous: windows::Win32::UI::HiDpi::DPI_HOSTING_BEHAVIOR,
+}
+
+impl ScopedDpiHostingBehavior {
+    pub fn allow_mixed() -> Self {
+        use windows::Win32::UI::HiDpi::{DPI_HOSTING_BEHAVIOR_MIXED, SetThreadDpiHostingBehavior};
+        let previous = unsafe { SetThreadDpiHostingBehavior(DPI_HOSTING_BEHAVIOR_MIXED) };
+        Self { previous }
+    }
+}
+
+impl Drop for ScopedDpiHostingBehavior {
+    fn drop(&mut self) {
+        use windows::Win32::UI::HiDpi::SetThreadDpiHostingBehavior;
+        unsafe {
+            SetThreadDpiHostingBehavior(self.previous);
+        }
+    }
+}
+
 /// Reparent `host_hwnd` into `workerw` and apply the correct window style.
 pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<(), PlatformError> {
     unsafe {
@@ -359,6 +380,7 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
 
         let _ = ShowWindow(workerw, SW_SHOW);
 
+        let _dpi_guard = ScopedDpiHostingBehavior::allow_mixed();
         SetParent(host_hwnd, Some(workerw))?;
 
         let style = GetWindowLongPtrW(host_hwnd, GWL_STYLE);

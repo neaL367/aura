@@ -329,7 +329,11 @@ fn ensure_attached(render_hwnd: HWND) -> Result<HWND> {
 
     // Step 4: SetParent render window into WorkerW.
     unsafe {
-        SetParent(render_hwnd, Some(workerw))?;
+        use windows::Win32::UI::HiDpi::{DPI_HOSTING_BEHAVIOR_MIXED, SetThreadDpiHostingBehavior};
+        let prev = SetThreadDpiHostingBehavior(DPI_HOSTING_BEHAVIOR_MIXED);
+        let res = SetParent(render_hwnd, Some(workerw));
+        SetThreadDpiHostingBehavior(prev);
+        res?;
     }
 
     // Step 5: Update style and position.
