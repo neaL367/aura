@@ -4,8 +4,8 @@ use crate::decoder::DecodedFrame;
 
 /// Capacity of the bounded frame channel (frames buffered between decoder and renderer).
 ///
-/// 3 frames is sufficient to absorb minor timing jitter without unbounded growth.
-pub const FRAME_CHANNEL_CAPACITY: usize = 3;
+/// 2 frames (double buffering) absorbs timing jitter while keeping RAM footprint minimal.
+pub const FRAME_CHANNEL_CAPACITY: usize = 2;
 
 /// Sending end of a bounded frame channel.
 ///

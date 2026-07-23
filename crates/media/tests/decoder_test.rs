@@ -125,7 +125,7 @@ fn test_frame_channel_capacity() {
         duration_ms: 0,
     };
 
-    for _ in 0..3 {
+    for _ in 0..aura_media::frame_queue::FRAME_CHANNEL_CAPACITY {
         assert!(tx.try_send(frame.clone()));
     }
     assert!(!tx.try_send(frame.clone()));

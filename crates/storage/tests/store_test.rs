@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use aura_core::config::AppConfig;
 use aura_core::monitor::{MonitorAssignment, MonitorId};
@@ -112,13 +113,56 @@ fn test_thumbnail_get_or_create_for_image() {
         scanned_at: String::new(),
     };
 
-    let thumb = ThumbnailStore::get_or_create(&meta);
+    let thumb = ThumbnailStore::get_or_create_in(&meta, dir.path());
     assert!(thumb.is_some(), "expected thumbnail to be generated");
     let thumb_path = thumb.unwrap();
     assert!(thumb_path.exists(), "thumbnail file should exist on disk");
 
-    let cached = ThumbnailStore::get_or_create(&meta);
+    let cached = ThumbnailStore::get_or_create_in(&meta, dir.path());
     assert!(cached.is_some(), "expected cached thumbnail on second call");
+}
+
+#[test]
+fn test_thumbnail_concurrent_generation() {
+    let dir = tempdir().unwrap();
+    let img_path = dir.path().join("concurrent.png");
+    let mut img = image::RgbaImage::new(32, 32);
+    for y in 0..32 {
+        for x in 0..32 {
+            img.put_pixel(x, y, image::Rgba([200, 100, 50, 255]));
+        }
+    }
+    img.save(&img_path).unwrap();
+
+    let meta = Arc::new(WallpaperMeta {
+        id: WallpaperId::from_path(&img_path),
+        path: img_path,
+        kind: MediaKind::Image,
+        width: 32,
+        height: 32,
+        duration_ms: 0,
+        file_size: 0,
+        scanned_at: String::new(),
+    });
+
+    let dir_path = Arc::new(dir.path().to_path_buf());
+    let mut handles = Vec::new();
+
+    for _ in 0..4 {
+        let meta_clone = meta.clone();
+        let dir_clone = dir_path.clone();
+        handles.push(std::thread::spawn(move || {
+            ThumbnailStore::get_or_create_in(&meta_clone, &dir_clone)
+        }));
+    }
+
+    for h in handles {
+        let res = h.join().unwrap();
+        assert!(
+            res.is_some(),
+            "concurrent thread should receive thumbnail path"
+        );
+    }
 }
 
 #[test]

@@ -48,4 +48,11 @@ impl IpcClient {
         }
         Ok(resp.payload)
     }
+
+    /// Send a pre-constructed IpcMessage (useful for testing custom headers/versions).
+    pub async fn send_message(&mut self, msg: IpcMessage<Request>) -> Result<Response, IpcError> {
+        write_message(&mut self.pipe, &msg).await?;
+        let resp: IpcMessage<Response> = read_message(&mut self.pipe).await?;
+        Ok(resp.payload)
+    }
 }

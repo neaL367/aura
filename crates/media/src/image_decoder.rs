@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use image::GenericImageView;
 
@@ -13,8 +13,8 @@ const MAX_DECODE_DIM: u32 = 3840;
 
 /// Decoder for single-frame static images (PNG, JPEG, BMP, WebP, TIFF, …).
 pub struct ImageDecoder {
-    frame: DecodedFrame,
-    consumed: bool,
+    path: PathBuf,
+    frame: Option<DecodedFrame>,
     width: u32,
     height: u32,
 }
@@ -24,6 +24,16 @@ impl ImageDecoder {
     ///
     /// Downsamples images larger than 4K (3840px) to conserve RAM and converts to RGBA8.
     pub fn open(path: &Path) -> Result<Self, MediaError> {
+        let (frame, width, height) = Self::decode_frame(path)?;
+        Ok(Self {
+            path: path.to_path_buf(),
+            frame: Some(frame),
+            width,
+            height,
+        })
+    }
+
+    fn decode_frame(path: &Path) -> Result<(DecodedFrame, u32, u32), MediaError> {
         let img = image::open(path)?;
         let (orig_w, orig_h) = img.dimensions();
 
@@ -53,27 +63,20 @@ impl ImageDecoder {
         };
         frame.validate()?;
 
-        Ok(Self {
-            frame,
-            consumed: false,
-            width,
-            height,
-        })
+        Ok((frame, width, height))
     }
 }
 
 impl MediaDecoder for ImageDecoder {
     fn next_frame(&mut self) -> Result<Option<DecodedFrame>, MediaError> {
-        if self.consumed {
-            Ok(None)
-        } else {
-            self.consumed = true;
-            Ok(Some(self.frame.clone()))
-        }
+        Ok(self.frame.take())
     }
 
     fn loop_reset(&mut self) -> Result<(), MediaError> {
-        self.consumed = false;
+        if self.frame.is_none() {
+            let (frame, _, _) = Self::decode_frame(&self.path)?;
+            self.frame = Some(frame);
+        }
         Ok(())
     }
 

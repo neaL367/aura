@@ -139,4 +139,8 @@ impl<T> IpcMessage<T> {
             payload,
         }
     }
+
+    pub fn with_version(payload: T, version: u16) -> Self {
+        Self { version, payload }
+    }
 }

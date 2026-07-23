@@ -75,10 +75,31 @@ async fn handle_client(mut pipe: NamedPipeServer, handler: std::sync::Arc<Reques
         };
 
         if msg.version != PROTOCOL_VERSION {
-            warn!(got = msg.version, "IPC version mismatch");
+            warn!(
+                got = msg.version,
+                daemon = PROTOCOL_VERSION,
+                "IPC version mismatch — rejecting request"
+            );
+            let err_response = Response::Error {
+                reason: format!(
+                    "protocol version mismatch (client: {}, daemon: {})",
+                    msg.version, PROTOCOL_VERSION
+                ),
+            };
+            let reply = IpcMessage::new(err_response);
+            let _ = write_message(&mut pipe, &reply).await;
+            break;
         }
 
-        let response = handler(msg.payload);
+        let handler_clone = handler.clone();
+        let payload = msg.payload;
+        let response = match tokio::task::spawn_blocking(move || handler_clone(payload)).await {
+            Ok(resp) => resp,
+            Err(e) => Response::Error {
+                reason: format!("request execution failed: {}", e),
+            },
+        };
+
         let reply = IpcMessage::new(response);
 
         if let Err(e) = write_message(&mut pipe, &reply).await {

@@ -36,7 +36,7 @@ tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Async runtime (IPC, UI reconnect)
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "io-util", "net", "macros"] }
 
 # Identifiers
 uuid = { version = "1", features = ["v4", "v5", "serde"] }
@@ -76,7 +76,10 @@ aura-renderer-vulkan  = { path = "crates/renderer-vulkan" }
 # Build profiles
 # ---------------------------------------------------------------------------
 [profile.dev]
-opt-level = 1          # Faster debug builds with minimal optimisation
+opt-level     = 1      # Faster debug builds with minimal optimisation
+debug         = 1      # Reduced debug symbol depth for 30-40% faster Windows MSVC linking
+incremental   = true   # Fast incremental rebuilds
+codegen-units = 16     # Parallel codegen units
 
 [profile.release]
 opt-level       = 3
