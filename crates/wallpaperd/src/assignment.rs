@@ -22,6 +22,7 @@ impl AssignmentManager {
         self.assignments.remove(monitor_id)
     }
 
+    #[expect(dead_code, reason = "useful accessor for future query features")]
     pub fn get(&self, monitor_id: &MonitorId) -> Option<&WallpaperId> {
         self.assignments.get(monitor_id)
     }

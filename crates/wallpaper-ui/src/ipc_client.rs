@@ -181,6 +181,7 @@ impl UiIpcClient {
             .clone()
     }
 
+    #[expect(dead_code, reason = "convenience wrapper for manual refresh")]
     pub fn fetch_wallpapers(&self) {
         self.send(Request::ListWallpapers);
     }
