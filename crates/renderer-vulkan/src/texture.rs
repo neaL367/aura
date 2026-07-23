@@ -49,18 +49,21 @@ impl GpuTexture {
 
         let reqs = unsafe { context.device.get_image_memory_requirements(image) };
 
-        let allocation = context
-            .allocator
-            .lock()
-            .unwrap()
-            .allocate(&AllocationCreateDesc {
-                name: "GpuTexture Allocation",
-                requirements: reqs,
-                location: gpu_allocator::MemoryLocation::GpuOnly,
-                linear: false,
-                allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
-            })
-            .map_err(|e| VulkanError::Allocation(e.to_string()))?;
+        let allocation = {
+            let mut guard = context.allocator.lock().unwrap();
+            let alloc = guard.as_mut().ok_or_else(|| {
+                VulkanError::Allocation("Allocator missing during texture creation".to_string())
+            })?;
+            alloc
+                .allocate(&AllocationCreateDesc {
+                    name: "GpuTexture Allocation",
+                    requirements: reqs,
+                    location: gpu_allocator::MemoryLocation::GpuOnly,
+                    linear: false,
+                    allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
+                })
+                .map_err(|e| VulkanError::Allocation(e.to_string()))?
+        };
 
         unsafe {
             context
@@ -128,8 +131,11 @@ impl GpuTexture {
             context.device.destroy_sampler(self.sampler, None);
             context.device.destroy_image_view(self.view, None);
             context.device.destroy_image(self.image, None);
-            if let Some(alloc) = self.allocation.take() {
-                let _ = context.allocator.lock().unwrap().free(alloc);
+            if let Some(alloc) = self.allocation.take()
+                && let Ok(mut guard) = context.allocator.lock()
+                && let Some(ref mut allocator) = *guard
+            {
+                let _ = allocator.free(alloc);
             }
         }
     }

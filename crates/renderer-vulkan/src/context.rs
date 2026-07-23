@@ -11,7 +11,7 @@ pub struct VulkanContext {
     pub device: ash::Device,
     pub graphics_queue: vk::Queue,
     pub graphics_queue_family: u32,
-    pub allocator: Mutex<gpu_allocator::vulkan::Allocator>,
+    pub allocator: Mutex<Option<gpu_allocator::vulkan::Allocator>>,
     pub queue_mutex: Mutex<()>,
 }
 
@@ -43,7 +43,7 @@ impl VulkanContext {
             device,
             graphics_queue: queue,
             graphics_queue_family: queue_family,
-            allocator: Mutex::new(allocator),
+            allocator: Mutex::new(Some(allocator)),
             queue_mutex: Mutex::new(()),
         })
     }
@@ -58,6 +58,9 @@ impl Drop for VulkanContext {
     fn drop(&mut self) {
         unsafe {
             self.device.device_wait_idle().ok();
+            if let Ok(mut lock) = self.allocator.lock() {
+                lock.take();
+            }
             self.device.destroy_device(None);
             self.instance.destroy_instance(None);
         }

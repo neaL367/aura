@@ -62,8 +62,11 @@ impl StagingUploader {
             if let Some(buf) = self.staging_buffer.take() {
                 unsafe { context.device.destroy_buffer(buf, None) };
             }
-            if let Some(alloc) = self.staging_allocation.take() {
-                let _ = context.allocator.lock().unwrap().free(alloc);
+            if let Some(alloc) = self.staging_allocation.take()
+                && let Ok(mut guard) = context.allocator.lock()
+                && let Some(ref mut allocator) = *guard
+            {
+                let _ = allocator.free(alloc);
             }
 
             let buffer_info = vk::BufferCreateInfo::default()
@@ -80,18 +83,22 @@ impl StagingUploader {
 
             let reqs = unsafe { context.device.get_buffer_memory_requirements(new_buffer) };
 
-            let new_alloc = context
-                .allocator
-                .lock()
-                .unwrap()
-                .allocate(&gpu_allocator::vulkan::AllocationCreateDesc {
-                    name: "Staging Buffer",
-                    requirements: reqs,
-                    location: gpu_allocator::MemoryLocation::CpuToGpu,
-                    linear: true,
-                    allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
-                })
-                .map_err(|e| VulkanError::Allocation(e.to_string()))?;
+            let new_alloc = {
+                let mut guard = context.allocator.lock().unwrap();
+                let alloc = guard.as_mut().ok_or_else(|| {
+                    VulkanError::Allocation("Allocator missing during staging upload".to_string())
+                })?;
+                alloc
+                    .allocate(&gpu_allocator::vulkan::AllocationCreateDesc {
+                        name: "Staging Buffer",
+                        requirements: reqs,
+                        location: gpu_allocator::MemoryLocation::CpuToGpu,
+                        linear: true,
+                        allocation_scheme:
+                            gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
+                    })
+                    .map_err(|e| VulkanError::Allocation(e.to_string()))?
+            };
 
             unsafe {
                 context
@@ -291,8 +298,11 @@ impl StagingUploader {
             if let Some(buf) = self.staging_buffer.take() {
                 context.device.destroy_buffer(buf, None);
             }
-            if let Some(alloc) = self.staging_allocation.take() {
-                let _ = context.allocator.lock().unwrap().free(alloc);
+            if let Some(alloc) = self.staging_allocation.take()
+                && let Ok(mut guard) = context.allocator.lock()
+                && let Some(ref mut allocator) = *guard
+            {
+                let _ = allocator.free(alloc);
             }
             if self.upload_fence != vk::Fence::null() {
                 context.device.destroy_fence(self.upload_fence, None);
