@@ -93,6 +93,11 @@ impl UiIpcClient {
                                                      tracing::info!("UI sending IPC request: {:?}", req);
                                                      let res = client.send(req).await;
                                                      match &res {
+                                                         Ok(Response::Status(s)) => {
+                                                             tracing::info!("UI received Status update: {} monitor(s)", s.active_monitors);
+                                                             *status_clone.lock().unwrap() = ConnectionStatus::Connected(s.clone());
+                                                             *last_error_clone.lock().unwrap() = None;
+                                                         }
                                                          Ok(Response::WallpaperList(list)) => {
                                                              tracing::info!("UI received WallpaperList with {} wallpaper(s)", list.len());
                                                              *wallpapers_clone.lock().unwrap() = list.clone();
