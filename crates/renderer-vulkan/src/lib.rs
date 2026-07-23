@@ -25,6 +25,10 @@ pub mod swapchain;
 pub mod texture;
 pub mod transform;
 #[cfg(target_os = "windows")]
+pub mod video_decode_pipeline;
+#[cfg(target_os = "windows")]
+pub mod video_session;
+#[cfg(target_os = "windows")]
 pub use context::VulkanContext;
 #[cfg(target_os = "windows")]
 pub use error::VulkanError;

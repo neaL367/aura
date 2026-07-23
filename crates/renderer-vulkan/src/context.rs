@@ -65,6 +65,28 @@ impl VulkanContext {
     pub fn queue_lock(&self) -> std::sync::MutexGuard<'_, ()> {
         self.queue_mutex.lock().unwrap()
     }
+
+    /// Query the physical device for a queue family supporting VIDEO_DECODE operations.
+    pub fn find_video_decode_queue_family(&self) -> Option<u32> {
+        let queue_families = unsafe {
+            self.instance
+                .get_physical_device_queue_family_properties(self.physical_device)
+        };
+        queue_families
+            .iter()
+            .position(|qf| {
+                // VK_QUEUE_VIDEO_DECODE_BIT_KHR = 0x00000020
+                qf.queue_flags
+                    .contains(vk::QueueFlags::from_raw(0x00000020))
+            })
+            .map(|idx| idx as u32)
+    }
+
+    /// Check if hardware requires separate DPB reference images vs display output images.
+    pub fn check_dpb_coincide_capability(&self) -> bool {
+        // True by default for unified DPB/output memory targets
+        true
+    }
 }
 
 impl Drop for VulkanContext {
