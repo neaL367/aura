@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use aura_platform_windows::host_window::HostWindow;
 use aura_platform_windows::workerw::attach_to_workerw;
 use std::sync::{
@@ -159,13 +161,29 @@ impl RenderCoordinator {
         }
     }
 
-    pub fn shutdown(&mut self) {
+    /// Signal all render threads and wait for them with a timeout.
+    /// Threads that don't finish within the timeout are detached.
+    pub fn shutdown_with_timeout(&mut self, timeout: Duration) {
+        let deadline = std::time::Instant::now() + timeout;
         for ctx in &self.monitors {
             ctx.shutdown_flag.store(true, Ordering::Relaxed);
         }
         for ctx in &mut self.monitors {
             if let Some(handle) = ctx.render_thread.take() {
-                let _ = handle.join();
+                while std::time::Instant::now() < deadline {
+                    if handle.is_finished() {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                if handle.is_finished() {
+                    let _ = handle.join();
+                } else {
+                    tracing::warn!(
+                        "Shutdown timeout exceeded for {:?}, detaching render thread",
+                        ctx.monitor_id
+                    );
+                }
             }
         }
     }

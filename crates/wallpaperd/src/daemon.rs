@@ -1,4 +1,7 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use std::path::PathBuf;
 
 use aura_platform_windows::PlatformError;
 use aura_platform_windows::event_pump::{EventPump, HostEvent};
@@ -8,6 +11,8 @@ use aura_platform_windows::workerw::WorkerWManager;
 use aura_renderer_vulkan::VulkanContext;
 use crossbeam_channel::RecvTimeoutError;
 use thiserror::Error;
+
+static CTRLC_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 use crate::orchestrator::Orchestrator;
 use crate::perf::PerfMonitor;
@@ -69,7 +74,7 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
 
     let orchestrator_ipc = orchestrator.clone();
     let (ipc_server_shutdown_tx, ipc_server_shutdown_rx) = tokio::sync::watch::channel(false);
-    let _ipc_thread = std::thread::Builder::new()
+    let ipc_thread = std::thread::Builder::new()
         .name("ipc-server".into())
         .spawn(move || {
             let rt = match tokio::runtime::Runtime::new() {
@@ -90,6 +95,13 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
         .map_err(|_| DaemonError::ThreadSpawn)?;
 
     tracing::info!("IPC server listening on \\\\.\\pipe\\aura-wallpaperd");
+
+    // Install Ctrl+C handler for graceful shutdown.
+    if let Err(e) = ctrlc::set_handler(move || {
+        CTRLC_REQUESTED.store(true, Ordering::Relaxed);
+    }) {
+        tracing::warn!("Failed to install Ctrl+C handler: {}", e);
+    }
 
     #[cfg(target_os = "windows")]
     let vulkan_context = Arc::new(VulkanContext::new()?);
@@ -159,7 +171,7 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
     // Spawn platform event pump thread.
     let event_pump = EventPump::new();
     let receiver = event_pump.receiver.clone();
-    let _pump_handle = event_pump.spawn();
+    let pump_handle = event_pump.spawn();
 
     tracing::info!(
         "wallpaperd orchestrator running — {} monitors, WorkerW: {:?}",
@@ -173,6 +185,11 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
     loop {
         if ipc_shutdown_rx.try_recv().is_ok() {
             tracing::info!("IPC shutdown requested. Exiting daemon...");
+            break;
+        }
+
+        if CTRLC_REQUESTED.load(Ordering::Relaxed) {
+            tracing::info!("Ctrl+C received. Exiting daemon...");
             break;
         }
 
@@ -237,7 +254,15 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
 
     // Shutdown: signal IPC server and render threads.
     let _ = ipc_server_shutdown_tx.send(true);
-    coordinator.shutdown();
+
+    // Join render threads with a timeout to prevent indefinite hangs.
+    coordinator.shutdown_with_timeout(Duration::from_secs(3));
+
+    // Join IPC server thread.
+    let _ = ipc_thread.join();
+
+    // Join event pump thread.
+    let _ = pump_handle.join();
 
     tracing::info!("wallpaperd daemon shutdown complete");
     Ok(())
