@@ -1,7 +1,10 @@
 use windows::{
     Win32::{
         Foundation::{LPARAM, RECT},
-        Graphics::Gdi::{EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFOEXW},
+        Graphics::Gdi::{
+            DISPLAY_DEVICEW, EnumDisplayDevicesW, EnumDisplayMonitors, GetMonitorInfoW, HDC,
+            HMONITOR, MONITORINFOEXW,
+        },
         UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
     },
     core::BOOL,
@@ -68,10 +71,29 @@ unsafe extern "system" fn enum_monitor_callback(
             &minfo.szDevice[..minfo.szDevice.iter().position(|&c| c == 0).unwrap_or(32)],
         );
 
-        // Derive stable MonitorId from device name.
-        // For a truly unique path, a full SetupAPI traversal is needed; the
-        // device name is sufficient for practical uniqueness in most setups.
-        let monitor_id = MonitorId::from_device_path(&device_name);
+        // Derive hardware-stable MonitorId using EnumDisplayDevicesW.
+        let mut hardware_id = device_name.clone();
+        let mut disp_dev: DISPLAY_DEVICEW = unsafe { std::mem::zeroed() };
+        disp_dev.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as u32;
+
+        unsafe {
+            use windows::core::PCWSTR;
+            let sz_device_ptr = minfo.szDevice.as_ptr();
+            if EnumDisplayDevicesW(PCWSTR(sz_device_ptr), 0, &mut disp_dev, 1).as_bool() {
+                let dev_id = String::from_utf16_lossy(
+                    &disp_dev.DeviceID[..disp_dev
+                        .DeviceID
+                        .iter()
+                        .position(|&c| c == 0)
+                        .unwrap_or(128)],
+                );
+                if !dev_id.trim().is_empty() {
+                    hardware_id = dev_id;
+                }
+            }
+        }
+
+        let monitor_id = MonitorId::from_device_path(&hardware_id);
 
         let rc = minfo.monitorInfo.rcMonitor;
         let width = (rc.right - rc.left) as u32;
@@ -88,7 +110,7 @@ unsafe extern "system" fn enum_monitor_callback(
         infos.push(MonitorInfo {
             id: monitor_id,
             device_name: device_name.clone(),
-            device_path: device_name,
+            device_path: hardware_id,
             x: rc.left,
             y: rc.top,
             width,
