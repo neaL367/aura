@@ -13,7 +13,7 @@ pub const CONFIG_VERSION: u32 = 1;
 ///
 /// Migration: the `version` field is checked at load time; missing fields
 /// receive defaults; unknown fields are silently ignored (forward compat).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppConfig {
     /// Schema version.  Must equal `CONFIG_VERSION` after migration.
     #[serde(default = "default_version")]
@@ -51,7 +51,7 @@ impl Default for AppConfig {
 // PerformanceConfig
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PerformanceConfig {
     /// Profile applied during normal operation.
     #[serde(default)]
@@ -103,7 +103,7 @@ impl Default for PerformanceConfig {
 // LibraryConfig
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LibraryConfig {
     /// Directories scanned for wallpaper files.
     #[serde(default)]

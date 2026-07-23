@@ -31,6 +31,10 @@ fn test_request_serialization_roundtrip() {
         Request::RemoveScanPath {
             path: std::path::PathBuf::from(r"C:\Wallpapers"),
         },
+        Request::GetConfig,
+        Request::UpdateConfig {
+            config: aura_core::config::AppConfig::default(),
+        },
         Request::Shutdown,
         Request::SetPlayback {
             monitor_id: MonitorId::from_device_path(r"\\.\DISPLAY1"),
@@ -77,6 +81,7 @@ fn test_response_serialization_roundtrip() {
                 thumbnail_path: None,
             },
         ]),
+        Response::Config(aura_core::config::AppConfig::default()),
     ];
 
     for resp in responses {

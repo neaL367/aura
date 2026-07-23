@@ -41,6 +41,29 @@ pub fn enable_dpi_awareness() -> Result<(), PlatformError> {
     Ok(())
 }
 
+/// Returns process RAM memory usage `(working_set_mb, private_bytes_mb)`.
+#[cfg(target_os = "windows")]
+pub fn get_process_memory_mb() -> (f32, f32) {
+    use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+    use windows::Win32::System::Threading::GetCurrentProcess;
+
+    unsafe {
+        let mut pmc = PROCESS_MEMORY_COUNTERS {
+            cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
+            ..Default::default()
+        };
+        if K32GetProcessMemoryInfo(GetCurrentProcess(), &mut pmc as *mut _ as *mut _, pmc.cb)
+            .as_bool()
+        {
+            let working_set_mb = (pmc.WorkingSetSize as f32) / (1024.0 * 1024.0);
+            let pagefile_mb = (pmc.PagefileUsage as f32) / (1024.0 * 1024.0);
+            (working_set_mb, pagefile_mb)
+        } else {
+            (0.0, 0.0)
+        }
+    }
+}
+
 // Stubs for non-Windows platforms (e.g. Linux CI check/test)
 #[cfg(not(target_os = "windows"))]
 pub mod stub {
@@ -183,6 +206,9 @@ pub mod stub {
     }
     pub fn enable_dpi_awareness() -> Result<(), PlatformError> {
         Ok(())
+    }
+    pub fn get_process_memory_mb() -> (f32, f32) {
+        (0.0, 0.0)
     }
 }
 #[cfg(not(target_os = "windows"))]

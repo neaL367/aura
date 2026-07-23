@@ -14,6 +14,7 @@ pub enum ConnectionStatus {
 pub struct UiIpcClient {
     status: Arc<Mutex<ConnectionStatus>>,
     wallpapers: Arc<Mutex<Vec<WallpaperEntry>>>,
+    config: Arc<Mutex<Option<aura_core::config::AppConfig>>>,
     last_error: Arc<Mutex<Option<String>>>,
     cmd_tx: tokio::sync::mpsc::UnboundedSender<(
         Request,
@@ -25,9 +26,11 @@ impl UiIpcClient {
     pub fn new(ctx: egui::Context) -> Self {
         let status = Arc::new(Mutex::new(ConnectionStatus::Connecting));
         let wallpapers = Arc::new(Mutex::new(Vec::new()));
+        let config = Arc::new(Mutex::new(None));
         let last_error = Arc::new(Mutex::new(None));
         let status_clone = status.clone();
         let wallpapers_clone = wallpapers.clone();
+        let config_clone = config.clone();
         let last_error_clone = last_error.clone();
 
         let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<(
@@ -103,6 +106,11 @@ impl UiIpcClient {
                                                              *wallpapers_clone.lock().unwrap() = list.clone();
                                                              *last_error_clone.lock().unwrap() = None;
                                                          }
+                                                         Ok(Response::Config(c)) => {
+                                                             tracing::info!("UI received Config update");
+                                                             *config_clone.lock().unwrap() = Some(c.clone());
+                                                             *last_error_clone.lock().unwrap() = None;
+                                                         }
                                                          Ok(Response::Error { reason }) => {
                                                              tracing::warn!("Daemon returned error: {}", reason);
                                                              *last_error_clone.lock().unwrap() = Some(reason.clone());
@@ -153,6 +161,7 @@ impl UiIpcClient {
         Self {
             status,
             wallpapers,
+            config,
             last_error,
             cmd_tx,
         }
@@ -167,6 +176,13 @@ impl UiIpcClient {
 
     pub fn wallpapers(&self) -> Vec<WallpaperEntry> {
         self.wallpapers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    pub fn config(&self) -> Option<aura_core::config::AppConfig> {
+        self.config
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()

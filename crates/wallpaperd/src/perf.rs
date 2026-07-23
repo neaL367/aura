@@ -54,12 +54,27 @@ impl PerfMonitor {
                     0.0
                 };
 
-                info!(
-                    monitor = %tracker.monitor_id,
-                    fps = format!("{:.1}", fps),
-                    frame_time_ms = format!("{:.2}", frame_time_ms),
-                    "Aura performance metrics"
-                );
+                let (working_set_mb, private_mb) = aura_platform_windows::get_process_memory_mb();
+
+                if frames == 0 {
+                    info!(
+                        monitor = %tracker.monitor_id,
+                        status = "Idle (Static - 0% CPU/GPU)",
+                        fps = "0.0",
+                        ram_working_set_mb = format!("{:.1}", working_set_mb),
+                        ram_private_mb = format!("{:.1}", private_mb),
+                        "Aura performance metrics"
+                    );
+                } else {
+                    info!(
+                        monitor = %tracker.monitor_id,
+                        fps = format!("{:.1}", fps),
+                        frame_time_ms = format!("{:.2}", frame_time_ms),
+                        ram_working_set_mb = format!("{:.1}", working_set_mb),
+                        ram_private_mb = format!("{:.1}", private_mb),
+                        "Aura performance metrics"
+                    );
+                }
 
                 tracker.last_count = current_count;
                 tracker.last_log = Instant::now();

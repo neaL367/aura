@@ -211,10 +211,20 @@ impl GraphicsPipeline {
         unsafe {
             if self.pipeline != vk::Pipeline::null() {
                 device.destroy_pipeline(self.pipeline, None);
+                self.pipeline = vk::Pipeline::null();
             }
-            device.destroy_render_pass(self.render_pass, None);
-            device.destroy_pipeline_layout(self.pipeline_layout, None);
-            device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
+            if self.render_pass != vk::RenderPass::null() {
+                device.destroy_render_pass(self.render_pass, None);
+                self.render_pass = vk::RenderPass::null();
+            }
+            if self.pipeline_layout != vk::PipelineLayout::null() {
+                device.destroy_pipeline_layout(self.pipeline_layout, None);
+                self.pipeline_layout = vk::PipelineLayout::null();
+            }
+            if self.descriptor_set_layout != vk::DescriptorSetLayout::null() {
+                device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
+                self.descriptor_set_layout = vk::DescriptorSetLayout::null();
+            }
         }
     }
 }

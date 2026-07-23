@@ -343,6 +343,7 @@ impl Orchestrator {
                 let config = state.config_store.load().unwrap_or_default();
                 let scanned = LibraryScanner::scan_paths(&config.library.scan_paths);
                 state.library_items = scanned;
+                state.library_items.shrink_to_fit();
                 let _ = state.library_store.save(&state.library_items);
                 info!(
                     "RefreshLibrary complete — {} wallpaper(s) in library",
@@ -373,6 +374,21 @@ impl Orchestrator {
                     let _ = state.library_store.save(&state.library_items);
                 }
                 Response::WallpaperList(build_wallpaper_list(&state.library_items))
+            }
+            Request::GetConfig => {
+                let config = state.config_store.load().unwrap_or_default();
+                Response::Config(config)
+            }
+            Request::UpdateConfig { config } => {
+                info!("UpdateConfig received — saving config");
+                if let Err(e) = state.config_store.save(&config) {
+                    tracing::error!("Failed to save config: {}", e);
+                    Response::Error {
+                        reason: e.to_string(),
+                    }
+                } else {
+                    Response::Config(config)
+                }
             }
             Request::Shutdown => {
                 let _ = self.shutdown_tx.send(());

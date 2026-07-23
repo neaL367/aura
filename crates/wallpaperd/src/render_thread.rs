@@ -177,6 +177,7 @@ pub fn create_monitor_context(
         .spawn(move || {
             let mut active_worker: Option<DecodeWorkerHandle> = initial_worker;
             let mut current_frame_rx = initial_frame_rx;
+            let mut is_dirty = true;
 
             // Render loop: check for wallpaper commands, new frames, then draw.
             loop {
@@ -190,6 +191,7 @@ pub fn create_monitor_context(
                 }
 
                 if let Ok(cmd) = assign_rx.try_recv() {
+                    is_dirty = true;
                     match cmd {
                         RenderCommand::SetFitMode(new_mode) => {
                             tracing::info!("Render thread received new fit mode: {:?}", new_mode);
@@ -293,39 +295,65 @@ pub fn create_monitor_context(
                     }
                 }
 
+                let mut has_new_frame = false;
                 if let Some(ref rx) = current_frame_rx
                     && let Some(frame) = rx.try_recv()
-                    && let Err(e) = renderer.set_wallpaper_pixels(
+                {
+                    has_new_frame = true;
+                    if let Err(e) = renderer.set_wallpaper_pixels(
                         &context_clone,
                         frame.width,
                         frame.height,
                         &frame.data,
-                    )
-                {
-                    tracing::warn!("Texture upload failed: {}", e);
+                    ) {
+                        tracing::warn!("Texture upload failed: {}", e);
+                    }
                 }
 
-                match renderer.frame(&context_clone, [0.0, 0.0, 0.0, 1.0]) {
-                    Ok(_) => {
-                        counter_clone.fetch_add(1, Ordering::Relaxed);
-                    }
-                    Err(VulkanError::SwapchainOutOfDate) => {
-                        if let Err(e) = renderer.resize(&context_clone, width, height) {
-                            tracing::warn!("Swapchain resize failed: {}", e);
+                if current_frame_rx.is_some() {
+                    // Animated content (GIF/Video): draw whenever new frame or dirty
+                    if has_new_frame || is_dirty {
+                        match renderer.frame(&context_clone, [0.0, 0.0, 0.0, 1.0]) {
+                            Ok(_) => {
+                                counter_clone.fetch_add(1, Ordering::Relaxed);
+                            }
+                            Err(VulkanError::SwapchainOutOfDate) => {
+                                if let Err(e) = renderer.resize(&context_clone, width, height) {
+                                    tracing::warn!("Swapchain resize failed: {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!("Render frame failed: {}", e);
+                            }
                         }
+                        is_dirty = false;
                     }
-                    Err(e) => {
-                        tracing::warn!("Render frame failed: {}", e);
+                    std::thread::sleep(Duration::from_millis(16)); // ~60 FPS pacing
+                } else {
+                    // Static image content: draw once when dirty, then sleep (0% CPU/GPU idle)
+                    if is_dirty {
+                        match renderer.frame(&context_clone, [0.0, 0.0, 0.0, 1.0]) {
+                            Ok(_) => {
+                                counter_clone.fetch_add(1, Ordering::Relaxed);
+                            }
+                            Err(VulkanError::SwapchainOutOfDate) => {
+                                if let Err(e) = renderer.resize(&context_clone, width, height) {
+                                    tracing::warn!("Swapchain resize failed: {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!("Render frame failed: {}", e);
+                            }
+                        }
+                        is_dirty = false;
+                    } else {
+                        std::thread::sleep(Duration::from_millis(50));
                     }
                 }
             }
 
             if let Some(worker) = active_worker.take() {
                 worker.stop();
-            }
-
-            unsafe {
-                renderer.destroy(&context_clone);
             }
         })
         .map_err(|_| DaemonError::ThreadSpawn)?;

@@ -52,6 +52,12 @@ pub enum Request {
     AddScanPath { path: std::path::PathBuf },
     /// Remove a scan directory path from the wallpaper library.
     RemoveScanPath { path: std::path::PathBuf },
+    /// Fetch the current application configuration.
+    GetConfig,
+    /// Update the application configuration.
+    UpdateConfig {
+        config: aura_core::config::AppConfig,
+    },
     /// Gracefully shut down the daemon.
     Shutdown,
 }
@@ -72,6 +78,8 @@ pub enum Response {
     Status(DaemonStatus),
     /// Response to `ListWallpapers`.
     WallpaperList(Vec<WallpaperEntry>),
+    /// Response to `GetConfig`.
+    Config(aura_core::config::AppConfig),
 }
 
 // ---------------------------------------------------------------------------

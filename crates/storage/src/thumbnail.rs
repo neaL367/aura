@@ -52,6 +52,7 @@ impl ThumbnailStore {
         }?;
 
         let thumb = img.thumbnail(320, 180);
+        drop(img);
         let tmp_file = dir.join(format!("{}.tmp", meta.id));
 
         if let Ok(mut file) = std::fs::File::create(&tmp_file) {

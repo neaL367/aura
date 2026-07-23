@@ -78,4 +78,5 @@ opt-level = 1          # Faster debug builds with minimal optimisation
 opt-level       = 3
 lto             = "thin"
 codegen-units   = 1
+panic           = "abort"
 strip           = "symbols"

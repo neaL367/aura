@@ -56,14 +56,16 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 - **Response Variants for Mutations**: IPC handlers that mutate library state (`AddScanPath`, `RemoveScanPath`, `RefreshLibrary`) must return `Response::WallpaperList(...)` directly — not `Response::Ok`. This eliminates a fragile second `ListWallpapers` round-trip and ensures the UI gallery updates atomically in a single IPC exchange.
 - **Roundtrip Test Coverage**: All four `Response` variants (`Ok`, `Error`, `Status`, `WallpaperList`) must be covered in `crates/ipc/tests/ipc_roundtrip.rs`. Any new response variant added to the protocol must include a roundtrip serialize/deserialize test.
 - **egui Frame Loop Guard**: Never call `ipc_client.send(...)` or `ipc_client.fetch_wallpapers()` unconditionally inside `eframe::App::update()`. The egui render loop runs continuously; unguarded sends flood `tokio::sync::mpsc::unbounded_channel` with thousands of duplicate requests per second, blocking real user-triggered IPC commands.
+- **Orchestrator Channel Assignment Fallback**: `Request::AssignWallpaper` must not return `unknown monitor` error if `monitor_id` is present in active `state.monitors`. If the render channel (`wallpaper_txs`) is initializing, `Orchestrator` must persist the assignment to `aura.toml` and return success so the UI gallery stays responsive.
 
 ---
 
-## 6. Storage Rules
+## 6. Storage & UI Rules
 
 - **Atomic Write on Windows**: `std::fs::rename(tmp, dest)` fails with `ERROR_ALREADY_EXISTS` if `dest` already exists on Windows (unlike POSIX `rename`). Always call `let _ = std::fs::remove_file(&dest)` before `std::fs::rename(&tmp, &dest)` in `ConfigStore::save` and `LibraryStore::save`.
 - **Native File Pickers**: Use `rfd::FileDialog` for all folder/file selection dialogs. `pick_folder()` opens a native Windows folder-only picker; `pick_files()` with `.add_filter("Media Files", &["png", "jpg", "gif", "webp", "mp4", ...])` opens a native file multi-select dialog. Both are synchronous blocking calls on the egui UI thread — this is acceptable.
 - **LibraryScanner File vs Directory**: `LibraryScanner::scan_paths()` handles both directory paths (`is_dir()` → recursive scan) and individual file paths (`is_file()` → direct `inspect_file`). Always route `AddScanPath` requests through `LibraryScanner::scan_paths` after adding the path to `config.library.scan_paths`.
+- **Windows File URI Scheme for egui_extras**: Local Windows file URIs for `egui_extras::install_image_loaders` MUST use 3 slashes (`file:///C:/path/to/file`). Using 2 slashes (`file://C:/...`) causes `egui` to treat `C:` as a network hostname, failing image loading and displaying red warning icons (`⚠`).
 
 ---
 
@@ -80,3 +82,20 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 
 - **HMONITOR Handle Invalidation**: Per Microsoft Win32 API specifications, `HMONITOR` handles are transient and become invalid upon `WM_DISPLAYCHANGE`. Monitor identity and active context mapping must rely strictly on stable `MonitorId` values (derived from device paths), never raw `HMONITOR` handles.
 - **Dynamic Monitor Reconciliation**: When `HostEvent::DisplayChanged` (`WM_DISPLAYCHANGE`) is received, re-enumerate displays fresh using `MonitorEnumerator::enumerate()`, diff against active `MonitorId`s in `RenderCoordinator`, gracefully shut down removed monitor render threads, spawn new render threads for added displays, and update IPC `Orchestrator` summaries.
+
+---
+
+## 9. Vulkan Teardown & Idempotent Resource Destruction Rules
+
+- **Idempotent Destruction Methods**: All Vulkan resource teardown methods (`Swapchain::destroy`, `GraphicsPipeline::destroy`, `Surface::drop`) MUST clear destroyed handles to `vk::...::null()` immediately after freeing. Calling `destroy()` multiple times on the same object must always be a safe no-op.
+- **RAII Resource Teardown**: `MonitorRenderer` implements `Drop` for RAII resource cleanup. Do NOT invoke manual `renderer.destroy()` calls prior to thread closure exit, as redundant destruction triggers double-free `STATUS_ACCESS_VIOLATION` (`0xc0000005`) crashes inside graphics driver DLLs.
+
+---
+
+## 10. Performance Engine & Memory Optimization Rules
+
+- **Dirty-Flag Presentation Skipping**: Static image presentation loop tracks `is_dirty`. A frame is rendered once on load/resize/fit mode change, after which `renderer.frame(...)` calls are paused to achieve 0% CPU and 0% GPU load during desktop idle.
+- **Idle Metric Logging**: `PerfMonitor` logs 0-frame intervals with `status = "Idle (Static - 0% CPU/GPU)"` and `fps = "0.0"` to explicitly distinguish dirty-flag power saving from renderer freezes.
+- **Immediate High-Res Image Memory Release**: `ThumbnailStore::get_or_create` MUST explicitly invoke `drop(img)` immediately after `img.thumbnail(...)` generation to release full-resolution 4K/8K uncompressed image RAM before JPEG encoding and file I/O.
+- **Heap Vector Compaction**: Scanner results (`LibraryScanner::scan_paths`) and orchestrator library storage (`state.library_items`) MUST invoke `shrink_to_fit()` after scanning to release unused heap allocation capacity.
+

@@ -76,7 +76,7 @@ pub struct MonitorInfo {
 // ---------------------------------------------------------------------------
 
 /// A wallpaper assigned to a specific monitor.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MonitorAssignment {
     pub monitor_id: MonitorId,
     pub wallpaper_id: WallpaperId,

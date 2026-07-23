@@ -32,6 +32,7 @@ impl LibraryScanner {
             "Library scan complete — discovered {} wallpapers",
             results.len()
         );
+        results.shrink_to_fit();
         results
     }
 

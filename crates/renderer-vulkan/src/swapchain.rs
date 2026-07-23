@@ -143,8 +143,11 @@ impl Swapchain {
             for view in self.image_views.drain(..) {
                 device.destroy_image_view(view, None);
             }
-            self.swapchain_loader
-                .destroy_swapchain(self.swapchain, None);
+            if self.swapchain != vk::SwapchainKHR::null() {
+                self.swapchain_loader
+                    .destroy_swapchain(self.swapchain, None);
+                self.swapchain = vk::SwapchainKHR::null();
+            }
         }
     }
 }
