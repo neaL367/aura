@@ -311,7 +311,10 @@ impl Orchestrator {
                 let tx = state.wallpaper_txs.get(&monitor_id).cloned();
                 match tx {
                     Some(tx) => {
-                        info!("Forwarding playback command {:?} to monitor {:?}", command, monitor_id);
+                        info!(
+                            "Forwarding playback command {:?} to monitor {:?}",
+                            command, monitor_id
+                        );
                         if tx.send(RenderCommand::Playback(command)).is_err() {
                             Response::Error {
                                 reason: format!(

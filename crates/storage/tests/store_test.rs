@@ -70,8 +70,14 @@ fn test_config_store_save_and_load_roundtrip() {
     let loaded = store.load().unwrap();
     assert_eq!(loaded.version, config.version);
     assert_eq!(loaded.assignments.len(), 1);
-    assert_eq!(loaded.assignments[0].monitor_id, config.assignments[0].monitor_id);
-    assert_eq!(loaded.assignments[0].fit_mode, config.assignments[0].fit_mode);
+    assert_eq!(
+        loaded.assignments[0].monitor_id,
+        config.assignments[0].monitor_id
+    );
+    assert_eq!(
+        loaded.assignments[0].fit_mode,
+        config.assignments[0].fit_mode
+    );
 }
 
 #[test]

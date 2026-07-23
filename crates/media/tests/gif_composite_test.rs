@@ -23,7 +23,7 @@ fn create_test_gif_with_disposal(
     path: &Path,
     width: u16,
     height: u16,
-    bg_color: u8,
+    _bg_color: u8,
     frames: &[(Vec<u8>, u16, gif::DisposalMethod)],
 ) {
     let mut file = std::fs::File::create(path).unwrap();
@@ -45,7 +45,12 @@ fn gif_two_frames_read_all() {
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("two_frames.gif");
 
-    create_test_gif(&path, 2, 1, &[([255, 0, 0, 255], 10), ([0, 255, 0, 255], 10)]);
+    create_test_gif(
+        &path,
+        2,
+        1,
+        &[([255, 0, 0, 255], 10), ([0, 255, 0, 255], 10)],
+    );
 
     let mut decoder = GifDecoder::open(&path).unwrap();
     let f1 = decoder.next_frame().unwrap().unwrap();
@@ -78,7 +83,11 @@ fn gif_frame_with_transparency() {
     assert_eq!(f1.data[0..4], [255, 0, 0, 255]);
 
     let f2 = decoder.next_frame().unwrap().unwrap();
-    assert_eq!(f2.data[0..4], [255, 0, 0, 255], "transparent should keep previous pixel");
+    assert_eq!(
+        f2.data[0..4],
+        [255, 0, 0, 255],
+        "transparent should keep previous pixel"
+    );
 
     std::fs::remove_dir_all(&dir).unwrap_or(());
 }
@@ -129,13 +138,22 @@ fn gif_disposal_keep() {
 
     // 2x1 canvas: frame 1 is red (left), frame 2 is green (right).
     // With Keep disposal, after frame 2 the entire canvas shows both red AND green.
-    create_test_gif(&path, 2, 1, &[([255, 0, 0, 255], 10), ([0, 255, 0, 255], 10)]);
+    create_test_gif(
+        &path,
+        2,
+        1,
+        &[([255, 0, 0, 255], 10), ([0, 255, 0, 255], 10)],
+    );
 
     let mut decoder = GifDecoder::open(&path).unwrap();
     let _f1 = decoder.next_frame().unwrap().unwrap();
     let f2 = decoder.next_frame().unwrap().unwrap();
     // Frame 2 replaces the entire canvas with green (Keep is default).
-    assert_eq!(f2.data[0..4], [0, 255, 0, 255], "keep disposal replaces canvas");
+    assert_eq!(
+        f2.data[0..4],
+        [0, 255, 0, 255],
+        "keep disposal replaces canvas"
+    );
 
     std::fs::remove_dir_all(&dir).unwrap_or(());
 }
@@ -152,14 +170,17 @@ fn gif_disposal_background_clears_frame_area() {
     // Frame 2: green (partial — only left pixel)
     let w = 2u16;
     let h = 1u16;
-    let mut all_red = vec![255u8; (w as usize * h as usize * 4)];
-    let mut left_green = vec![0u8; (w as usize * h as usize * 4)];
-    left_green[0] = 0;   // R=0
+    let all_red = vec![255u8; w as usize * h as usize * 4];
+    let mut left_green = vec![0u8; w as usize * h as usize * 4];
+    left_green[0] = 0; // R=0
     left_green[1] = 255; // G=255
     left_green[3] = 255; // A=255
 
     create_test_gif_with_disposal(
-        &path, w, h, 0,
+        &path,
+        w,
+        h,
+        0,
         &[
             (all_red, 10, gif::DisposalMethod::Background),
             (left_green, 10, gif::DisposalMethod::Keep),
@@ -178,7 +199,8 @@ fn gif_disposal_background_clears_frame_area() {
 
     // Just verify the right pixel was affected by background disposal (not still red from frame 1).
     assert_ne!(
-        f2.data[4..8], [255, 0, 0, 255],
+        f2.data[4..8],
+        [255, 0, 0, 255],
         "background disposal should clear frame 1 area"
     );
 

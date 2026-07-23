@@ -9,12 +9,17 @@ fn app_config_default_with_userprofile() {
 
     let prev = std::env::var("USERPROFILE").ok();
     // SAFETY: env var manipulation in a single-threaded test.
-    unsafe { std::env::set_var("USERPROFILE", &dir); }
+    unsafe {
+        std::env::set_var("USERPROFILE", &dir);
+    }
 
     let cfg = AppConfig::default();
     // Should include the Pictures dir from our custom USERPROFILE.
     let has_pics = cfg.library.scan_paths.iter().any(|p| p.starts_with(&pics));
-    assert!(has_pics, "default scan_paths should include USERPROFILE/Pictures");
+    assert!(
+        has_pics,
+        "default scan_paths should include USERPROFILE/Pictures"
+    );
 
     // Restore original.
     // SAFETY: restoring env var in single-threaded test.

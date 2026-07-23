@@ -18,7 +18,10 @@ fn display_vulkan_error() {
 #[test]
 fn display_already_running() {
     let err = DaemonError::AlreadyRunning;
-    assert_eq!(err.to_string(), "another instance of wallpaperd is already running");
+    assert_eq!(
+        err.to_string(),
+        "another instance of wallpaperd is already running"
+    );
 }
 
 #[test]
@@ -29,7 +32,7 @@ fn display_event_pump_disconnected() {
 
 #[test]
 fn debug_all_variants() {
-    let io = std::io::Error::new(std::io::ErrorKind::Other, "io");
+    let io = std::io::Error::other("io");
     let variants: Vec<DaemonError> = vec![
         DaemonError::Storage(aura_storage::StorageError::Io(io)),
         DaemonError::ThreadSpawn,

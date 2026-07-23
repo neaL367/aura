@@ -2,9 +2,9 @@
 mod windows_tests {
     use std::time::Duration;
 
+    use aura_ipc::client::IpcClient;
     use aura_ipc::protocol::{DaemonStatus, MonitorSummary, PROTOCOL_VERSION, Request, Response};
     use aura_ipc::server::IpcServer;
-    use aura_ipc::client::IpcClient;
 
     fn test_pipe_name() -> String {
         format!(
@@ -27,14 +27,14 @@ mod windows_tests {
                     active_monitors: 2,
                     assigned_wallpapers: 1,
                     is_paused: false,
-                    monitors: vec![
-                        MonitorSummary {
-                            id: aura_core::monitor::MonitorId::from_device_path(r"\\.\DISPLAY1"),
-                            name: "Display 1".into(),
-                        },
-                    ],
+                    monitors: vec![MonitorSummary {
+                        id: aura_core::monitor::MonitorId::from_device_path(r"\\.\DISPLAY1"),
+                        name: "Display 1".into(),
+                    }],
                 }),
-                _ => Response::Error { reason: "unexpected request".into() },
+                _ => Response::Error {
+                    reason: "unexpected request".into(),
+                },
             }
         });
 
@@ -70,7 +70,9 @@ mod windows_tests {
         let handler = Box::new(|req: Request| -> Response {
             match req {
                 Request::ListWallpapers => Response::WallpaperList(vec![]),
-                _ => Response::Error { reason: "unexpected request".into() },
+                _ => Response::Error {
+                    reason: "unexpected request".into(),
+                },
             }
         });
 

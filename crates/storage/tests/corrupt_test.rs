@@ -21,7 +21,10 @@ fn library_store_corrupt_json_returns_empty() {
 
     let store = LibraryStore::new(&path);
     let loaded = store.load().unwrap();
-    assert!(loaded.is_empty(), "corrupt JSON should produce empty library");
+    assert!(
+        loaded.is_empty(),
+        "corrupt JSON should produce empty library"
+    );
 }
 
 #[test]
@@ -33,14 +36,20 @@ fn library_store_missing_parent_dir_creates_it() {
 
     // Save should create the parent directory and succeed.
     store.save(&entries).unwrap();
-    assert!(nested.exists(), "save should create parent dirs and write file");
+    assert!(
+        nested.exists(),
+        "save should create parent dirs and write file"
+    );
 }
 
 #[test]
 fn scanner_empty_directory_produces_empty_results() {
     let dir = tempdir().unwrap();
     let scanned = aura_storage::LibraryScanner::scan_paths(&[dir.path().to_path_buf()]);
-    assert!(scanned.is_empty(), "empty directory should produce no results");
+    assert!(
+        scanned.is_empty(),
+        "empty directory should produce no results"
+    );
 }
 
 #[test]

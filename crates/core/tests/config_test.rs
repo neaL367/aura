@@ -1,4 +1,4 @@
-use aura_core::config::{AppConfig, CONFIG_VERSION, PerformanceConfig, LibraryConfig};
+use aura_core::config::{AppConfig, CONFIG_VERSION, LibraryConfig, PerformanceConfig};
 use aura_core::playback::PerformanceProfile;
 
 #[test]

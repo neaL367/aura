@@ -27,13 +27,22 @@ fn image_decoder_corrupt_png() {
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("corrupt.png");
     // Write bytes that start like a PNG but have invalid content.
-    std::fs::write(&path, &[137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0, 0xff, 0xff, 0xff]).unwrap();
+    std::fs::write(
+        &path,
+        [
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0, 0xff, 0xff, 0xff,
+        ],
+    )
+    .unwrap();
 
     let mut decoder = ImageDecoder::open(&path);
     // Depending on the image crate, it might fail at open or at next_frame.
     if let Ok(ref mut d) = decoder {
         let result = d.next_frame();
-        assert!(result.is_err() || result.unwrap().is_none(), "expected error or None for corrupt PNG");
+        assert!(
+            result.is_err() || result.unwrap().is_none(),
+            "expected error or None for corrupt PNG"
+        );
     }
 
     std::fs::remove_dir_all(&dir).unwrap_or(());

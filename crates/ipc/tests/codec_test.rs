@@ -1,7 +1,7 @@
-use tokio::io::{duplex, AsyncWriteExt};
+use tokio::io::{AsyncWriteExt, duplex};
 
 use aura_ipc::codec::{read_message, write_message};
-use aura_ipc::protocol::{IpcMessage, Request, Response, PROTOCOL_VERSION};
+use aura_ipc::protocol::{IpcMessage, PROTOCOL_VERSION, Request, Response};
 
 #[tokio::test]
 async fn test_codec_roundtrip_request() {

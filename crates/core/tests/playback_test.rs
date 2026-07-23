@@ -1,4 +1,4 @@
-use aura_core::playback::{PlaybackState, PlaybackCommand, PerformanceProfile};
+use aura_core::playback::{PerformanceProfile, PlaybackCommand, PlaybackState};
 
 #[test]
 fn playback_state_default_is_buffering() {
@@ -32,7 +32,11 @@ fn performance_profile_eq() {
 
 #[test]
 fn serde_roundtrip_playback_state() {
-    for state in &[PlaybackState::Playing, PlaybackState::Paused, PlaybackState::Buffering] {
+    for state in &[
+        PlaybackState::Playing,
+        PlaybackState::Paused,
+        PlaybackState::Buffering,
+    ] {
         let json = serde_json::to_string(state).unwrap();
         let back: PlaybackState = serde_json::from_str(&json).unwrap();
         assert_eq!(*state, back);
@@ -41,7 +45,12 @@ fn serde_roundtrip_playback_state() {
 
 #[test]
 fn serde_roundtrip_playback_command() {
-    for cmd in &[PlaybackCommand::Play, PlaybackCommand::Pause, PlaybackCommand::Loop, PlaybackCommand::Stop] {
+    for cmd in &[
+        PlaybackCommand::Play,
+        PlaybackCommand::Pause,
+        PlaybackCommand::Loop,
+        PlaybackCommand::Stop,
+    ] {
         let json = serde_json::to_string(cmd).unwrap();
         let back: PlaybackCommand = serde_json::from_str(&json).unwrap();
         assert_eq!(*cmd, back);
@@ -50,7 +59,11 @@ fn serde_roundtrip_playback_command() {
 
 #[test]
 fn serde_roundtrip_performance_profile() {
-    for prof in &[PerformanceProfile::Maximum, PerformanceProfile::Balanced, PerformanceProfile::Paused] {
+    for prof in &[
+        PerformanceProfile::Maximum,
+        PerformanceProfile::Balanced,
+        PerformanceProfile::Paused,
+    ] {
         let json = serde_json::to_string(prof).unwrap();
         let back: PerformanceProfile = serde_json::from_str(&json).unwrap();
         assert_eq!(*prof, back);

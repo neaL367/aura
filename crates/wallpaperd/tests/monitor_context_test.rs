@@ -22,7 +22,10 @@ mod windows_tests {
             handle,
             shutdown,
             Arc::new(AtomicBool::new(false)),
-            1920, 1080, 0, 0,
+            1920,
+            1080,
+            0,
+            0,
         )
     }
 

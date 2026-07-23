@@ -13,7 +13,11 @@ fn vertex_shader_starts_with_spirv_magic() {
 fn fragment_shader_starts_with_spirv_magic() {
     let spv = shader::fragment_shader_spv();
     assert!(spv.len() >= 4, "fragment shader too short");
-    assert_eq!(spv[0..4], SPIRV_MAGIC, "fragment shader missing SPIR-V magic");
+    assert_eq!(
+        spv[0..4],
+        SPIRV_MAGIC,
+        "fragment shader missing SPIR-V magic"
+    );
 }
 
 #[test]

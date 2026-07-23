@@ -57,7 +57,10 @@ fn test_image_decoder_open_and_decode() {
     assert!(decoder.next_frame().unwrap().is_none());
 
     decoder.loop_reset().unwrap();
-    let frame_again = decoder.next_frame().unwrap().expect("expected frame after reset");
+    let frame_again = decoder
+        .next_frame()
+        .unwrap()
+        .expect("expected frame after reset");
     assert_eq!(frame_again.data, frame.data);
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -85,7 +88,10 @@ fn test_gif_decoder_open_and_decode() {
     assert_ne!(frame1.data, frame2.data);
 
     decoder.loop_reset().unwrap();
-    let frame1_again = decoder.next_frame().unwrap().expect("expected frame after loop reset");
+    let frame1_again = decoder
+        .next_frame()
+        .unwrap()
+        .expect("expected frame after loop reset");
     assert_eq!(frame1.data, frame1_again.data);
 
     let _ = std::fs::remove_dir_all(&dir);

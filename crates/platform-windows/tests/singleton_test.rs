@@ -9,7 +9,10 @@ mod windows_tests {
 
         // A second acquire should fail since s1 still holds the mutex.
         let result = ProcessSingleton::acquire();
-        assert!(result.is_err(), "second acquire should fail with AlreadyRunning");
+        assert!(
+            result.is_err(),
+            "second acquire should fail with AlreadyRunning"
+        );
 
         // Drop s1 to release the mutex.
         drop(s1);
