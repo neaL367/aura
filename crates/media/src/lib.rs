@@ -16,3 +16,4 @@ pub use error::MediaError;
 pub use frame_queue::{FrameReceiver, FrameSender, frame_channel};
 pub use gif_decoder::GifDecoder;
 pub use image_decoder::ImageDecoder;
+pub use video_decoder::{MfVideoDecoder, is_video_by_extension};

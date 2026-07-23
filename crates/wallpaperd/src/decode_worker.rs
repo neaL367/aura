@@ -75,4 +75,67 @@ impl DecodeWorkerHandle {
             command_sender: cmd_tx,
         }
     }
+
+    /// Spawn a dedicated background thread for Media Foundation video decoding.
+    pub fn spawn_video_worker(path: PathBuf, frame_sender: FrameSender) -> Self {
+        let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+
+        std::thread::Builder::new()
+            .name("aura-video-worker".into())
+            .spawn(move || {
+                let mut decoder = match aura_media::MfVideoDecoder::open(&path) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        tracing::error!("Failed to open video wallpaper {}: {}", path.display(), e);
+                        return;
+                    }
+                };
+
+                tracing::info!("Video DecodeWorker started for {}", path.display());
+
+                loop {
+                    if let Ok(cmd) = cmd_rx.try_recv() {
+                        match cmd {
+                            PlaybackCommand::Play => {}
+                            PlaybackCommand::Pause => {
+                                while let Ok(c) = cmd_rx.recv() {
+                                    if c == PlaybackCommand::Play {
+                                        break;
+                                    }
+                                }
+                            }
+                            PlaybackCommand::Stop => break,
+                            _ => {}
+                        }
+                    }
+
+                    match decoder.next_frame() {
+                        Ok(Some(frame)) => {
+                            let duration = std::time::Duration::from_millis(frame.duration_ms);
+                            if !frame_sender.send_blocking(frame) {
+                                break;
+                            }
+                            std::thread::sleep(duration);
+                        }
+                        Ok(None) => {
+                            if let Err(e) = decoder.loop_reset() {
+                                tracing::error!("Failed to reset video loop: {}", e);
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Video decoder error: {}", e);
+                            break;
+                        }
+                    }
+                }
+
+                tracing::info!("Video DecodeWorker finished for {}", path.display());
+            })
+            .expect("failed to spawn video decode worker thread");
+
+        Self {
+            command_sender: cmd_tx,
+        }
+    }
 }
