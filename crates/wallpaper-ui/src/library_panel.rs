@@ -102,6 +102,16 @@ impl LibraryPanel {
                     };
                     ui.label(badge);
 
+                    if let Some(ref thumb_path) = entry.thumbnail_path {
+                        let uri =
+                            format!("file://{}", thumb_path.to_string_lossy().replace('\\', "/"));
+                        ui.add(
+                            egui::Image::new(uri)
+                                .max_size([200.0, 112.5].into())
+                                .corner_radius(4.0),
+                        );
+                    }
+
                     ui.add(
                         egui::Label::new(
                             egui::RichText::new(entry.path.to_string_lossy())

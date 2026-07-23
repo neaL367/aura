@@ -326,6 +326,7 @@ dependencies = [
  "image",
  "thiserror 2.0.19",
  "tracing",
+ "windows",
 ]
 
 [[package]]
@@ -357,6 +358,7 @@ name = "aura-storage"
 version = "0.1.0"
 dependencies = [
  "aura-core",
+ "aura-media",
  "image",
  "serde",
  "serde_json",

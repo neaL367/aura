@@ -92,6 +92,8 @@ pub struct WallpaperEntry {
     pub id: WallpaperId,
     pub path: std::path::PathBuf,
     pub kind: aura_core::wallpaper::MediaKind,
+    #[serde(default)]
+    pub thumbnail_path: Option<std::path::PathBuf>,
 }
 
 impl From<&aura_core::wallpaper::WallpaperMeta> for WallpaperEntry {
@@ -100,6 +102,7 @@ impl From<&aura_core::wallpaper::WallpaperMeta> for WallpaperEntry {
             id: meta.id,
             path: meta.path.clone(),
             kind: meta.kind,
+            thumbnail_path: None,
         }
     }
 }

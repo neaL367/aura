@@ -62,11 +62,13 @@ fn test_response_serialization_roundtrip() {
                 id: WallpaperId::new(),
                 path: std::path::PathBuf::from(r"C:\Wallpapers\test.png"),
                 kind: MediaKind::Image,
+                thumbnail_path: Some(std::path::PathBuf::from(r"C:\Thumbs\thumb1.jpg")),
             },
             WallpaperEntry {
                 id: WallpaperId::new(),
                 path: std::path::PathBuf::from(r"C:\Wallpapers\anim.gif"),
                 kind: MediaKind::Gif,
+                thumbnail_path: None,
             },
         ]),
     ];
