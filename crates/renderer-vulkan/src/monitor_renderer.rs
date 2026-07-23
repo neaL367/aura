@@ -1,12 +1,13 @@
 use ash::vk;
-use aura_core::monitor::MonitorId;
+use aura_core::{monitor::MonitorId, wallpaper::FitMode};
 
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::HWND;
 
 use crate::{
     context::VulkanContext, error::VulkanError, frame::FrameSync, pipeline::GraphicsPipeline,
-    surface::Surface, swapchain::Swapchain, texture::GpuTexture,
+    staging::StagingUploader, surface::Surface, swapchain::Swapchain, texture::GpuTexture,
+    transform::calculate_uv_transform,
 };
 
 use std::sync::Arc;
@@ -20,16 +21,13 @@ pub struct MonitorRenderer {
     pub frame_sync: FrameSync,
     pub command_pool: vk::CommandPool,
     pub command_buffer: vk::CommandBuffer,
-    pub upload_command_buffer: vk::CommandBuffer,
     pub descriptor_pool: vk::DescriptorPool,
     pub descriptor_set: vk::DescriptorSet,
     pub framebuffers: Vec<vk::Framebuffer>,
     pub active_texture: Option<GpuTexture>,
-    // Persistent staging buffer for CPU→GPU texture uploads.
-    pub upload_staging_buffer: Option<vk::Buffer>,
-    pub upload_staging_allocation: Option<gpu_allocator::vulkan::Allocation>,
-    pub upload_staging_size: u64,
-    pub upload_fence: vk::Fence,
+    pub active_fit_mode: FitMode,
+    pub repeat_sampler: vk::Sampler,
+    pub uploader: StagingUploader,
 }
 
 impl MonitorRenderer {
@@ -82,13 +80,23 @@ impl MonitorRenderer {
 
         let framebuffers = create_framebuffers(context, &pipeline, &swapchain)?;
 
-        let fence_info = vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
-        let upload_fence = unsafe {
+        let sampler_info = vk::SamplerCreateInfo::default()
+            .mag_filter(vk::Filter::LINEAR)
+            .min_filter(vk::Filter::LINEAR)
+            .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
+            .address_mode_u(vk::SamplerAddressMode::REPEAT)
+            .address_mode_v(vk::SamplerAddressMode::REPEAT)
+            .address_mode_w(vk::SamplerAddressMode::REPEAT)
+            .max_anisotropy(1.0);
+
+        let repeat_sampler = unsafe {
             context
                 .device
-                .create_fence(&fence_info, None)
-                .map_err(|e| VulkanError::FrameSync(e.to_string()))?
+                .create_sampler(&sampler_info, None)
+                .map_err(|e| VulkanError::Texture(e.to_string()))?
         };
+
+        let uploader = StagingUploader::create(context, upload_command_buffer)?;
 
         Ok(Self {
             monitor_id,
@@ -99,15 +107,13 @@ impl MonitorRenderer {
             frame_sync,
             command_pool,
             command_buffer,
-            upload_command_buffer,
             descriptor_pool,
             descriptor_set,
             framebuffers,
             active_texture: None,
-            upload_staging_buffer: None,
-            upload_staging_allocation: None,
-            upload_staging_size: 0,
-            upload_fence,
+            active_fit_mode: FitMode::Fill,
+            repeat_sampler,
+            uploader,
         })
     }
 
@@ -208,8 +214,28 @@ impl MonitorRenderer {
             );
         }
 
-        if self.active_texture.is_some() {
+        if let Some(ref texture) = self.active_texture {
+            let pc = calculate_uv_transform(
+                self.active_fit_mode,
+                texture.width,
+                texture.height,
+                self.swapchain.extent.width,
+                self.swapchain.extent.height,
+            );
+            let mut pc_bytes = [0u8; 16];
+            pc_bytes[0..4].copy_from_slice(&pc.uv_scale[0].to_ne_bytes());
+            pc_bytes[4..8].copy_from_slice(&pc.uv_scale[1].to_ne_bytes());
+            pc_bytes[8..12].copy_from_slice(&pc.uv_offset[0].to_ne_bytes());
+            pc_bytes[12..16].copy_from_slice(&pc.uv_offset[1].to_ne_bytes());
+
             unsafe {
+                context.device.cmd_push_constants(
+                    self.command_buffer,
+                    self.pipeline.pipeline_layout,
+                    vk::ShaderStageFlags::VERTEX,
+                    0,
+                    &pc_bytes,
+                );
                 context.device.cmd_bind_descriptor_sets(
                     self.command_buffer,
                     vk::PipelineBindPoint::GRAPHICS,
@@ -278,8 +304,6 @@ impl MonitorRenderer {
         }
     }
 
-    /// Upload new RGBA pixel data to the active wallpaper texture using a
-    /// persistent staging buffer + fence, without queue_wait_idle.
     pub fn set_wallpaper_pixels(
         &mut self,
         context: &VulkanContext,
@@ -309,257 +333,32 @@ impl MonitorRenderer {
             self.active_texture = Some(new_t);
         }
 
-        // 2. Wait for previous upload to complete (protects staging buffer reuse).
-        unsafe {
-            context
-                .device
-                .wait_for_fences(std::slice::from_ref(&self.upload_fence), true, u64::MAX)
-                .map_err(|e| VulkanError::Upload(e.to_string()))?;
-            context
-                .device
-                .reset_fences(std::slice::from_ref(&self.upload_fence))
-                .map_err(|e| VulkanError::Upload(e.to_string()))?;
-        }
-
-        // 3. Create / resize staging buffer if needed.
-        if self.upload_staging_size < buffer_size {
-            if let Some(buf) = self.upload_staging_buffer.take() {
-                unsafe { context.device.destroy_buffer(buf, None) };
-            }
-            if let Some(alloc) = self.upload_staging_allocation.take() {
-                let _ = context.allocator.lock().unwrap().free(alloc);
-            }
-
-            let buffer_info = vk::BufferCreateInfo::default()
-                .size(buffer_size)
-                .usage(vk::BufferUsageFlags::TRANSFER_SRC)
-                .sharing_mode(vk::SharingMode::EXCLUSIVE);
-
-            let new_buffer = unsafe {
-                context
-                    .device
-                    .create_buffer(&buffer_info, None)
-                    .map_err(|e| VulkanError::Upload(e.to_string()))?
-            };
-
-            let reqs = unsafe { context.device.get_buffer_memory_requirements(new_buffer) };
-
-            let new_alloc = context
-                .allocator
-                .lock()
-                .unwrap()
-                .allocate(&gpu_allocator::vulkan::AllocationCreateDesc {
-                    name: "Staging Buffer",
-                    requirements: reqs,
-                    location: gpu_allocator::MemoryLocation::CpuToGpu,
-                    linear: true,
-                    allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
-                })
-                .map_err(|e| VulkanError::Allocation(e.to_string()))?;
-
-            unsafe {
-                context
-                    .device
-                    .bind_buffer_memory(new_buffer, new_alloc.memory(), new_alloc.offset())
-                    .map_err(|e| VulkanError::Upload(e.to_string()))?;
-            }
-
-            self.upload_staging_buffer = Some(new_buffer);
-            self.upload_staging_allocation = Some(new_alloc);
-            self.upload_staging_size = buffer_size;
-        }
-
-        // 4. Map and copy pixel data into staging buffer.
-        if let Some(ref alloc) = self.upload_staging_allocation {
-            if let Some(mapped_ptr) = alloc.mapped_ptr() {
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        pixels.as_ptr(),
-                        mapped_ptr.as_ptr() as *mut u8,
-                        pixels.len(),
-                    );
-                }
-            } else {
-                unsafe {
-                    let ptr = context
-                        .device
-                        .map_memory(
-                            alloc.memory(),
-                            alloc.offset(),
-                            buffer_size,
-                            vk::MemoryMapFlags::empty(),
-                        )
-                        .map_err(|e| VulkanError::Upload(e.to_string()))?;
-                    std::ptr::copy_nonoverlapping(pixels.as_ptr(), ptr as *mut u8, pixels.len());
-                    context.device.unmap_memory(alloc.memory());
-                }
-            }
-
-            // Flush mapped memory range to ensure CPU writes are visible to GPU DMA transfer reads
-            unsafe {
-                let range = vk::MappedMemoryRange::default()
-                    .memory(alloc.memory())
-                    .offset(alloc.offset())
-                    .size(vk::WHOLE_SIZE);
-                let _ = context.device.flush_mapped_memory_ranges(&[range]);
-            }
-        }
-
-        // 5. Record upload command buffer.
-        let texture = self
-            .active_texture
-            .as_ref()
-            .ok_or_else(|| VulkanError::Upload("no active texture".into()))?;
-
-        unsafe {
-            context
-                .device
-                .reset_command_buffer(
-                    self.upload_command_buffer,
-                    vk::CommandBufferResetFlags::empty(),
-                )
-                .ok();
-        }
-
-        let begin_info = vk::CommandBufferBeginInfo::default()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-
-        let current_layout = texture.layout;
-        let (src_stage, src_access) = if current_layout == vk::ImageLayout::UNDEFINED {
-            (
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::AccessFlags::empty(),
-            )
-        } else {
-            (
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-                vk::AccessFlags::SHADER_READ,
-            )
-        };
-
-        unsafe {
-            context
-                .device
-                .begin_command_buffer(self.upload_command_buffer, &begin_info)
-                .map_err(|e| VulkanError::Upload(e.to_string()))?;
-
-            // Transition image: current_layout -> TRANSFER_DST_OPTIMAL
-            let barrier_to_transfer = vk::ImageMemoryBarrier::default()
-                .old_layout(current_layout)
-                .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-                .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-                .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-                .image(texture.image)
-                .subresource_range(vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    base_mip_level: 0,
-                    level_count: 1,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                })
-                .src_access_mask(src_access)
-                .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE);
-
-            context.device.cmd_pipeline_barrier(
-                self.upload_command_buffer,
-                src_stage,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier_to_transfer],
+        if let Some(ref mut texture) = self.active_texture {
+            self.uploader.upload_pixels(context, texture, pixels)?;
+            update_descriptor_set(
+                context,
+                self.descriptor_set,
+                texture,
+                self.active_fit_mode,
+                self.repeat_sampler,
             );
-
-            // Copy buffer to image
-            let copy_region = vk::BufferImageCopy::default()
-                .buffer_offset(0)
-                .buffer_row_length(0)
-                .buffer_image_height(0)
-                .image_subresource(vk::ImageSubresourceLayers {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    mip_level: 0,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                })
-                .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
-                .image_extent(vk::Extent3D {
-                    width: texture.width,
-                    height: texture.height,
-                    depth: 1,
-                });
-
-            let staging_buf = self
-                .upload_staging_buffer
-                .ok_or_else(|| VulkanError::Upload("No staging buffer available".to_string()))?;
-
-            context.device.cmd_copy_buffer_to_image(
-                self.upload_command_buffer,
-                staging_buf,
-                texture.image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &[copy_region],
-            );
-
-            // Transition image: TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL
-            let barrier_to_shader = vk::ImageMemoryBarrier::default()
-                .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-                .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-                .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-                .image(texture.image)
-                .subresource_range(vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    base_mip_level: 0,
-                    level_count: 1,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                })
-                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-                .dst_access_mask(vk::AccessFlags::SHADER_READ);
-
-            context.device.cmd_pipeline_barrier(
-                self.upload_command_buffer,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier_to_shader],
-            );
-
-            context
-                .device
-                .end_command_buffer(self.upload_command_buffer)
-                .map_err(|e| VulkanError::Upload(e.to_string()))?;
-        }
-
-        if let Some(t) = self.active_texture.as_mut() {
-            t.layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
-        }
-
-        // 6. Submit with upload_fence (no wait_idle).
-        let submit_info = vk::SubmitInfo::default()
-            .command_buffers(std::slice::from_ref(&self.upload_command_buffer));
-
-        let _lock = context.queue_lock();
-
-        unsafe {
-            context
-                .device
-                .queue_submit(context.graphics_queue, &[submit_info], self.upload_fence)
-                .map_err(|e| VulkanError::Upload(e.to_string()))?;
-            context
-                .device
-                .wait_for_fences(std::slice::from_ref(&self.upload_fence), true, u64::MAX)
-                .map_err(|e| VulkanError::Upload(e.to_string()))?;
-        }
-
-        // 7. Update descriptor set to point at the (now-populated) texture.
-        if let Some(some_texture) = self.active_texture.as_ref() {
-            update_descriptor_set(context, self.descriptor_set, some_texture);
         }
 
         Ok(())
+    }
+
+    /// Update active fit mode and update descriptor set sampler if needed.
+    pub fn set_fit_mode(&mut self, fit_mode: FitMode, context: &VulkanContext) {
+        self.active_fit_mode = fit_mode;
+        if let Some(ref texture) = self.active_texture {
+            update_descriptor_set(
+                context,
+                self.descriptor_set,
+                texture,
+                fit_mode,
+                self.repeat_sampler,
+            );
+        }
     }
 
     /// Recreate the swapchain and framebuffers after resolution change.
@@ -602,16 +401,11 @@ impl MonitorRenderer {
                 texture.destroy(context);
             }
 
-            // Destroy persistent staging buffer.
-            if let Some(buf) = self.upload_staging_buffer.take() {
-                context.device.destroy_buffer(buf, None);
-            }
-            if let Some(alloc) = self.upload_staging_allocation.take() {
-                let _ = context.allocator.lock().unwrap().free(alloc);
-            }
-            if self.upload_fence != vk::Fence::null() {
-                context.device.destroy_fence(self.upload_fence, None);
-                self.upload_fence = vk::Fence::null();
+            self.uploader.destroy(context);
+
+            if self.repeat_sampler != vk::Sampler::null() {
+                context.device.destroy_sampler(self.repeat_sampler, None);
+                self.repeat_sampler = vk::Sampler::null();
             }
 
             destroy_framebuffers(&context.device, &mut self.framebuffers);
@@ -685,9 +479,17 @@ fn update_descriptor_set(
     context: &VulkanContext,
     descriptor_set: vk::DescriptorSet,
     texture: &GpuTexture,
+    fit_mode: FitMode,
+    repeat_sampler: vk::Sampler,
 ) {
+    let sampler = if fit_mode == FitMode::Tile {
+        repeat_sampler
+    } else {
+        texture.sampler
+    };
+
     let image_info = vk::DescriptorImageInfo::default()
-        .sampler(texture.sampler)
+        .sampler(sampler)
         .image_view(texture.view)
         .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
 

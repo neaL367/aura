@@ -16,11 +16,15 @@ pub mod pipeline;
 #[cfg(target_os = "windows")]
 pub mod shader;
 #[cfg(target_os = "windows")]
+pub mod staging;
+#[cfg(target_os = "windows")]
 pub mod surface;
 #[cfg(target_os = "windows")]
 pub mod swapchain;
 #[cfg(target_os = "windows")]
 pub mod texture;
+#[cfg(target_os = "windows")]
+pub mod transform;
 #[cfg(target_os = "windows")]
 pub use context::VulkanContext;
 #[cfg(target_os = "windows")]
