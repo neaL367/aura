@@ -50,17 +50,9 @@ impl ConfigStore {
         Ok(cfg)
     }
 
-    /// Write configuration to disk atomically (write to `.tmp`, then rename).
+    /// Write configuration to disk atomically (write to `.tmp`, then atomic rename).
     pub fn save(&self, config: &AppConfig) -> Result<(), StorageError> {
-        if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-
         let serialised = toml::to_string_pretty(config)?;
-        let tmp_path = self.path.with_extension("tmp");
-        std::fs::write(&tmp_path, serialised)?;
-        let _ = std::fs::remove_file(&self.path);
-        std::fs::rename(&tmp_path, &self.path)?;
-        Ok(())
+        crate::atomic::atomic_save_file(&self.path, &serialised)
     }
 }

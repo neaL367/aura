@@ -33,14 +33,7 @@ impl LibraryStore {
 
     /// Persist the full list of wallpaper metadata (atomic write).
     pub fn save(&self, entries: &[WallpaperMeta]) -> Result<(), StorageError> {
-        if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
         let serialised = serde_json::to_string_pretty(entries)?;
-        let tmp = self.path.with_extension("tmp");
-        std::fs::write(&tmp, serialised)?;
-        let _ = std::fs::remove_file(&self.path);
-        std::fs::rename(&tmp, &self.path)?;
-        Ok(())
+        crate::atomic::atomic_save_file(&self.path, &serialised)
     }
 }

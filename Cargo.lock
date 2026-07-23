@@ -370,6 +370,7 @@ dependencies = [
  "toml",
  "tracing",
  "uuid",
+ "windows",
 ]
 
 [[package]]
