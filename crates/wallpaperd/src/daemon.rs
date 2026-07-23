@@ -171,7 +171,7 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
     // Spawn platform event pump thread.
     let event_pump = EventPump::new();
     let receiver = event_pump.receiver.clone();
-    let pump_handle = event_pump.spawn();
+    let (pump_handle, pump_thread) = event_pump.spawn();
 
     tracing::info!(
         "wallpaperd orchestrator running — {} monitors, WorkerW: {:?}",
@@ -261,8 +261,9 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
     // Join IPC server thread.
     let _ = ipc_thread.join();
 
-    // Join event pump thread.
-    let _ = pump_handle.join();
+    // Signal event pump message loop to exit, then join the thread.
+    pump_handle.shutdown();
+    let _ = pump_thread.join();
 
     tracing::info!("wallpaperd daemon shutdown complete");
     Ok(())

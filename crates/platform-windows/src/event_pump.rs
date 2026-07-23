@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use aura_core::playback::PerformanceProfile;
 use crossbeam_channel::{Receiver, Sender};
 
@@ -7,8 +9,9 @@ use windows::Win32::{
     System::LibraryLoader::GetModuleHandleW,
     UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, MSG, PBT_APMRESUMESUSPEND,
-        PBT_APMSUSPEND, PostQuitMessage, RegisterClassW, RegisterWindowMessageW, WM_CLOSE,
-        WM_DISPLAYCHANGE, WM_ENDSESSION, WM_POWERBROADCAST, WNDCLASSW, WS_OVERLAPPEDWINDOW,
+        PBT_APMSUSPEND, PostMessageW, PostQuitMessage, RegisterClassW, RegisterWindowMessageW,
+        WM_CLOSE, WM_DISPLAYCHANGE, WM_ENDSESSION, WM_POWERBROADCAST, WNDCLASSW,
+        WS_OVERLAPPEDWINDOW,
     },
 };
 
@@ -28,36 +31,69 @@ pub enum HostEvent {
     ShutdownRequested,
 }
 
+/// Handle to signal the event pump thread to shut down cleanly.
+pub struct PumpHandle {
+    hwnd: Arc<Mutex<Option<isize>>>,
+}
+
+impl PumpHandle {
+    /// Signal the event pump message loop to exit by posting WM_CLOSE
+    /// to its hidden window. On non-Windows this is a no-op.
+    pub fn shutdown(&self) {
+        #[cfg(target_os = "windows")]
+        if let Some(hwnd_ptr) = *self.hwnd.lock().unwrap() {
+            unsafe {
+                let _ = PostMessageW(
+                    Some(HWND(hwnd_ptr as *mut std::ffi::c_void)),
+                    WM_CLOSE,
+                    WPARAM(0),
+                    LPARAM(0),
+                );
+            }
+        }
+    }
+}
+
 /// Drives the Win32 message loop on a dedicated thread.
 ///
 /// Emits `HostEvent`s over a `crossbeam_channel` to the daemon orchestrator.
 pub struct EventPump {
     sender: Sender<HostEvent>,
     pub receiver: Receiver<HostEvent>,
+    hwnd: Arc<Mutex<Option<isize>>>,
 }
 
 impl EventPump {
     pub fn new() -> Self {
         let (sender, receiver) = crossbeam_channel::unbounded();
-        Self { sender, receiver }
+        let hwnd = Arc::new(Mutex::new(None));
+        Self {
+            sender,
+            receiver,
+            hwnd,
+        }
     }
 
     /// Spawn the event pump thread running a Win32 message loop.
-    pub fn spawn(self) -> std::thread::JoinHandle<()> {
+    /// Returns a `PumpHandle` for clean shutdown and the thread handle.
+    pub fn spawn(self) -> (PumpHandle, std::thread::JoinHandle<()>) {
         let sender = self.sender.clone();
-        std::thread::Builder::new()
+        let hwnd = self.hwnd.clone();
+        let handle = std::thread::Builder::new()
             .name("aura-event-pump".into())
             .spawn(move || {
                 #[cfg(target_os = "windows")]
-                run_message_loop(sender);
+                run_message_loop(sender, hwnd);
 
                 #[cfg(not(target_os = "windows"))]
                 {
                     let _ = sender;
+                    let _ = hwnd;
                     tracing::warn!("EventPump not supported on non-Windows platform");
                 }
             })
-            .expect("failed to spawn event pump thread")
+            .expect("failed to spawn event pump thread");
+        (PumpHandle { hwnd: self.hwnd }, handle)
     }
 }
 
@@ -74,7 +110,7 @@ thread_local! {
 }
 
 #[cfg(target_os = "windows")]
-fn run_message_loop(sender: Sender<HostEvent>) {
+fn run_message_loop(sender: Sender<HostEvent>, hwnd_shared: Arc<Mutex<Option<isize>>>) {
     let taskbar_created = unsafe { RegisterWindowMessageW(windows::core::w!("TaskbarCreated")) };
 
     EVENT_SENDER.with(|s| s.set(Some(sender)));
@@ -112,6 +148,8 @@ fn run_message_loop(sender: Sender<HostEvent>) {
             tracing::error!("Failed to create EventPump message window");
             return;
         }
+        let hwnd = hwnd.unwrap();
+        *hwnd_shared.lock().unwrap() = Some(hwnd.0 as isize);
 
         tracing::info!(
             "EventPump message loop started (TaskbarCreated msg: {})",
