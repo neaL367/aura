@@ -23,10 +23,14 @@ impl LibraryWatcher {
             None,
             move |result: DebounceEventResult| match result {
                 Ok(events) => {
-                    if !events.is_empty() {
+                    let cache_dir = crate::ThumbnailStore::thumbs_dir();
+                    let has_external_event = events
+                        .iter()
+                        .any(|ev| ev.paths.iter().any(|p| !p.starts_with(&cache_dir)));
+
+                    if has_external_event {
                         tracing::info!(
-                            "Filesystem watcher detected {} event(s) — triggering auto-refresh",
-                            events.len()
+                            "Filesystem watcher detected event(s) outside cache — triggering auto-refresh"
                         );
                         on_change();
                     }
@@ -54,10 +58,7 @@ impl LibraryWatcher {
     /// Add a path to the active filesystem watcher.
     pub fn add_path(&mut self, path: &Path) {
         if path.exists() {
-            if let Err(e) = self
-                ._debouncer
-                .watch(path, RecursiveMode::Recursive)
-            {
+            if let Err(e) = self._debouncer.watch(path, RecursiveMode::Recursive) {
                 tracing::warn!("Failed to watch scan path {}: {}", path.display(), e);
             } else {
                 tracing::info!("Filesystem watcher actively monitoring {}", path.display());

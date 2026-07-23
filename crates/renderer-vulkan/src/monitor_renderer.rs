@@ -14,7 +14,6 @@ use std::sync::Arc;
 
 pub struct MonitorRenderer {
     pub monitor_id: MonitorId,
-    pub context: Arc<VulkanContext>,
     pub surface: Surface,
     pub swapchain: Swapchain,
     pub pipeline: GraphicsPipeline,
@@ -32,6 +31,7 @@ pub struct MonitorRenderer {
     pub virtual_y: i32,
     pub virtual_desktop_width: u32,
     pub virtual_desktop_height: u32,
+    pub context: Arc<VulkanContext>,
 }
 
 impl MonitorRenderer {
@@ -125,13 +125,7 @@ impl MonitorRenderer {
         })
     }
 
-    pub fn set_virtual_geometry(
-        &mut self,
-        mon_x: i32,
-        mon_y: i32,
-        total_w: u32,
-        total_h: u32,
-    ) {
+    pub fn set_virtual_geometry(&mut self, mon_x: i32, mon_y: i32, total_w: u32, total_h: u32) {
         self.virtual_x = mon_x;
         self.virtual_y = mon_y;
         self.virtual_desktop_width = total_w;

@@ -252,7 +252,7 @@ unsafe extern "system" fn wnd_proc(
             // WM_WTSSESSION_CHANGE
             let code = wparam.0 as u32;
             let p_event = match code {
-                0x7 => Some(crate::power::PowerEvent::SessionLocked),   // WTS_SESSION_LOCK
+                0x7 => Some(crate::power::PowerEvent::SessionLocked), // WTS_SESSION_LOCK
                 0x8 => Some(crate::power::PowerEvent::SessionUnlocked), // WTS_SESSION_UNLOCK
                 _ => None,
             };

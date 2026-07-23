@@ -33,7 +33,8 @@ impl ThumbnailStore {
             MediaKind::Video => {
                 #[cfg(target_os = "windows")]
                 {
-                    if let Ok(mut decoder) = aura_platform_windows::MfVideoDecoder::open(&meta.path) {
+                    if let Ok(mut decoder) = aura_platform_windows::MfVideoDecoder::open(&meta.path)
+                    {
                         if let Ok(Some(frame)) = decoder.next_frame() {
                             image::RgbaImage::from_raw(frame.width, frame.height, frame.data)
                                 .map(image::DynamicImage::ImageRgba8)
