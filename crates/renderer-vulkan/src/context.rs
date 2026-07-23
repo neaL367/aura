@@ -141,7 +141,6 @@ fn create_instance(entry: &ash::Entry) -> Result<ash::Instance, VulkanError> {
     let extensions = [
         ash::khr::surface::NAME.as_ptr(),
         ash::khr::win32_surface::NAME.as_ptr(),
-        ash::khr::video_queue::NAME.as_ptr(),
     ];
 
     let validation_layer = c"VK_LAYER_KHRONOS_validation";
@@ -305,25 +304,29 @@ fn create_device(
         );
     }
 
-    let mut extensions = Vec::with_capacity(3);
+    let mut extensions = Vec::with_capacity(4);
     extensions.push(ash::khr::swapchain::NAME.as_ptr());
-    extensions.push(ash::khr::video_queue::NAME.as_ptr());
-    extensions.push(ash::khr::video_decode_queue::NAME.as_ptr());
 
     if video_queue_family.is_some() {
-        // Check if VK_KHR_video_decode_h264 is supported
         let available_extensions = unsafe {
             instance
                 .enumerate_device_extension_properties(physical_device)
                 .unwrap_or_default()
         };
-        let has_h264 = available_extensions.iter().any(|e| {
-            let name =
-                unsafe { std::ffi::CStr::from_ptr(e.extension_name.as_ptr()) }.to_string_lossy();
-            name == "VK_KHR_video_decode_h264"
-        });
-        if has_h264 {
-            extensions.push(ash::khr::video_decode_h264::NAME.as_ptr());
+
+        let has_ext = |ext_name: &std::ffi::CStr| {
+            available_extensions.iter().any(|e| {
+                let name = unsafe { std::ffi::CStr::from_ptr(e.extension_name.as_ptr()) };
+                name == ext_name
+            })
+        };
+
+        if has_ext(ash::khr::video_queue::NAME) && has_ext(ash::khr::video_decode_queue::NAME) {
+            extensions.push(ash::khr::video_queue::NAME.as_ptr());
+            extensions.push(ash::khr::video_decode_queue::NAME.as_ptr());
+            if has_ext(ash::khr::video_decode_h264::NAME) {
+                extensions.push(ash::khr::video_decode_h264::NAME.as_ptr());
+            }
         }
     }
 
