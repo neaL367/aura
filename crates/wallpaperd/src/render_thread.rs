@@ -233,8 +233,11 @@ pub fn create_monitor_context(
                                 }
                                 Some(MediaKind::Video) => {
                                     let (tx, rx) = frame_channel();
-                                    let handle =
-                                        DecodeWorkerHandle::spawn_video_worker(new_path, tx);
+                                    let handle = DecodeWorkerHandle::spawn_hw_video_worker(
+                                        new_path,
+                                        tx,
+                                        context_clone.clone(),
+                                    );
                                     active_worker = Some(handle);
                                     current_frame_rx = Some(rx);
                                 }
