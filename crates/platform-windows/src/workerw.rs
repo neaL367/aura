@@ -280,16 +280,6 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
             next = unsafe { GetWindow(next_hwnd, GW_HWNDNEXT) };
         }
 
-        // If no secondary WorkerW sibling exists (e.g. Windows 11 24H2/25H2 desktop composition engine),
-        // target the SHELLDLL_DefView host window itself. Attaching host_hwnd to this parent and placing it at
-        // HWND_BOTTOM positions host_hwnd directly behind SHELLDLL_DefView in child Z-order.
-        let slot = unsafe { &mut *(lparam.0 as *mut HWND) };
-        *slot = hwnd;
-        tracing::info!(
-            "Windows 11 24H2 composition mode: target host window HWND({:?}) containing SHELLDLL_DefView",
-            hwnd.0
-        );
-        return BOOL::from(false);
     }
 
     // Fallback Check: Top-level WorkerW window without SHELLDLL_DefView
