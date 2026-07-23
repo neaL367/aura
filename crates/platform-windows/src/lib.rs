@@ -105,6 +105,20 @@ pub mod stub {
         }
     }
 
+    pub struct PowerMonitor;
+    impl PowerMonitor {
+        pub fn new() -> Self { Self }
+        pub fn profile_for_event(_event: PowerEvent) -> aura_core::playback::PerformanceProfile {
+            aura_core::playback::PerformanceProfile::Balanced
+        }
+    }
+    impl Default for PowerMonitor { fn default() -> Self { Self::new() } }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum PowerEvent {
+        SessionLocked, SessionUnlocked, DisplayOff, DisplayOn, OnBattery, PluggedIn,
+    }
+
     pub struct MfVideoDecoder;
     impl MfVideoDecoder {
         pub fn open(_path: &std::path::Path) -> Result<Self, aura_media::error::MediaError> {

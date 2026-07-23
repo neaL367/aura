@@ -9,6 +9,7 @@ use std::{
 
 use aura_core::playback::PlaybackCommand;
 use aura_core::wallpaper::MediaKind;
+use aura_core::wallpaper::detect_media_kind;
 use aura_media::{ImageDecoder, MediaDecoder, frame_channel};
 use aura_platform_windows::host_window::HostWindow;
 use aura_renderer_vulkan::{VulkanContext, VulkanError, monitor_renderer::MonitorRenderer};
@@ -18,7 +19,7 @@ use crate::decode_worker::DecodeWorkerHandle;
 use crate::render_coordinator::MonitorContext;
 
 #[derive(Debug, Clone)]
-pub(crate) enum RenderCommand {
+pub enum RenderCommand {
     SetWallpaper {
         path: PathBuf,
         fit_mode: Option<aura_core::wallpaper::FitMode>,
@@ -31,22 +32,8 @@ pub(crate) enum RenderCommand {
     Playback(PlaybackCommand),
 }
 
-pub(crate) fn detect_media_kind(path: &Path) -> Option<MediaKind> {
-    match path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_ascii_lowercase())
-        .as_deref()
-    {
-        Some("gif") => Some(MediaKind::Gif),
-        Some("mp4" | "mkv" | "avi" | "mov" | "wmv" | "webm") => Some(MediaKind::Video),
-        Some("png" | "jpg" | "jpeg" | "bmp" | "tiff" | "tif" | "webp") => Some(MediaKind::Image),
-        _ => None,
-    }
-}
-
 #[cfg(target_os = "windows")]
-pub(crate) fn create_monitor_context(
+pub fn create_monitor_context(
     context: &Arc<VulkanContext>,
     info: &aura_core::monitor::MonitorInfo,
     workerw: windows::Win32::Foundation::HWND,

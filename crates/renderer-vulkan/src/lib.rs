@@ -23,7 +23,6 @@ pub mod surface;
 pub mod swapchain;
 #[cfg(target_os = "windows")]
 pub mod texture;
-#[cfg(target_os = "windows")]
 pub mod transform;
 #[cfg(target_os = "windows")]
 pub use context::VulkanContext;

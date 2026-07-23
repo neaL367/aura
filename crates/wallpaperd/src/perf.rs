@@ -17,7 +17,7 @@ struct MonitorPerfTracker {
 }
 
 /// PerfMonitor tracks per-monitor rendering frame rates and latency.
-pub(crate) struct PerfMonitor {
+pub struct PerfMonitor {
     trackers: Vec<MonitorPerfTracker>,
 }
 

@@ -8,7 +8,7 @@ use std::sync::{
 };
 
 /// Per-monitor state owned by RenderCoordinator.
-pub(crate) struct MonitorContext {
+pub struct MonitorContext {
     pub monitor_id: aura_core::monitor::MonitorId,
     pub host_window: HostWindow,
     pub render_thread: Option<std::thread::JoinHandle<()>>,
@@ -105,7 +105,7 @@ impl MonitorContext {
 }
 
 /// Manages all per-monitor render threads and windows.
-pub(crate) struct RenderCoordinator {
+pub struct RenderCoordinator {
     monitors: Vec<MonitorContext>,
 }
 

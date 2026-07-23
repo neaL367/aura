@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
@@ -54,6 +56,25 @@ impl std::fmt::Display for MediaKind {
             Self::Gif => write!(f, "GIF"),
             Self::Video => write!(f, "Video"),
         }
+    }
+}
+
+/// Detect media kind from a file path extension (case-insensitive).
+///
+/// This is the single canonical extension-to-kind mapper for the entire
+/// Aura platform. All crates must use this function rather than duplicating
+/// the match logic.
+pub fn detect_media_kind(path: &Path) -> Option<MediaKind> {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("gif") => Some(MediaKind::Gif),
+        Some("mp4" | "mkv" | "avi" | "mov" | "wmv" | "webm") => Some(MediaKind::Video),
+        Some("png" | "jpg" | "jpeg" | "bmp" | "tiff" | "tif" | "webp") => Some(MediaKind::Image),
+        _ => None,
     }
 }
 

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tracing::info;
 
-pub(crate) struct OrchestratorState {
+pub struct OrchestratorState {
     pub is_paused: bool,
     pub assignments: AssignmentManager,
     pub active_monitors: usize,
@@ -20,7 +20,7 @@ pub(crate) struct OrchestratorState {
 }
 
 #[derive(Clone)]
-pub(crate) struct Orchestrator {
+pub struct Orchestrator {
     state: Arc<Mutex<OrchestratorState>>,
     shutdown_tx: crossbeam_channel::Sender<()>,
 }

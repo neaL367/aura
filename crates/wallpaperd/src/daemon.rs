@@ -21,7 +21,7 @@ use crate::render_coordinator::RenderCoordinator;
 use crate::render_thread;
 
 #[derive(Debug, Error)]
-pub(crate) enum DaemonError {
+pub enum DaemonError {
     #[error("storage error: {0}")]
     Storage(#[from] aura_storage::StorageError),
     #[error("Vulkan error: {0}")]
@@ -44,7 +44,7 @@ enum AttachState {
     Detached { retry_count: u32 },
 }
 
-pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
+pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
     let _singleton = ProcessSingleton::acquire().map_err(|_| DaemonError::AlreadyRunning)?;
     tracing::info!("Process singleton acquired successfully");
 

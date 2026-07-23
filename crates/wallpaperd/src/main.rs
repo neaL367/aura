@@ -1,27 +1,9 @@
-//! `wallpaperd` — Aura wallpaper daemon.
+//! `wallpaperd` — Aura wallpaper daemon (binary entry point).
 //!
-//! Process responsibilities:
-//! - Own the ProcessSingleton (mutex).
-//! - Own the Win32 event pump thread.
-//! - Own WorkerW attachment state.
-//! - Own per-monitor HostWindows and MonitorRenderers.
-//! - Own the IPC server.
-//! - Dispatch PlaybackCommands to decode worker threads.
-
-mod assignment;
-mod decode_worker;
-mod orchestrator;
-mod perf;
-mod recovery;
-mod render_coordinator;
-
-#[cfg(target_os = "windows")]
-mod daemon;
-#[cfg(target_os = "windows")]
-mod render_thread;
+//! All logic is in the `wallpaperd` library crate. This file is a thin
+//! wrapper that initialises logging and delegates to `daemon::run`.
 
 fn main() {
-    // Initialise structured logging.
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -36,9 +18,8 @@ fn main() {
         if let Err(e) = aura_platform_windows::enable_dpi_awareness() {
             tracing::warn!("Failed to enable process-wide DPI awareness: {}", e);
         }
-
         tracing::info!("wallpaperd starting");
-        if let Err(e) = daemon::run(wallpaper_path) {
+        if let Err(e) = wallpaperd::daemon::run(wallpaper_path) {
             tracing::error!("wallpaperd exited with error: {}", e);
             std::process::exit(1);
         }

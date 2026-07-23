@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use aura_core::wallpaper::{MediaKind, WallpaperId, WallpaperMeta};
+use aura_core::wallpaper::{MediaKind, WallpaperId, WallpaperMeta, detect_media_kind};
 use tracing::{info, warn};
 
 /// Scans configured directories on disk to discover wallpaper media files.
@@ -77,17 +77,7 @@ impl LibraryScanner {
 
     /// Inspect a single file to determine if it is valid media and create `WallpaperMeta`.
     pub fn inspect_file(path: &Path) -> Option<WallpaperMeta> {
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| e.to_ascii_lowercase())?;
-
-        let kind = match ext.as_str() {
-            "gif" => MediaKind::Gif,
-            "png" | "jpg" | "jpeg" | "bmp" | "tiff" | "tif" | "webp" => MediaKind::Image,
-            "mp4" | "webm" | "mkv" | "avi" => MediaKind::Video,
-            _ => return None,
-        };
+        let kind = detect_media_kind(path)?;
 
         let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
         let (width, height) = match kind {
@@ -110,7 +100,7 @@ impl LibraryScanner {
     }
 }
 
-fn chrono_iso8601_now() -> String {
+pub fn chrono_iso8601_now() -> String {
     let now = SystemTime::now();
     let duration = now
         .duration_since(SystemTime::UNIX_EPOCH)
