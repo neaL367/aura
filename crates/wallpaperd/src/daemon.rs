@@ -297,6 +297,9 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
     pump_handle.shutdown();
     let _ = pump_thread.join();
 
+    #[cfg(target_os = "windows")]
+    aura_platform_windows::workerw::restore_desktop_wallpaper();
+
     tracing::info!("wallpaperd daemon shutdown complete");
     Ok(())
 }
@@ -424,7 +427,7 @@ fn reconcile_monitors(
                     coordinator.add_monitor(ctx);
                 }
                 Err(e) => {
-                    tracing::error!("Failed to create monitor context for new monitor: {}", e)
+                    tracing::error!("Failed to create monitor context for new monitor: {}", e);
                 }
             }
         }
