@@ -72,6 +72,12 @@ fn process_hinstance() -> HINSTANCE {
 // ---------------------------------------------------------------------------
 
 pub fn main() -> Result<()> {
+    unsafe {
+        let _ = windows::Win32::UI::HiDpi::SetProcessDpiAwarenessContext(
+            windows::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+        );
+    }
+
     println!("╔══════════════════════════════════════════════════════╗");
     println!("║  Aura — WorkerW Desktop Integration Proof (Phase 0)  ║");
     println!("╚══════════════════════════════════════════════════════╝");

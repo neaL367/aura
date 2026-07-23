@@ -30,6 +30,17 @@ pub mod workerw;
 #[cfg(target_os = "windows")]
 pub use error::PlatformError;
 
+#[cfg(target_os = "windows")]
+pub fn enable_dpi_awareness() -> Result<(), PlatformError> {
+    use windows::Win32::UI::HiDpi::{
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext,
+    };
+    unsafe {
+        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)?;
+    }
+    Ok(())
+}
+
 // Stubs for non-Windows platforms (e.g. Linux CI check/test)
 #[cfg(not(target_os = "windows"))]
 pub mod stub {
@@ -144,6 +155,9 @@ pub mod stub {
         fn default() -> Self {
             Self::new()
         }
+    }
+    pub fn enable_dpi_awareness() -> Result<(), PlatformError> {
+        Ok(())
     }
 }
 #[cfg(not(target_os = "windows"))]

@@ -35,15 +35,10 @@ fn main() {
 
     #[cfg(target_os = "windows")]
     {
-        // NOTE: deliberately NOT calling enable_dpi_awareness() process-wide here.
-        // Setting process-wide PER_MONITOR_AWARE_V2 changes the DPI awareness
-        // context of every window this process creates, and SetParent() fails
-        // with ERROR_INVALID_PARAMETER (0x80070057) when the child and new
-        // parent windows have different DPI awareness contexts — which broke
-        // reparenting into Explorer's WorkerW on Explorer-restart recovery.
-        // Correct virtual-screen metrics are obtained with a thread-scoped
-        // context switch (see workerw::with_virtual_screen_metrics) only around
-        // the specific GetSystemMetrics calls that need it.
+        if let Err(e) = aura_platform_windows::enable_dpi_awareness() {
+            tracing::warn!("Failed to enable process-wide DPI awareness: {}", e);
+        }
+
         tracing::info!("wallpaperd starting");
         if let Err(e) = daemon::run(wallpaper_path) {
             tracing::error!("wallpaperd exited with error: {}", e);
