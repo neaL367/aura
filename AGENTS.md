@@ -99,3 +99,12 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 - **Immediate High-Res Image Memory Release**: `ThumbnailStore::get_or_create` MUST explicitly invoke `drop(img)` immediately after `img.thumbnail(...)` generation to release full-resolution 4K/8K uncompressed image RAM before JPEG encoding and file I/O.
 - **Heap Vector Compaction**: Scanner results (`LibraryScanner::scan_paths`) and orchestrator library storage (`state.library_items`) MUST invoke `shrink_to_fit()` after scanning to release unused heap allocation capacity.
 
+---
+
+## 11. Media Architecture, Filesystem Watcher & Power Notification Rules
+
+- **Strict Media Crate Platform Independence**: `aura-media` must remain 100% platform-agnostic containing only decoder traits and pure decoders (Image, GIF, WebP). All platform-specific decoders (e.g. Media Foundation `MfVideoDecoder`) MUST reside in `crates/platform-windows/src/mf_video.rs`.
+- **Non-Blocking Tokio IPC Operations**: Synchronous file I/O or image decoding inside Tokio IPC handlers MUST be wrapped in `tokio::task::block_in_place(|| ...)` to prevent worker thread starvation.
+- **Debounced Filesystem Auto-Refresh**: Filesystem watchers MUST use `notify-debouncer-full` with a quiet-period buffer (500ms) to coalesce file event bursts and trigger auto-rescan via background worker threads.
+- **Win32 Session & Power Notification Lifecycles**: `PowerManager` MUST store its `power_notify_handle: HPOWERNOTIFY` and call `UnregisterPowerSettingNotification` and `WTSUnRegisterSessionNotification` when event pump message windows exit.
+

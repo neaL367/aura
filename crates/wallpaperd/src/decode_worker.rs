@@ -83,7 +83,7 @@ impl DecodeWorkerHandle {
         std::thread::Builder::new()
             .name("aura-video-worker".into())
             .spawn(move || {
-                let mut decoder = match aura_media::MfVideoDecoder::open(&path) {
+                let mut decoder = match aura_platform_windows::MfVideoDecoder::open(&path) {
                     Ok(d) => d,
                     Err(e) => {
                         tracing::error!("Failed to open video wallpaper {}: {}", path.display(), e);

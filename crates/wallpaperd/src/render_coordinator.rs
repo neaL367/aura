@@ -122,6 +122,28 @@ impl RenderCoordinator {
         self.monitors.iter().map(|m| m.monitor_id).collect()
     }
 
+    /// Calculate the total bounding box `(min_x, min_y, total_w, total_h)` across all active monitors.
+    pub fn virtual_desktop_bounds(&self) -> (i32, i32, u32, u32) {
+        if self.monitors.is_empty() {
+            return (0, 0, 1920, 1080);
+        }
+        let mut min_x = i32::MAX;
+        let mut min_y = i32::MAX;
+        let mut max_x = i32::MIN;
+        let mut max_y = i32::MIN;
+
+        for m in &self.monitors {
+            min_x = min_x.min(m.x);
+            min_y = min_y.min(m.y);
+            max_x = max_x.max(m.x + m.width as i32);
+            max_y = max_y.max(m.y + m.height as i32);
+        }
+
+        let total_w = (max_x - min_x).max(1) as u32;
+        let total_h = (max_y - min_y).max(1) as u32;
+        (min_x, min_y, total_w, total_h)
+    }
+
     pub fn add_monitor(&mut self, context: MonitorContext) {
         self.monitors.push(context);
     }

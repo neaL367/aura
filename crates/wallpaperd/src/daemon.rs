@@ -115,6 +115,13 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
         })
         .map_err(|_| DaemonError::ThreadSpawn)?;
 
+    let orchestrator_watcher = orchestrator.clone();
+    let scan_paths = orchestrator.scan_paths();
+    let _watcher = aura_storage::LibraryWatcher::new(&scan_paths, move || {
+        orchestrator_watcher.trigger_auto_refresh();
+    })
+    .ok();
+
     tracing::info!("IPC server listening on \\\\.\\pipe\\aura-wallpaperd");
 
     // Install Ctrl+C handler for graceful shutdown.

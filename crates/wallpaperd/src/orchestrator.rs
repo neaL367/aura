@@ -5,6 +5,7 @@ use aura_core::wallpaper::WallpaperMeta;
 use aura_ipc::protocol::{DaemonStatus, MonitorSummary, PROTOCOL_VERSION, Request, Response};
 use aura_storage::{LibraryScanner, config_store::ConfigStore, library_store::LibraryStore};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::info;
 
@@ -73,35 +74,25 @@ impl Orchestrator {
 
         // Asynchronously rescan configured library scan paths in a background thread
         // so daemon startup and IPC server initialization are never blocked by filesystem I/O.
-        let orch_bg = orchestrator.clone();
+        orchestrator.trigger_auto_refresh();
+
+        orchestrator
+    }
+
+    pub fn scan_paths(&self) -> Vec<PathBuf> {
+        let state = self.state.lock().unwrap();
+        let config = state.config_store.load().unwrap_or_default();
+        config.library.scan_paths
+    }
+
+    pub fn trigger_auto_refresh(&self) {
+        let orch = self.clone();
         std::thread::Builder::new()
             .name("library-rescan".into())
             .spawn(move || {
-                let scan_paths = {
-                    let state = orch_bg.state.lock().unwrap();
-                    let config = state.config_store.load().unwrap_or_default();
-                    config.library.scan_paths
-                };
-                if !scan_paths.is_empty() {
-                    info!("Background library rescan starting...");
-                    let scanned = LibraryScanner::scan_paths(&scan_paths);
-                    // Generate thumbnails before moving scanned into state (avoids clone).
-                    for meta in &scanned {
-                        aura_storage::ThumbnailStore::get_or_create(meta);
-                    }
-                    if let Ok(mut state) = orch_bg.state.lock() {
-                        state.library_items = scanned;
-                        let _ = state.library_store.save(&state.library_items);
-                        info!(
-                            "Background library rescan complete — {} wallpaper(s), thumbnails ready",
-                            state.library_items.len()
-                        );
-                    }
-                }
+                let _ = orch.handle_request(aura_ipc::protocol::Request::RefreshLibrary);
             })
-            .expect("failed to spawn library rescan thread");
-
-        orchestrator
+            .ok();
     }
 
     pub fn is_paused(&self) -> bool {
@@ -405,7 +396,8 @@ fn build_wallpaper_list(
         .iter()
         .map(|meta| {
             let mut entry = aura_ipc::protocol::WallpaperEntry::from(meta);
-            entry.thumbnail_path = aura_storage::ThumbnailStore::get_or_create(meta);
+            entry.thumbnail_path =
+                tokio::task::block_in_place(|| aura_storage::ThumbnailStore::get_or_create(meta));
             entry
         })
         .collect()

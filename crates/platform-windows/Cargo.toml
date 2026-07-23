@@ -32,10 +32,13 @@ features = [
     # Power & session events
     "Win32_System_SystemServices",
     "Win32_System_Power",
+    "Win32_System_RemoteDesktop",
     # Module handle
     "Win32_System_LibraryLoader",
     # COM (needed for Media Foundation initialisation)
     "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
     # Media Foundation video decoding
     "Win32_Media",
     "Win32_Media_MediaFoundation",

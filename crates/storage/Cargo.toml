@@ -16,6 +16,10 @@ toml       = { workspace = true }
 thiserror  = { workspace = true }
 tracing    = { workspace = true }
 uuid       = { workspace = true }
+notify-debouncer-full = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+aura-platform-windows = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

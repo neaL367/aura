@@ -28,6 +28,10 @@ pub struct MonitorRenderer {
     pub active_fit_mode: FitMode,
     pub repeat_sampler: vk::Sampler,
     pub uploader: StagingUploader,
+    pub virtual_x: i32,
+    pub virtual_y: i32,
+    pub virtual_desktop_width: u32,
+    pub virtual_desktop_height: u32,
 }
 
 impl MonitorRenderer {
@@ -114,7 +118,24 @@ impl MonitorRenderer {
             active_fit_mode: FitMode::Fill,
             repeat_sampler,
             uploader,
+            virtual_x: 0,
+            virtual_y: 0,
+            virtual_desktop_width: width,
+            virtual_desktop_height: height,
         })
+    }
+
+    pub fn set_virtual_geometry(
+        &mut self,
+        mon_x: i32,
+        mon_y: i32,
+        total_w: u32,
+        total_h: u32,
+    ) {
+        self.virtual_x = mon_x;
+        self.virtual_y = mon_y;
+        self.virtual_desktop_width = total_w;
+        self.virtual_desktop_height = total_h;
     }
 
     /// Acquire, draw, and present one frame.
@@ -215,13 +236,26 @@ impl MonitorRenderer {
         }
 
         if let Some(ref texture) = self.active_texture {
-            let pc = calculate_uv_transform(
-                self.active_fit_mode,
-                texture.width,
-                texture.height,
-                self.swapchain.extent.width,
-                self.swapchain.extent.height,
-            );
+            let pc = if self.active_fit_mode == FitMode::Span {
+                crate::transform::calculate_span_uv_transform(
+                    texture.width,
+                    texture.height,
+                    self.virtual_x,
+                    self.virtual_y,
+                    self.swapchain.extent.width,
+                    self.swapchain.extent.height,
+                    self.virtual_desktop_width,
+                    self.virtual_desktop_height,
+                )
+            } else {
+                calculate_uv_transform(
+                    self.active_fit_mode,
+                    texture.width,
+                    texture.height,
+                    self.swapchain.extent.width,
+                    self.swapchain.extent.height,
+                )
+            };
             let mut pc_bytes = [0u8; 16];
             pc_bytes[0..4].copy_from_slice(&pc.uv_scale[0].to_ne_bytes());
             pc_bytes[4..8].copy_from_slice(&pc.uv_scale[1].to_ne_bytes());

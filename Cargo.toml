@@ -44,6 +44,9 @@ uuid = { version = "1", features = ["v4", "v5", "serde"] }
 # Bounded channels (frame pipeline, event queues)
 crossbeam-channel = "0.5"
 
+# Filesystem watcher
+notify-debouncer-full = "0.7.0"
+
 # Windows APIs — only platform-windows, renderer-vulkan, workerw-proof depend on this
 windows = "0.62"
 

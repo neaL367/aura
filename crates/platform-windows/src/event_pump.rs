@@ -151,6 +151,9 @@ fn run_message_loop(sender: Sender<HostEvent>, hwnd_shared: Arc<Mutex<Option<isi
         let hwnd = hwnd.unwrap();
         *hwnd_shared.lock().unwrap() = Some(hwnd.0 as isize);
 
+        let mut power_mgr = crate::power::PowerManager::new();
+        power_mgr.register(hwnd);
+
         tracing::info!(
             "EventPump message loop started (TaskbarCreated msg: {})",
             taskbar_created
@@ -161,6 +164,7 @@ fn run_message_loop(sender: Sender<HostEvent>, hwnd_shared: Arc<Mutex<Option<isi
             DispatchMessageW(&msg);
         }
 
+        power_mgr.unregister(hwnd);
         tracing::info!("EventPump message loop terminated");
     }
 }
@@ -220,8 +224,49 @@ unsafe extern "system" fn wnd_proc(
                         s.set(Some(sender));
                     }
                 });
+            } else if event == 0x8013 {
+                // PBT_POWERSETTINGCHANGE
+                if lparam.0 != 0 {
+                    let setting = unsafe {
+                        &*(lparam.0 as *const windows::Win32::System::Power::POWERBROADCAST_SETTING)
+                    };
+                    let is_on = setting.Data[0] != 0;
+                    let p_event = if is_on {
+                        crate::power::PowerEvent::DisplayOn
+                    } else {
+                        crate::power::PowerEvent::DisplayOff
+                    };
+                    tracing::info!("EventPump: Display state changed (is_on: {})", is_on);
+                    EVENT_SENDER.with(|s| {
+                        if let Some(sender) = s.take() {
+                            let profile = crate::power::PowerMonitor::profile_for_event(p_event);
+                            let _ = sender.send(HostEvent::PerformanceHint(profile));
+                            s.set(Some(sender));
+                        }
+                    });
+                }
             }
             LRESULT(1)
+        }
+        0x02B1 => {
+            // WM_WTSSESSION_CHANGE
+            let code = wparam.0 as u32;
+            let p_event = match code {
+                0x7 => Some(crate::power::PowerEvent::SessionLocked),   // WTS_SESSION_LOCK
+                0x8 => Some(crate::power::PowerEvent::SessionUnlocked), // WTS_SESSION_UNLOCK
+                _ => None,
+            };
+            if let Some(p_event) = p_event {
+                tracing::info!("EventPump: Session state changed ({:?})", p_event);
+                EVENT_SENDER.with(|s| {
+                    if let Some(sender) = s.take() {
+                        let profile = crate::power::PowerMonitor::profile_for_event(p_event);
+                        let _ = sender.send(HostEvent::PerformanceHint(profile));
+                        s.set(Some(sender));
+                    }
+                });
+            }
+            LRESULT(0)
         }
         WM_ENDSESSION | WM_CLOSE => {
             tracing::info!("EventPump: Shutdown requested");
