@@ -56,8 +56,9 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 gif   = "0.14"
 
 # UI — only wallpaper-ui depends on this
-eframe = { version = "0.35", default-features = false, features = ["default_fonts", "wgpu"] }
-egui   = "0.35"
+eframe      = { version = "0.35", default-features = false, features = ["default_fonts", "wgpu"] }
+egui        = "0.35"
+egui_extras = { version = "0.35", features = ["all_loaders"] }
 
 # Internal workspace crates
 aura-core             = { path = "crates/core" }

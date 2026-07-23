@@ -21,6 +21,7 @@ enum Tab {
 
 impl AuraApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        egui_extras::install_image_loaders(&cc.egui_ctx);
         Self {
             library: LibraryPanel::new(),
             monitor: MonitorPanel::new(),

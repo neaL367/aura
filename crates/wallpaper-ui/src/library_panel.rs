@@ -102,15 +102,18 @@ impl LibraryPanel {
                     };
                     ui.label(badge);
 
-                    if let Some(ref thumb_path) = entry.thumbnail_path {
-                        let uri =
-                            format!("file://{}", thumb_path.to_string_lossy().replace('\\', "/"));
-                        ui.add(
-                            egui::Image::new(uri)
-                                .max_size([200.0, 112.5].into())
-                                .corner_radius(4.0),
-                        );
-                    }
+                    let display_path = entry.thumbnail_path.as_ref().unwrap_or(&entry.path);
+                    let path_str = display_path.to_string_lossy().replace('\\', "/");
+                    let uri = if path_str.starts_with('/') {
+                        format!("file://{}", path_str)
+                    } else {
+                        format!("file:///{}", path_str)
+                    };
+                    ui.add(
+                        egui::Image::new(uri)
+                            .max_size([200.0, 112.5].into())
+                            .corner_radius(4.0),
+                    );
 
                     ui.add(
                         egui::Label::new(
