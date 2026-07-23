@@ -79,6 +79,22 @@ impl Orchestrator {
         self.state.lock().unwrap().is_paused
     }
 
+    pub fn update_monitors(
+        &self,
+        monitors: Vec<MonitorSummary>,
+        wallpaper_txs: HashMap<MonitorId, crossbeam_channel::Sender<RenderCommand>>,
+    ) {
+        if let Ok(mut state) = self.state.lock() {
+            state.active_monitors = monitors.len();
+            state.monitors = monitors;
+            state.wallpaper_txs = wallpaper_txs;
+            info!(
+                "Orchestrator monitors updated — now active: {} monitor(s)",
+                state.active_monitors
+            );
+        }
+    }
+
     pub fn handle_request(&self, request: Request) -> Response {
         let mut state = match self.state.lock() {
             Ok(s) => s,
@@ -102,7 +118,7 @@ impl Orchestrator {
                     "ListWallpapers requested — returning {} wallpaper(s)",
                     state.library_items.len()
                 );
-                Response::WallpaperList(state.library_items.iter().map(Into::into).collect())
+                Response::WallpaperList(build_wallpaper_list(&state.library_items))
             }
             Request::AssignWallpaper {
                 monitor_id,
@@ -116,11 +132,6 @@ impl Orchestrator {
                     .cloned();
                 match wallpaper_meta {
                     Some(meta) => {
-                        if meta.kind == aura_core::wallpaper::MediaKind::Video {
-                            return Response::Error {
-                                reason: "Video wallpapers are not yet supported".into(),
-                            };
-                        }
                         let tx = state.wallpaper_txs.get(&monitor_id).cloned();
                         match tx {
                             Some(tx) => {
@@ -249,7 +260,7 @@ impl Orchestrator {
                     "RefreshLibrary complete — {} wallpaper(s) in library",
                     state.library_items.len()
                 );
-                Response::WallpaperList(state.library_items.iter().map(Into::into).collect())
+                Response::WallpaperList(build_wallpaper_list(&state.library_items))
             }
             Request::AddScanPath { path } => {
                 info!("AddScanPath received for {:?}", path);
@@ -262,7 +273,7 @@ impl Orchestrator {
                 info!("Rescanned library — now has {} wallpaper(s)", scanned.len());
                 state.library_items = scanned;
                 let _ = state.library_store.save(&state.library_items);
-                Response::WallpaperList(state.library_items.iter().map(Into::into).collect())
+                Response::WallpaperList(build_wallpaper_list(&state.library_items))
             }
             Request::RemoveScanPath { path } => {
                 let mut config = state.config_store.load().unwrap_or_default();
@@ -273,7 +284,7 @@ impl Orchestrator {
                     state.library_items = scanned;
                     let _ = state.library_store.save(&state.library_items);
                 }
-                Response::WallpaperList(state.library_items.iter().map(Into::into).collect())
+                Response::WallpaperList(build_wallpaper_list(&state.library_items))
             }
             Request::Shutdown => {
                 let _ = self.shutdown_tx.send(());
@@ -281,4 +292,17 @@ impl Orchestrator {
             }
         }
     }
+}
+
+fn build_wallpaper_list(
+    items: &[aura_core::wallpaper::WallpaperMeta],
+) -> Vec<aura_ipc::protocol::WallpaperEntry> {
+    items
+        .iter()
+        .map(|meta| {
+            let mut entry = aura_ipc::protocol::WallpaperEntry::from(meta);
+            entry.thumbnail_path = aura_storage::ThumbnailStore::get_or_create(meta);
+            entry
+        })
+        .collect()
 }

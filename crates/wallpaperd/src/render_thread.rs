@@ -23,6 +23,10 @@ pub(crate) enum RenderCommand {
         fit_mode: Option<aura_core::wallpaper::FitMode>,
     },
     SetFitMode(aura_core::wallpaper::FitMode),
+    Resize {
+        width: u32,
+        height: u32,
+    },
 }
 
 pub(crate) fn detect_media_kind(path: &Path) -> Option<MediaKind> {
@@ -33,6 +37,7 @@ pub(crate) fn detect_media_kind(path: &Path) -> Option<MediaKind> {
         .as_deref()
     {
         Some("gif") => Some(MediaKind::Gif),
+        Some("mp4" | "mkv" | "avi" | "mov" | "wmv" | "webm") => Some(MediaKind::Video),
         Some("png" | "jpg" | "jpeg" | "bmp" | "tiff" | "tif" | "webp") => Some(MediaKind::Image),
         _ => None,
     }
@@ -139,6 +144,11 @@ pub(crate) fn create_monitor_context(
                 let handle = DecodeWorkerHandle::spawn_gif_worker(path.to_owned(), tx);
                 (Some(handle), Some(rx))
             }
+            Some(MediaKind::Video) => {
+                let (tx, rx) = frame_channel();
+                let handle = DecodeWorkerHandle::spawn_video_worker(path.to_owned(), tx);
+                (Some(handle), Some(rx))
+            }
             Some(MediaKind::Image) => {
                 let mut decoder = ImageDecoder::open(path)?;
                 if let Ok(Some(frame)) = decoder.next_frame() {
@@ -170,8 +180,8 @@ pub(crate) fn create_monitor_context(
     let context_clone = context.clone();
     let counter_clone = frame_counter.clone();
 
-    let width = info.width;
-    let height = info.height;
+    let mut width = info.width;
+    let mut height = info.height;
 
     let handle = std::thread::Builder::new()
         .name(format!("render-{}", info.id))
@@ -196,6 +206,17 @@ pub(crate) fn create_monitor_context(
                             tracing::info!("Render thread received new fit mode: {:?}", new_mode);
                             renderer.set_fit_mode(new_mode, &context_clone);
                         }
+                        RenderCommand::Resize {
+                            width: new_w,
+                            height: new_h,
+                        } => {
+                            tracing::info!("Render thread received resize: {}x{}", new_w, new_h);
+                            width = new_w;
+                            height = new_h;
+                            if let Err(e) = renderer.resize(&context_clone, width, height) {
+                                tracing::warn!("Resize failed: {}", e);
+                            }
+                        }
                         RenderCommand::SetWallpaper {
                             path: new_path,
                             fit_mode,
@@ -216,6 +237,13 @@ pub(crate) fn create_monitor_context(
                                 Some(MediaKind::Gif) => {
                                     let (tx, rx) = frame_channel();
                                     let handle = DecodeWorkerHandle::spawn_gif_worker(new_path, tx);
+                                    active_worker = Some(handle);
+                                    current_frame_rx = Some(rx);
+                                }
+                                Some(MediaKind::Video) => {
+                                    let (tx, rx) = frame_channel();
+                                    let handle =
+                                        DecodeWorkerHandle::spawn_video_worker(new_path, tx);
                                     active_worker = Some(handle);
                                     current_frame_rx = Some(rx);
                                 }
@@ -310,6 +338,7 @@ pub(crate) fn create_monitor_context(
 
     Ok((
         MonitorContext::new(
+            info.id,
             host_window,
             handle,
             shutdown_flag,

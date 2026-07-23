@@ -73,3 +73,10 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 - **Never Mutate Shell Geometry**: Never call `SetWindowPos` to force-resize Explorer's `WorkerW` window across process boundaries. Explorer automatically sizes desktop-hosting `WorkerW` windows. Forcibly resizing `WorkerW` causes taskbar stalls, desktop UI corruption, and white screen artifacts upon daemon exit.
 - **Reject Raw Desktop Window (`#32769`)**: `GetDesktopWindow()` (`#32769`) must never be accepted as a valid `WorkerW` attach target. DWM does not composite `WS_CHILD` windows reparented into `#32769`, causing host windows to silently render nothing.
 - **Process-Wide DPI Awareness & Mixed-DPI Hosting**: Always call `SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)` at the very top of `main()` before monitor enumeration or window creation. Additionally, wrap `SetParent` calls in `attach_to_workerw` with `SetThreadDpiHostingBehavior(DPI_HOSTING_BEHAVIOR_MIXED)` to enable cross-context reparenting into Explorer's `WorkerW` without triggering `ERROR_INVALID_PARAMETER` (`0x80070057`).
+
+---
+
+## 8. Monitor Topology & Reconciliation Rules
+
+- **HMONITOR Handle Invalidation**: Per Microsoft Win32 API specifications, `HMONITOR` handles are transient and become invalid upon `WM_DISPLAYCHANGE`. Monitor identity and active context mapping must rely strictly on stable `MonitorId` values (derived from device paths), never raw `HMONITOR` handles.
+- **Dynamic Monitor Reconciliation**: When `HostEvent::DisplayChanged` (`WM_DISPLAYCHANGE`) is received, re-enumerate displays fresh using `MonitorEnumerator::enumerate()`, diff against active `MonitorId`s in `RenderCoordinator`, gracefully shut down removed monitor render threads, spawn new render threads for added displays, and update IPC `Orchestrator` summaries.

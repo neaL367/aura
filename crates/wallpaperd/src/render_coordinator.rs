@@ -7,6 +7,7 @@ use std::sync::{
 
 /// Per-monitor state owned by RenderCoordinator.
 pub(crate) struct MonitorContext {
+    pub monitor_id: aura_core::monitor::MonitorId,
     pub host_window: HostWindow,
     pub render_thread: Option<std::thread::JoinHandle<()>>,
     pub shutdown_flag: Arc<AtomicBool>,
@@ -20,6 +21,7 @@ pub(crate) struct MonitorContext {
 impl MonitorContext {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        monitor_id: aura_core::monitor::MonitorId,
         host_window: HostWindow,
         render_thread: std::thread::JoinHandle<()>,
         shutdown_flag: Arc<AtomicBool>,
@@ -30,6 +32,7 @@ impl MonitorContext {
         y: i32,
     ) -> Self {
         Self {
+            monitor_id,
             host_window,
             render_thread: Some(render_thread),
             shutdown_flag,
@@ -79,6 +82,21 @@ impl MonitorContext {
         }
     }
 
+    pub fn update_geometry(
+        &mut self,
+        workerw: windows::Win32::Foundation::HWND,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    ) {
+        self.x = x;
+        self.y = y;
+        self.width = width;
+        self.height = height;
+        self.attach_to_workerw(workerw);
+    }
+
     pub fn set_paused(&self, paused: bool) {
         self.pause_flag.store(paused, Ordering::Relaxed);
     }
@@ -96,6 +114,37 @@ impl RenderCoordinator {
 
     pub fn monitor_count(&self) -> usize {
         self.monitors.len()
+    }
+
+    pub fn active_monitor_ids(&self) -> Vec<aura_core::monitor::MonitorId> {
+        self.monitors.iter().map(|m| m.monitor_id).collect()
+    }
+
+    pub fn add_monitor(&mut self, context: MonitorContext) {
+        self.monitors.push(context);
+    }
+
+    pub fn remove_monitor(&mut self, monitor_id: aura_core::monitor::MonitorId) {
+        if let Some(pos) = self
+            .monitors
+            .iter()
+            .position(|m| m.monitor_id == monitor_id)
+        {
+            let mut ctx = self.monitors.remove(pos);
+            ctx.shutdown_flag.store(true, Ordering::Relaxed);
+            if let Some(handle) = ctx.render_thread.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    pub fn find_monitor_mut(
+        &mut self,
+        monitor_id: aura_core::monitor::MonitorId,
+    ) -> Option<&mut MonitorContext> {
+        self.monitors
+            .iter_mut()
+            .find(|m| m.monitor_id == monitor_id)
     }
 
     pub fn attach_all(&mut self, workerw: windows::Win32::Foundation::HWND) {

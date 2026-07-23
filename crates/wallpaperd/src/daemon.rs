@@ -56,7 +56,7 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
 
     // Create per-monitor windows + renderers (each renderer runs in its own thread).
     #[cfg(target_os = "windows")]
-    let (monitor_contexts, wallpaper_txs, perf_counters) = {
+    let (monitor_contexts, mut wallpaper_txs, perf_counters) = {
         let mut contexts = Vec::with_capacity(monitors.len());
         let mut txs = std::collections::HashMap::new();
         let mut counters = Vec::with_capacity(monitors.len());
@@ -96,7 +96,7 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
         (contexts, txs, counters)
     };
     #[cfg(not(target_os = "windows"))]
-    let (monitor_contexts, wallpaper_txs, perf_counters) =
+    let (monitor_contexts, mut wallpaper_txs, perf_counters) =
         (Vec::new(), std::collections::HashMap::new(), Vec::new());
 
     let mut coordinator = RenderCoordinator::new(monitor_contexts);
@@ -116,7 +116,7 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
         .collect();
 
     let (ipc_shutdown_tx, ipc_shutdown_rx) = crossbeam_channel::bounded::<()>(1);
-    let orchestrator = Orchestrator::new(monitor_summaries, wallpaper_txs, ipc_shutdown_tx);
+    let orchestrator = Orchestrator::new(monitor_summaries, wallpaper_txs.clone(), ipc_shutdown_tx);
 
     // Spawn async IPC server on a dedicated Tokio thread.
     let orchestrator_ipc = orchestrator.clone();
@@ -172,13 +172,17 @@ pub(crate) fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
                 }
             }
             Ok(HostEvent::DisplayChanged) => {
-                tracing::info!("Display topology changed");
-                if let Ok(_new_monitors) = RecoveryManager::handle_display_change() {
-                    attach_state = attach_or_detach(&mut workerw_manager);
-                    if let AttachState::Attached = attach_state {
-                        coordinator.attach_all(workerw_manager.workerw());
-                    }
-                }
+                tracing::info!("Display topology changed — reconciling monitors");
+                attach_state = attach_or_detach(&mut workerw_manager);
+                #[cfg(target_os = "windows")]
+                reconcile_monitors(
+                    &vulkan_context,
+                    &mut workerw_manager,
+                    &mut coordinator,
+                    &mut wallpaper_txs,
+                    &orchestrator,
+                    wallpaper_path.as_deref(),
+                );
             }
             Ok(HostEvent::PerformanceHint(profile)) => {
                 tracing::info!("Performance profile changed to {:?}", profile);
@@ -252,4 +256,111 @@ fn attach_or_detach(manager: &mut WorkerWManager) -> AttachState {
             AttachState::Detached { retry_count: 0 }
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+fn reconcile_monitors(
+    vulkan_context: &Arc<VulkanContext>,
+    workerw_manager: &mut WorkerWManager,
+    coordinator: &mut RenderCoordinator,
+    wallpaper_txs: &mut std::collections::HashMap<
+        aura_core::monitor::MonitorId,
+        crossbeam_channel::Sender<render_thread::RenderCommand>,
+    >,
+    orchestrator: &Orchestrator,
+    wallpaper_path: Option<&std::path::Path>,
+) {
+    let new_monitors = match RecoveryManager::handle_display_change() {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::error!("Failed to re-enumerate monitors: {}", e);
+            return;
+        }
+    };
+
+    let workerw = workerw_manager.workerw();
+    let current_ids = coordinator.active_monitor_ids();
+    let new_ids: std::collections::HashSet<_> = new_monitors.iter().map(|m| m.id).collect();
+
+    // 1. Remove disconnected monitors
+    for old_id in current_ids {
+        if !new_ids.contains(&old_id) {
+            tracing::info!("Monitor {:?} disconnected — stopping render thread", old_id);
+            coordinator.remove_monitor(old_id);
+            wallpaper_txs.remove(&old_id);
+        }
+    }
+
+    // Load current config and library store for newly added monitors
+    let config_path = aura_storage::config_store::ConfigStore::default_path();
+    let config_store = aura_storage::config_store::ConfigStore::new(&config_path);
+    let config = config_store.load().unwrap_or_default();
+    let library_path = config_path.with_file_name("library.json");
+    let library_store = aura_storage::library_store::LibraryStore::new(&library_path);
+    let library_items = library_store.load().unwrap_or_default();
+
+    // 2. Process active / added / resized monitors
+    for m in &new_monitors {
+        if let Some(ctx) = coordinator.find_monitor_mut(m.id) {
+            // Check if bounds changed
+            if ctx.width != m.width || ctx.height != m.height || ctx.x != m.x || ctx.y != m.y {
+                tracing::info!(
+                    "Monitor {:?} resized/moved: ({}x{}) -> ({}x{})",
+                    m.id,
+                    ctx.width,
+                    ctx.height,
+                    m.width,
+                    m.height
+                );
+                ctx.update_geometry(workerw, m.x, m.y, m.width, m.height);
+                if let Some(tx) = wallpaper_txs.get(&m.id) {
+                    let _ = tx.send(render_thread::RenderCommand::Resize {
+                        width: m.width,
+                        height: m.height,
+                    });
+                }
+            } else {
+                ctx.attach_to_workerw(workerw);
+            }
+        } else {
+            // Added monitor
+            tracing::info!("New monitor detected: {:?}", m.id);
+            let assignment = config.assignments.iter().find(|a| a.monitor_id == m.id);
+            let initial_path = wallpaper_path.or_else(|| {
+                assignment
+                    .and_then(|a| library_items.iter().find(|item| item.id == a.wallpaper_id))
+                    .map(|item| item.path.as_path())
+            });
+            let fit_mode = assignment.map(|a| a.fit_mode).unwrap_or_default();
+
+            match render_thread::create_monitor_context(
+                vulkan_context,
+                m,
+                workerw,
+                initial_path,
+                fit_mode,
+            ) {
+                Ok((ctx, tx, _counter)) => {
+                    ctx.attach_to_workerw(workerw);
+                    wallpaper_txs.insert(m.id, tx.clone());
+                    coordinator.add_monitor(ctx);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to create monitor context for new monitor: {}", e)
+                }
+            }
+        }
+    }
+
+    // 3. Update IPC Orchestrator summaries
+    let summaries: Vec<aura_ipc::protocol::MonitorSummary> = new_monitors
+        .iter()
+        .enumerate()
+        .map(|(idx, m)| aura_ipc::protocol::MonitorSummary {
+            id: m.id,
+            name: format!("Display {} ({})", idx + 1, m.device_name),
+        })
+        .collect();
+
+    orchestrator.update_monitors(summaries, wallpaper_txs.clone());
 }
