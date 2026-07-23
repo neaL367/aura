@@ -88,7 +88,8 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 ## 9. Vulkan Teardown & Idempotent Resource Destruction Rules
 
 - **Idempotent Destruction Methods**: All Vulkan resource teardown methods (`Swapchain::destroy`, `GraphicsPipeline::destroy`, `Surface::drop`) MUST clear destroyed handles to `vk::...::null()` immediately after freeing. Calling `destroy()` multiple times on the same object must always be a safe no-op.
-- **RAII Resource Teardown**: `MonitorRenderer` implements `Drop` for RAII resource cleanup. Do NOT invoke manual `renderer.destroy()` calls prior to thread closure exit, as redundant destruction triggers double-free `STATUS_ACCESS_VIOLATION` (`0xc0000005`) crashes inside graphics driver DLLs.
+- **RAII Resource Teardown & Struct Drop Order**: `MonitorRenderer` implements `Drop` for RAII resource cleanup. Struct fields in `MonitorRenderer` drop in top-to-bottom declaration order; `context: Arc<VulkanContext>` MUST be declared last so Vulkan resources (`Surface`, `Swapchain`, `GraphicsPipeline`) call destroy methods before `VulkanContext` drops. In `MonitorContext`, `render_thread` MUST be declared before `host_window` so render threads join before `HostWindow::drop` destroys the Win32 `HWND`.
+- **Vulkan Allocator Teardown Order**: In `VulkanContext::drop`, `allocator: Mutex<Option<gpu_allocator::vulkan::Allocator>>` MUST be explicitly cleared (`lock.take()`) before `device.destroy_device(None)` is invoked, preventing `STATUS_ACCESS_VIOLATION` (`0xc0000005`) crashes on daemon shutdown.
 
 ---
 
@@ -96,6 +97,7 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 
 - **Dirty-Flag Presentation Skipping**: Static image presentation loop tracks `is_dirty`. A frame is rendered once on load/resize/fit mode change, after which `renderer.frame(...)` calls are paused to achieve 0% CPU and 0% GPU load during desktop idle.
 - **Idle Metric Logging**: `PerfMonitor` logs 0-frame intervals with `status = "Idle (Static - 0% CPU/GPU)"` and `fps = "0.0"` to explicitly distinguish dirty-flag power saving from renderer freezes.
+- **Max 4K Static Image Downsampling**: `ImageDecoder::open` MUST automatically downsample static images larger than 4K (3840px) to max 3840px (`img.thumbnail(3840, 3840)`), preventing 6K/8K uncompressed image RAM bloat.
 - **Immediate High-Res Image Memory Release**: `ThumbnailStore::get_or_create` MUST explicitly invoke `drop(img)` immediately after `img.thumbnail(...)` generation to release full-resolution 4K/8K uncompressed image RAM before JPEG encoding and file I/O.
 - **Heap Vector Compaction**: Scanner results (`LibraryScanner::scan_paths`) and orchestrator library storage (`state.library_items`) MUST invoke `shrink_to_fit()` after scanning to release unused heap allocation capacity.
 
@@ -105,6 +107,7 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 
 - **Strict Media Crate Platform Independence**: `aura-media` must remain 100% platform-agnostic containing only decoder traits and pure decoders (Image, GIF, WebP). All platform-specific decoders (e.g. Media Foundation `MfVideoDecoder`) MUST reside in `crates/platform-windows/src/mf_video.rs`.
 - **Non-Blocking Tokio IPC Operations**: Synchronous file I/O or image decoding inside Tokio IPC handlers MUST be wrapped in `tokio::task::block_in_place(|| ...)` to prevent worker thread starvation.
-- **Debounced Filesystem Auto-Refresh**: Filesystem watchers MUST use `notify-debouncer-full` with a quiet-period buffer (500ms) to coalesce file event bursts and trigger auto-rescan via background worker threads.
+- **Debounced Filesystem Watcher & Cache Exclusion**: Filesystem watchers MUST use `notify-debouncer-full` with a quiet-period buffer (500ms) to coalesce file event bursts. Events originating within `ThumbnailStore::thumbs_dir()` (`%APPDATA%/aura/thumbs`) MUST be filtered out to prevent self-triggering auto-refresh feedback loops.
 - **Win32 Session & Power Notification Lifecycles**: `PowerManager` MUST store its `power_notify_handle: HPOWERNOTIFY` and call `UnregisterPowerSettingNotification` and `WTSUnRegisterSessionNotification` when event pump message windows exit.
+
 
