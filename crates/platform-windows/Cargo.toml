@@ -12,6 +12,7 @@ aura-media        = { workspace = true }
 thiserror         = { workspace = true }
 tracing           = { workspace = true }
 crossbeam-channel = { workspace = true }
+h264-reader       = { workspace = true }
 
 [dependencies.windows]
 workspace = true

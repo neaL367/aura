@@ -15,6 +15,8 @@ pub mod error;
 #[cfg(target_os = "windows")]
 pub mod event_pump;
 #[cfg(target_os = "windows")]
+pub mod h264_parser;
+#[cfg(target_os = "windows")]
 pub mod host_window;
 #[cfg(target_os = "windows")]
 pub mod mf_video;

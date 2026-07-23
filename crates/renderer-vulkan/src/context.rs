@@ -11,6 +11,10 @@ pub struct VulkanContext {
     pub device: ash::Device,
     pub graphics_queue: vk::Queue,
     pub graphics_queue_family: u32,
+    pub video_queue_loader: Option<ash::khr::video_queue::Instance>,
+    pub video_decode_queue_loader: Option<ash::khr::video_decode_queue::Device>,
+    pub video_queue_family: Option<u32>,
+    pub dpb_coincide: bool,
     pub allocator: Mutex<Option<gpu_allocator::vulkan::Allocator>>,
     pub queue_mutex: Mutex<()>,
 }
@@ -36,6 +40,11 @@ impl VulkanContext {
             })
             .map_err(|e| VulkanError::Allocation(e.to_string()))?;
 
+        let video_queue_loader = Some(ash::khr::video_queue::Instance::new(&entry, &instance));
+        let video_decode_queue_loader = Some(ash::khr::video_decode_queue::Device::new(
+            &instance, &device,
+        ));
+
         Ok(Self {
             entry,
             instance,
@@ -43,6 +52,10 @@ impl VulkanContext {
             device,
             graphics_queue: queue,
             graphics_queue_family: queue_family,
+            video_queue_loader,
+            video_decode_queue_loader,
+            video_queue_family: None,
+            dpb_coincide: true,
             allocator: Mutex::new(Some(allocator)),
             queue_mutex: Mutex::new(()),
         })
