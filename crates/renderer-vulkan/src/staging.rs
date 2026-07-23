@@ -289,6 +289,32 @@ impl StagingUploader {
         Ok(())
     }
 
+    /// Free the CPU-to-GPU staging buffer allocation to reclaim host RAM when uploads are complete.
+    pub fn trim(&mut self, context: &VulkanContext) {
+        if self.upload_fence != vk::Fence::null() {
+            unsafe {
+                context
+                    .device
+                    .wait_for_fences(
+                        std::slice::from_ref(&self.upload_fence),
+                        true,
+                        1_000_000_000,
+                    )
+                    .ok();
+            }
+        }
+        if let Some(buf) = self.staging_buffer.take() {
+            unsafe { context.device.destroy_buffer(buf, None) };
+        }
+        if let Some(alloc) = self.staging_allocation.take()
+            && let Ok(mut guard) = context.allocator.lock()
+            && let Some(ref mut allocator) = *guard
+        {
+            let _ = allocator.free(alloc);
+        }
+        self.staging_size = 0;
+    }
+
     /// Clean up staging buffer and fence handles.
     ///
     /// # Safety
