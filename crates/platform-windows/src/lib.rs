@@ -68,6 +68,53 @@ pub fn get_process_memory_mb() -> (f32, f32) {
     }
 }
 
+/// Trim process working set RAM memory pages back to Windows OS.
+#[cfg(target_os = "windows")]
+pub fn trim_working_set() {
+    use windows::Win32::System::Threading::{GetCurrentProcess, SetProcessWorkingSetSize};
+    unsafe {
+        let _ = SetProcessWorkingSetSize(GetCurrentProcess(), usize::MAX, usize::MAX);
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn trim_working_set() {}
+
+/// Register a Win32 Console Ctrl+C handler that updates an AtomicBool.
+#[cfg(target_os = "windows")]
+pub fn register_console_ctrl_handler(flag: std::sync::Arc<std::sync::atomic::AtomicBool>) -> bool {
+    use windows::Win32::System::Console::{CTRL_C_EVENT, SetConsoleCtrlHandler};
+    use windows::core::BOOL;
+
+    static FLAG_PTR: std::sync::atomic::AtomicPtr<std::sync::atomic::AtomicBool> =
+        std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+
+    FLAG_PTR.store(
+        std::sync::Arc::into_raw(flag) as *mut _,
+        std::sync::atomic::Ordering::Relaxed,
+    );
+
+    unsafe extern "system" fn ctrl_handler(ctrl_type: u32) -> BOOL {
+        if ctrl_type == CTRL_C_EVENT {
+            let ptr = FLAG_PTR.load(std::sync::atomic::Ordering::Relaxed);
+            if !ptr.is_null() {
+                unsafe { (*ptr).store(true, std::sync::atomic::Ordering::Relaxed) };
+            }
+            BOOL(1)
+        } else {
+            BOOL(0)
+        }
+    }
+
+    // SAFETY: `ctrl_handler` is a valid Win32 console handler matching `PHANDLER_ROUTINE`.
+    unsafe { SetConsoleCtrlHandler(Some(ctrl_handler), true).is_ok() }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn register_console_ctrl_handler(_flag: std::sync::Arc<std::sync::atomic::AtomicBool>) -> bool {
+    true
+}
+
 // Stubs for non-Windows platforms (e.g. Linux CI check/test)
 #[cfg(not(target_os = "windows"))]
 pub mod stub {
