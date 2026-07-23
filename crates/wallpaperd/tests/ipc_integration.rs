@@ -3,23 +3,23 @@ mod windows_tests {
     use std::time::Duration;
 
     use aura_ipc::client::IpcClient;
-    use aura_ipc::protocol::{DaemonStatus, MonitorSummary, PROTOCOL_VERSION, Request, Response};
+    use aura_ipc::protocol::{
+        DaemonStatus, IpcMessage, MonitorSummary, PROTOCOL_VERSION, Request, Response,
+    };
     use aura_ipc::server::IpcServer;
 
-    fn test_pipe_name() -> String {
+    fn test_pipe_name(name: &str) -> String {
         format!(
-            r"\\.\pipe\aura-test-{}-{}",
+            r"\\.\pipe\aura-test-{}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            name,
+            uuid::Uuid::new_v4()
         )
     }
 
     #[tokio::test]
     async fn test_ipc_getstatus_roundtrip() {
-        let pipe_name = test_pipe_name();
+        let pipe_name = test_pipe_name("getstatus");
         let handler = Box::new(|req: Request| -> Response {
             match req {
                 Request::GetStatus => Response::Status(DaemonStatus {
@@ -66,7 +66,7 @@ mod windows_tests {
 
     #[tokio::test]
     async fn test_ipc_listwallpapers_roundtrip() {
-        let pipe_name = test_pipe_name();
+        let pipe_name = test_pipe_name("listwallpapers");
         let handler = Box::new(|req: Request| -> Response {
             match req {
                 Request::ListWallpapers => Response::WallpaperList(vec![]),
@@ -91,6 +91,41 @@ mod windows_tests {
         match response {
             Response::WallpaperList(list) => assert!(list.is_empty()),
             other => panic!("expected WallpaperList, got {:?}", other),
+        }
+
+        shutdown_tx.send(true).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_ipc_version_mismatch_rejected() {
+        let pipe_name = test_pipe_name("version_mismatch");
+        let handler = Box::new(|_req: Request| -> Response { Response::Ok });
+
+        let server = IpcServer::on_pipe(handler, pipe_name.clone());
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
+        tokio::spawn(async move {
+            let _ = server.serve(shutdown_rx).await;
+        });
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let mut client = IpcClient::connect_to(&pipe_name).await.unwrap();
+        let msg = IpcMessage::with_version(Request::GetStatus, 999);
+        let response = client.send_message(msg).await.unwrap();
+
+        match response {
+            Response::Error { reason } => {
+                assert!(
+                    reason.contains("protocol version mismatch"),
+                    "expected mismatch error, got {}",
+                    reason
+                );
+            }
+            other => panic!(
+                "expected Error response on version mismatch, got {:?}",
+                other
+            ),
         }
 
         shutdown_tx.send(true).unwrap();

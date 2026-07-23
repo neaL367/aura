@@ -31,3 +31,6 @@ features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
 ]
+
+[dev-dependencies]
+uuid = { workspace = true }
