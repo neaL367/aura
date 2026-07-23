@@ -58,6 +58,42 @@ impl std::fmt::Display for MediaKind {
 }
 
 // ---------------------------------------------------------------------------
+// FitMode
+// ---------------------------------------------------------------------------
+
+/// Scaling/positioning mode for displaying a wallpaper on a monitor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum FitMode {
+    /// Scale image to fill the entire monitor, cropping overflow.
+    #[default]
+    Fill,
+    /// Scale image to fit within monitor, preserving aspect ratio (letterbox/pillarbox).
+    Fit,
+    /// Stretch image to exact monitor dimensions without preserving aspect ratio.
+    Stretch,
+    /// Display image at 1:1 original pixel scale, centered on monitor.
+    Center,
+    /// Repeat image at 1:1 original pixel scale across monitor surface.
+    Tile,
+    /// Stretch/fill image across the combined virtual desktop bounding box.
+    Span,
+}
+
+impl std::fmt::Display for FitMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Fill => write!(f, "Fill"),
+            Self::Fit => write!(f, "Fit"),
+            Self::Stretch => write!(f, "Stretch"),
+            Self::Center => write!(f, "Center"),
+            Self::Tile => write!(f, "Tile"),
+            Self::Span => write!(f, "Span"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // WallpaperMeta
 // ---------------------------------------------------------------------------
 

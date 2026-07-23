@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::wallpaper::WallpaperId;
+use crate::wallpaper::{FitMode, WallpaperId};
 
 // ---------------------------------------------------------------------------
 // MonitorId
@@ -80,6 +80,8 @@ pub struct MonitorInfo {
 pub struct MonitorAssignment {
     pub monitor_id: MonitorId,
     pub wallpaper_id: WallpaperId,
+    #[serde(default)]
+    pub fit_mode: FitMode,
 }
 
 // ---------------------------------------------------------------------------

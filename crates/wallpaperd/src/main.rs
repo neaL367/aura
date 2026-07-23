@@ -19,6 +19,8 @@ mod render_coordinator;
 
 #[cfg(target_os = "windows")]
 mod daemon;
+#[cfg(target_os = "windows")]
+mod render_thread;
 
 fn main() {
     // Initialise structured logging.
