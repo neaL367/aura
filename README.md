@@ -28,12 +28,12 @@ wallpaper-ui (GUI Control Panel, egui/eframe)
     │ Named Pipe IPC (\\.\pipe\aura-wallpaperd)
     ▼
 wallpaperd (Headless Daemon Coordinator)
-    ├── Orchestrator (State machine, IPC request routing)
-    ├── RenderCoordinator (Per-monitor Vulkan render loops & pause control)
+    ├── Orchestrator (State machine & IPC handlers: status, assignment, library)
+    ├── RenderCoordinator (Per-monitor Vulkan render loops: placement, loop_runner)
     ├── PerfMonitor (FPS counters & frame latency metrics)
-    ├── platform-windows (WorkerW attach, Win32 event pump, monitor enum, power)
+    ├── platform-windows (WorkerW management: discovery, attachment, manager, Win32 pump)
     ├── media (Static Image, GIF streaming compositing, Media Foundation video)
-    └── renderer-vulkan (Vulkan instance/device, surface, swapchain, shaders, RAII Drop)
+    └── renderer-vulkan (Vulkan context, MonitorRenderer: frame_pass, resources, RAII Drop)
 ```
 
 ---
@@ -49,7 +49,7 @@ wallpaperd (Headless Daemon Coordinator)
 
 ## Workspace Structure
 
-The project is structured as a modular Cargo workspace across 8 crates and 1 tool:
+The project is structured as a modular Cargo workspace across 8 crates and 1 tool, organized into cohesive domain submodules following Single Responsibility Principle:
 
 | Crate | Purpose |
 | :--- | :--- |
@@ -57,10 +57,10 @@ The project is structured as a modular Cargo workspace across 8 crates and 1 too
 | [`aura-ipc`](crates/ipc) | Length-prefixed JSON serialization protocol over Windows Named Pipes |
 | [`aura-storage`](crates/storage) | Persistence layer for TOML app configs and library JSON database |
 | [`aura-media`](crates/media) | Frame-bounded image/GIF decoders and Media Foundation stubs |
-| [`aura-platform-windows`](crates/platform-windows) | Win32 HWND wrappers, WorkerW attachments, process singleton |
-| [`aura-renderer-vulkan`](crates/renderer-vulkan) | Vulkan context, monitor renderers, swapchains, shaders, RAII Drop |
-| [`wallpaperd`](crates/wallpaperd) | Headless background daemon orchestrator & IPC server |
-| [`wallpaper-ui`](crates/wallpaper-ui) | `egui`/`eframe` GUI Control Panel & reconnecting IPC client |
+| [`aura-platform-windows`](crates/platform-windows) | Win32 HWND wrappers, WorkerW attachments (`discovery`, `attachment`, `manager`), process singleton |
+| [`aura-renderer-vulkan`](crates/renderer-vulkan) | Vulkan context, monitor renderers (`frame_pass`, `resources`), swapchains, shaders, RAII Drop |
+| [`wallpaperd`](crates/wallpaperd) | Headless background daemon orchestrator (`handlers/`) & per-monitor render threads (`placement`, `loop_runner`) |
+| [`wallpaper-ui`](crates/wallpaper-ui) | `egui`/`eframe` GUI Control Panel (`library_panel/`) & reconnecting IPC client |
 | [`workerw-proof`](tools/workerw-proof) | Standalone validation tool for WorkerW integration proof |
 
 ---

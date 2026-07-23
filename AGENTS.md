@@ -15,7 +15,7 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 ## 2. Vulkan SDK Constraints
 
 - **Vulkan Version**: Pinned to `1.4.350.0` (matching local installations and GitHub Actions configuration).
-- **Vulkan CI Cache**: Caching must be disabled (`cache: false`) in the Vulkan installer step in GitHub Actions to avoid deprecated caching library warnings.
+- **Vulkan CI Cache & Pipeline**: Vulkan SDK installer caching must be disabled (`cache: false`) to avoid deprecated caching library warnings. CI uses `Swatinem/rust-cache@v2`, explicit `permissions: contents: read`, and workflow concurrency cancellation (`cancel-in-progress: true`).
 
 ---
 
@@ -31,15 +31,15 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 
 ## 4. Architectural Rules
 
-- **Crate Layout**:
+- **Crate Layout & Module Boundaries**:
   - `crates/core`: Platform-independent domain types (monitors, wallpaper lifecycle, configs).
   - `crates/ipc`: Typed length-prefixed JSON protocol over `\\.\pipe\aura-wallpaperd`.
   - `crates/storage`: TOML configs (`aura.toml` via `ConfigStore`), JSON wallpaper library cache (`library.json` via `LibraryStore`), and recursive `LibraryScanner` (multi-format media discovery: `png`, `jpg`, `jpeg`, `bmp`, `gif`, `webp`, `mp4`, `mkv`). Paths for both files are resolved under `%APPDATA%/aura` using `dirs::config_dir()`.
   - `crates/media`: Static image and GIF decoding (using disposal canvas composition).
-  - `crates/platform-windows`: Win32 native window wrappers, WorkerW attach, event pump, and singleton.
-  - `crates/renderer-vulkan`: Vulkan pipeline, swapchain, texture upload, and `MonitorRenderer`.
-  - `crates/wallpaperd`: Aura background daemon coordinator (owns WorkerW, Vulkan render threads, IPC server).
-  - `crates/wallpaper-ui`: `egui`/`eframe`-based Control Panel UI.
+  - `crates/platform-windows`: Win32 native window wrappers, WorkerW attach (`workerw/` split into `discovery`, `attachment`, `manager`), event pump, and singleton.
+  - `crates/renderer-vulkan`: Vulkan pipeline, swapchain, texture upload, and `MonitorRenderer` (`monitor_renderer/` split into `frame_pass`, `resources`).
+  - `crates/wallpaperd`: Aura background daemon coordinator (owns `WorkerW`, Vulkan render threads, IPC server). Split into focused submodules: `orchestrator/` (`handlers/` for `status`, `assignment`, `library`) and `render_thread/` (`placement`, `loop_runner`).
+  - `crates/wallpaper-ui`: `egui`/`eframe`-based Control Panel UI (`library_panel/` split into `card`, `mod`).
   - `tools/workerw-proof`: Phase 0 standalone WorkerW validation tool.
 
 - **Threading Architecture**:
