@@ -1,3 +1,4 @@
+use aura_core::wallpaper::FitMode;
 use aura_ipc::protocol::Request;
 
 use crate::ipc_client::{ConnectionStatus, UiIpcClient};
@@ -5,12 +6,14 @@ use crate::ipc_client::{ConnectionStatus, UiIpcClient};
 pub struct MonitorPanel {
     selected_wallpapers:
         std::collections::HashMap<aura_core::monitor::MonitorId, aura_core::wallpaper::WallpaperId>,
+    selected_fit_modes: std::collections::HashMap<aura_core::monitor::MonitorId, FitMode>,
 }
 
 impl MonitorPanel {
     pub fn new() -> Self {
         Self {
             selected_wallpapers: std::collections::HashMap::new(),
+            selected_fit_modes: std::collections::HashMap::new(),
         }
     }
 
@@ -111,6 +114,48 @@ impl MonitorPanel {
                                             );
 
                                             ui.add_space(8.0);
+                                            ui.label("Fit Mode:");
+                                            let fit_mode = self
+                                                .selected_fit_modes
+                                                .get(&mon.id)
+                                                .copied()
+                                                .unwrap_or_default();
+                                            egui::ComboBox::from_id_salt(format!(
+                                                "fit_{:?}",
+                                                mon.id
+                                            ))
+                                            .selected_text(format!("{}", fit_mode))
+                                            .width(280.0)
+                                            .show_ui(
+                                                ui,
+                                                |ui| {
+                                                    for mode in [
+                                                        FitMode::Fill,
+                                                        FitMode::Fit,
+                                                        FitMode::Stretch,
+                                                        FitMode::Center,
+                                                        FitMode::Tile,
+                                                        FitMode::Span,
+                                                    ] {
+                                                        if ui
+                                                            .selectable_label(
+                                                                fit_mode == mode,
+                                                                format!("{}", mode),
+                                                            )
+                                                            .clicked()
+                                                        {
+                                                            self.selected_fit_modes
+                                                                .insert(mon.id, mode);
+                                                            ipc_client.send(Request::SetFitMode {
+                                                                monitor_id: mon.id,
+                                                                fit_mode: mode,
+                                                            });
+                                                        }
+                                                    }
+                                                },
+                                            );
+
+                                            ui.add_space(8.0);
 
                                             ui.horizontal(|ui| {
                                                 if let Some(&wallpaper_id) =
@@ -120,6 +165,7 @@ impl MonitorPanel {
                                                         ipc_client.send(Request::AssignWallpaper {
                                                             monitor_id: mon.id,
                                                             wallpaper_id,
+                                                            fit_mode: Some(fit_mode),
                                                         });
                                                     }
                                                 } else {

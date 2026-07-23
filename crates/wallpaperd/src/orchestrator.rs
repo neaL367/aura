@@ -1,10 +1,10 @@
 use crate::assignment::AssignmentManager;
+use crate::render_thread::RenderCommand;
 use aura_core::monitor::MonitorId;
 use aura_core::wallpaper::WallpaperMeta;
 use aura_ipc::protocol::{DaemonStatus, MonitorSummary, PROTOCOL_VERSION, Request, Response};
 use aura_storage::{LibraryScanner, config_store::ConfigStore, library_store::LibraryStore};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::info;
 
@@ -16,7 +16,7 @@ pub(crate) struct OrchestratorState {
     pub library_items: Vec<WallpaperMeta>,
     pub config_store: ConfigStore,
     pub library_store: LibraryStore,
-    pub wallpaper_txs: HashMap<MonitorId, crossbeam_channel::Sender<PathBuf>>,
+    pub wallpaper_txs: HashMap<MonitorId, crossbeam_channel::Sender<RenderCommand>>,
 }
 
 #[derive(Clone)]
@@ -28,7 +28,7 @@ pub(crate) struct Orchestrator {
 impl Orchestrator {
     pub fn new(
         monitors: Vec<MonitorSummary>,
-        wallpaper_txs: HashMap<MonitorId, crossbeam_channel::Sender<PathBuf>>,
+        wallpaper_txs: HashMap<MonitorId, crossbeam_channel::Sender<RenderCommand>>,
         shutdown_tx: crossbeam_channel::Sender<()>,
     ) -> Self {
         let active_monitors = monitors.len();
@@ -107,6 +107,7 @@ impl Orchestrator {
             Request::AssignWallpaper {
                 monitor_id,
                 wallpaper_id,
+                fit_mode,
             } => {
                 let wallpaper_meta = state
                     .library_items
@@ -124,28 +125,39 @@ impl Orchestrator {
                         match tx {
                             Some(tx) => {
                                 info!(
-                                    "Assigning wallpaper {:?} to monitor {:?}",
-                                    meta.path, monitor_id
+                                    "Assigning wallpaper {:?} (fit_mode: {:?}) to monitor {:?}",
+                                    meta.path, fit_mode, monitor_id
                                 );
                                 state.assignments.assign(monitor_id, wallpaper_id);
                                 let mut config = state.config_store.load().unwrap_or_default();
+                                let effective_fit = fit_mode.unwrap_or_default();
                                 if let Some(pos) = config
                                     .assignments
                                     .iter()
                                     .position(|a| a.monitor_id == monitor_id)
                                 {
                                     config.assignments[pos].wallpaper_id = wallpaper_id;
+                                    if fit_mode.is_some() {
+                                        config.assignments[pos].fit_mode = effective_fit;
+                                    }
                                 } else {
                                     config.assignments.push(
                                         aura_core::monitor::MonitorAssignment {
                                             monitor_id,
                                             wallpaper_id,
+                                            fit_mode: effective_fit,
                                         },
                                     );
                                 }
                                 let _ = state.config_store.save(&config);
 
-                                if tx.send(meta.path).is_err() {
+                                if tx
+                                    .send(RenderCommand::SetWallpaper {
+                                        path: meta.path,
+                                        fit_mode,
+                                    })
+                                    .is_err()
+                                {
                                     tracing::error!(
                                         "Render thread for monitor {:?} is gone",
                                         monitor_id
@@ -169,6 +181,41 @@ impl Orchestrator {
                     }
                     None => Response::Error {
                         reason: "wallpaper not found".into(),
+                    },
+                }
+            }
+            Request::SetFitMode {
+                monitor_id,
+                fit_mode,
+            } => {
+                let tx = state.wallpaper_txs.get(&monitor_id).cloned();
+                match tx {
+                    Some(tx) => {
+                        info!(
+                            "Setting fit mode {:?} for monitor {:?}",
+                            fit_mode, monitor_id
+                        );
+                        let mut config = state.config_store.load().unwrap_or_default();
+                        if let Some(pos) = config
+                            .assignments
+                            .iter()
+                            .position(|a| a.monitor_id == monitor_id)
+                        {
+                            config.assignments[pos].fit_mode = fit_mode;
+                            let _ = state.config_store.save(&config);
+                        }
+                        if tx.send(RenderCommand::SetFitMode(fit_mode)).is_err() {
+                            return Response::Error {
+                                reason: format!(
+                                    "render thread for monitor {:?} is not running",
+                                    monitor_id
+                                ),
+                            };
+                        }
+                        Response::Ok
+                    }
+                    None => Response::Error {
+                        reason: format!("unknown monitor {:?}", monitor_id),
                     },
                 }
             }

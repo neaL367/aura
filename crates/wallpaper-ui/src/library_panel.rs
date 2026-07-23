@@ -125,6 +125,7 @@ impl LibraryPanel {
                                         ipc_client.send(Request::AssignWallpaper {
                                             monitor_id: mon.id,
                                             wallpaper_id: entry.id,
+                                            fit_mode: None,
                                         });
                                     }
                                 }

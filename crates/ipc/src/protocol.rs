@@ -1,4 +1,7 @@
-use aura_core::{monitor::MonitorId, wallpaper::WallpaperId};
+use aura_core::{
+    monitor::MonitorId,
+    wallpaper::{FitMode, WallpaperId},
+};
 use serde::{Deserialize, Serialize};
 
 /// Named pipe path used by both client and server.
@@ -19,10 +22,17 @@ pub enum Request {
     GetStatus,
     /// List all wallpapers in the library.
     ListWallpapers,
-    /// Assign a wallpaper to a monitor.
+    /// Assign a wallpaper to a monitor with an optional fit mode.
     AssignWallpaper {
         monitor_id: MonitorId,
         wallpaper_id: WallpaperId,
+        #[serde(default)]
+        fit_mode: Option<FitMode>,
+    },
+    /// Set scaling/fit mode for an assigned monitor wallpaper.
+    SetFitMode {
+        monitor_id: MonitorId,
+        fit_mode: FitMode,
     },
     /// Remove the wallpaper from a monitor.
     RemoveAssignment { monitor_id: MonitorId },

@@ -1,5 +1,5 @@
 use aura_core::monitor::MonitorId;
-use aura_core::wallpaper::{MediaKind, WallpaperId};
+use aura_core::wallpaper::{FitMode, MediaKind, WallpaperId};
 use aura_ipc::protocol::{
     DaemonStatus, IpcMessage, PROTOCOL_VERSION, Request, Response, WallpaperEntry,
 };
@@ -12,6 +12,11 @@ fn test_request_serialization_roundtrip() {
         Request::AssignWallpaper {
             monitor_id: MonitorId::from_device_path(r"\\.\DISPLAY1"),
             wallpaper_id: WallpaperId::new(),
+            fit_mode: Some(FitMode::Fill),
+        },
+        Request::SetFitMode {
+            monitor_id: MonitorId::from_device_path(r"\\.\DISPLAY1"),
+            fit_mode: FitMode::Fit,
         },
         Request::RemoveAssignment {
             monitor_id: MonitorId::from_device_path(r"\\.\DISPLAY1"),

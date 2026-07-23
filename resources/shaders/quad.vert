@@ -2,6 +2,11 @@
 
 layout(location = 0) out vec2 outUV;
 
+layout(push_constant) uniform PushConstants {
+    vec2 uvScale;
+    vec2 uvOffset;
+} pc;
+
 // Full-screen quad positions (2 triangles, 6 vertices)
 const vec2 POSITIONS[6] = vec2[](
     vec2(-1.0, -1.0),
@@ -24,5 +29,5 @@ const vec2 UVS[6] = vec2[](
 
 void main() {
     gl_Position = vec4(POSITIONS[gl_VertexIndex], 0.0, 1.0);
-    outUV = UVS[gl_VertexIndex];
+    outUV = UVS[gl_VertexIndex] * pc.uvScale + pc.uvOffset;
 }

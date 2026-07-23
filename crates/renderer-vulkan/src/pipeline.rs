@@ -31,8 +31,14 @@ impl GraphicsPipeline {
         };
 
         // 2. Create pipeline layout
+        let push_constant_range = vk::PushConstantRange::default()
+            .stage_flags(vk::ShaderStageFlags::VERTEX)
+            .offset(0)
+            .size(16); // 2 x vec2 (uvScale: [f32; 2], uvOffset: [f32; 2])
+
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
-            .set_layouts(std::slice::from_ref(&descriptor_set_layout));
+            .set_layouts(std::slice::from_ref(&descriptor_set_layout))
+            .push_constant_ranges(std::slice::from_ref(&push_constant_range));
 
         let pipeline_layout = unsafe {
             context
