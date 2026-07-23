@@ -30,6 +30,8 @@ pub enum RenderCommand {
         height: u32,
     },
     Playback(PlaybackCommand),
+    SetPerformanceProfile(aura_core::playback::PerformanceProfile),
+    SetTargetFps(u8),
 }
 
 #[cfg(target_os = "windows")]
@@ -178,6 +180,8 @@ pub fn create_monitor_context(
             let mut active_worker: Option<DecodeWorkerHandle> = initial_worker;
             let mut current_frame_rx = initial_frame_rx;
             let mut is_dirty = true;
+            let mut current_profile = aura_core::playback::PerformanceProfile::Maximum;
+            let mut target_fps: u8 = 60;
 
             // Render loop: check for wallpaper commands, new frames, then draw.
             loop {
@@ -185,7 +189,9 @@ pub fn create_monitor_context(
                     break;
                 }
 
-                if pause_clone.load(Ordering::Relaxed) {
+                if pause_clone.load(Ordering::Relaxed)
+                    || current_profile == aura_core::playback::PerformanceProfile::Paused
+                {
                     std::thread::sleep(Duration::from_millis(100));
                     continue;
                 }
@@ -295,6 +301,15 @@ pub fn create_monitor_context(
                                 let _ = worker.command_sender.send(cmd);
                             }
                         }
+                        RenderCommand::SetPerformanceProfile(profile) => {
+                            tracing::info!(profile = ?profile, "Render thread performance profile updated");
+                            current_profile = profile;
+                        }
+                        RenderCommand::SetTargetFps(fps) => {
+                            let valid_fps = fps.clamp(1, 240);
+                            tracing::info!(fps = valid_fps, "Render thread target FPS updated");
+                            target_fps = valid_fps;
+                        }
                     }
                 }
 
@@ -331,7 +346,14 @@ pub fn create_monitor_context(
                         }
                         is_dirty = false;
                     }
-                    std::thread::sleep(Duration::from_millis(16)); // ~60 FPS pacing
+                    let sleep_ms = match current_profile {
+                        aura_core::playback::PerformanceProfile::Balanced => {
+                            let balanced_fps = (target_fps / 2).max(15);
+                            1000 / balanced_fps as u64
+                        }
+                        _ => 1000 / target_fps.max(1) as u64,
+                    };
+                    std::thread::sleep(Duration::from_millis(sleep_ms));
                 } else {
                     // Static image content: draw once when dirty, then sleep (0% CPU/GPU idle)
                     if is_dirty {

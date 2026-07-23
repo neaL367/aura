@@ -255,6 +255,7 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
             }
             Ok(HostEvent::PerformanceHint(profile)) => {
                 tracing::info!("Performance profile changed to {:?}", profile);
+                orchestrator.set_performance_profile(profile);
             }
             Ok(HostEvent::ShutdownRequested) => {
                 tracing::info!("Shutdown signal received. Exiting daemon...");

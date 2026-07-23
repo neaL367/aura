@@ -20,6 +20,21 @@ pub struct OrchestratorState {
     pub wallpaper_txs: HashMap<MonitorId, crossbeam_channel::Sender<RenderCommand>>,
 }
 
+impl OrchestratorState {
+    pub fn mutate_config<F>(
+        &mut self,
+        mutator: F,
+    ) -> Result<aura_core::config::AppConfig, aura_storage::error::StorageError>
+    where
+        F: FnOnce(&mut aura_core::config::AppConfig),
+    {
+        let mut config = self.config_store.load().unwrap_or_default();
+        mutator(&mut config);
+        self.config_store.save(&config)?;
+        Ok(config)
+    }
+}
+
 #[derive(Clone)]
 pub struct Orchestrator {
     state: Arc<Mutex<OrchestratorState>>,
@@ -49,7 +64,18 @@ impl Orchestrator {
 
         let mut assignments = AssignmentManager::new();
         for a in &config.assignments {
-            assignments.assign(a.monitor_id, a.wallpaper_id);
+            let direct_match = monitors.iter().any(|m| m.id == a.monitor_id);
+            if direct_match {
+                assignments.assign(a.monitor_id, a.wallpaper_id);
+            } else if let Some(fallback_mon) =
+                monitors.iter().find(|m| assignments.get(&m.id).is_none())
+            {
+                info!(
+                    "MonitorId {:?} not found in active monitors; matching fallback display {:?}",
+                    a.monitor_id, fallback_mon.id
+                );
+                assignments.assign(fallback_mon.id, a.wallpaper_id);
+            }
         }
 
         info!(
@@ -97,6 +123,15 @@ impl Orchestrator {
 
     pub fn is_paused(&self) -> bool {
         self.state.lock().unwrap().is_paused
+    }
+
+    pub fn set_performance_profile(&self, profile: aura_core::playback::PerformanceProfile) {
+        if let Ok(state) = self.state.lock() {
+            info!(profile = ?profile, "Broadcasting performance profile to render threads");
+            for tx in state.wallpaper_txs.values() {
+                let _ = tx.send(RenderCommand::SetPerformanceProfile(profile));
+            }
+        }
     }
 
     pub fn update_monitors(
@@ -160,27 +195,27 @@ impl Orchestrator {
                                     meta.path, fit_mode, monitor_id
                                 );
                                 state.assignments.assign(monitor_id, wallpaper_id);
-                                let mut config = state.config_store.load().unwrap_or_default();
                                 let effective_fit = fit_mode.unwrap_or_default();
-                                if let Some(pos) = config
-                                    .assignments
-                                    .iter()
-                                    .position(|a| a.monitor_id == monitor_id)
-                                {
-                                    config.assignments[pos].wallpaper_id = wallpaper_id;
-                                    if fit_mode.is_some() {
-                                        config.assignments[pos].fit_mode = effective_fit;
+                                let _ = state.mutate_config(|config| {
+                                    if let Some(pos) = config
+                                        .assignments
+                                        .iter()
+                                        .position(|a| a.monitor_id == monitor_id)
+                                    {
+                                        config.assignments[pos].wallpaper_id = wallpaper_id;
+                                        if fit_mode.is_some() {
+                                            config.assignments[pos].fit_mode = effective_fit;
+                                        }
+                                    } else {
+                                        config.assignments.push(
+                                            aura_core::monitor::MonitorAssignment {
+                                                monitor_id,
+                                                wallpaper_id,
+                                                fit_mode: effective_fit,
+                                            },
+                                        );
                                     }
-                                } else {
-                                    config.assignments.push(
-                                        aura_core::monitor::MonitorAssignment {
-                                            monitor_id,
-                                            wallpaper_id,
-                                            fit_mode: effective_fit,
-                                        },
-                                    );
-                                }
-                                let _ = state.config_store.save(&config);
+                                });
 
                                 if tx
                                     .send(RenderCommand::SetWallpaper {
@@ -211,27 +246,27 @@ impl Orchestrator {
                                         monitor_id, meta.path
                                     );
                                     state.assignments.assign(monitor_id, wallpaper_id);
-                                    let mut config = state.config_store.load().unwrap_or_default();
                                     let effective_fit = fit_mode.unwrap_or_default();
-                                    if let Some(pos) = config
-                                        .assignments
-                                        .iter()
-                                        .position(|a| a.monitor_id == monitor_id)
-                                    {
-                                        config.assignments[pos].wallpaper_id = wallpaper_id;
-                                        if fit_mode.is_some() {
-                                            config.assignments[pos].fit_mode = effective_fit;
+                                    let _ = state.mutate_config(|config| {
+                                        if let Some(pos) = config
+                                            .assignments
+                                            .iter()
+                                            .position(|a| a.monitor_id == monitor_id)
+                                        {
+                                            config.assignments[pos].wallpaper_id = wallpaper_id;
+                                            if fit_mode.is_some() {
+                                                config.assignments[pos].fit_mode = effective_fit;
+                                            }
+                                        } else {
+                                            config.assignments.push(
+                                                aura_core::monitor::MonitorAssignment {
+                                                    monitor_id,
+                                                    wallpaper_id,
+                                                    fit_mode: effective_fit,
+                                                },
+                                            );
                                         }
-                                    } else {
-                                        config.assignments.push(
-                                            aura_core::monitor::MonitorAssignment {
-                                                monitor_id,
-                                                wallpaper_id,
-                                                fit_mode: effective_fit,
-                                            },
-                                        );
-                                    }
-                                    let _ = state.config_store.save(&config);
+                                    });
                                     Response::Ok
                                 } else {
                                     tracing::warn!("No channel found for monitor {:?}", monitor_id);
@@ -258,15 +293,15 @@ impl Orchestrator {
                             "Setting fit mode {:?} for monitor {:?}",
                             fit_mode, monitor_id
                         );
-                        let mut config = state.config_store.load().unwrap_or_default();
-                        if let Some(pos) = config
-                            .assignments
-                            .iter()
-                            .position(|a| a.monitor_id == monitor_id)
-                        {
-                            config.assignments[pos].fit_mode = fit_mode;
-                            let _ = state.config_store.save(&config);
-                        }
+                        let _ = state.mutate_config(|config| {
+                            if let Some(pos) = config
+                                .assignments
+                                .iter()
+                                .position(|a| a.monitor_id == monitor_id)
+                            {
+                                config.assignments[pos].fit_mode = fit_mode;
+                            }
+                        });
                         if tx.send(RenderCommand::SetFitMode(fit_mode)).is_err() {
                             return Response::Error {
                                 reason: format!(
@@ -284,15 +319,15 @@ impl Orchestrator {
             }
             Request::RemoveAssignment { monitor_id } => {
                 state.assignments.remove(&monitor_id);
-                let mut config = state.config_store.load().unwrap_or_default();
-                if let Some(pos) = config
-                    .assignments
-                    .iter()
-                    .position(|a| a.monitor_id == monitor_id)
-                {
-                    config.assignments.remove(pos);
-                    let _ = state.config_store.save(&config);
-                }
+                let _ = state.mutate_config(|config| {
+                    if let Some(pos) = config
+                        .assignments
+                        .iter()
+                        .position(|a| a.monitor_id == monitor_id)
+                    {
+                        config.assignments.remove(pos);
+                    }
+                });
                 Response::Ok
             }
             Request::SetPlayback {
@@ -344,26 +379,30 @@ impl Orchestrator {
             }
             Request::AddScanPath { path } => {
                 info!("AddScanPath received for {:?}", path);
-                let mut config = state.config_store.load().unwrap_or_default();
-                if !config.library.scan_paths.contains(&path) {
-                    config.library.scan_paths.push(path.clone());
-                    let _ = state.config_store.save(&config);
-                }
-                let scanned = LibraryScanner::scan_paths(&config.library.scan_paths);
+                let mut scan_paths = Vec::new();
+                let _ = state.mutate_config(|config| {
+                    if !config.library.scan_paths.contains(&path) {
+                        config.library.scan_paths.push(path.clone());
+                    }
+                    scan_paths = config.library.scan_paths.clone();
+                });
+                let scanned = LibraryScanner::scan_paths(&scan_paths);
                 info!("Rescanned library — now has {} wallpaper(s)", scanned.len());
                 state.library_items = scanned;
                 let _ = state.library_store.save(&state.library_items);
                 Response::WallpaperList(build_wallpaper_list(&state.library_items))
             }
             Request::RemoveScanPath { path } => {
-                let mut config = state.config_store.load().unwrap_or_default();
-                if let Some(pos) = config.library.scan_paths.iter().position(|p| p == &path) {
-                    config.library.scan_paths.remove(pos);
-                    let _ = state.config_store.save(&config);
-                    let scanned = LibraryScanner::scan_paths(&config.library.scan_paths);
-                    state.library_items = scanned;
-                    let _ = state.library_store.save(&state.library_items);
-                }
+                let mut scan_paths = Vec::new();
+                let _ = state.mutate_config(|config| {
+                    if let Some(pos) = config.library.scan_paths.iter().position(|p| p == &path) {
+                        config.library.scan_paths.remove(pos);
+                    }
+                    scan_paths = config.library.scan_paths.clone();
+                });
+                let scanned = LibraryScanner::scan_paths(&scan_paths);
+                state.library_items = scanned;
+                let _ = state.library_store.save(&state.library_items);
                 Response::WallpaperList(build_wallpaper_list(&state.library_items))
             }
             Request::GetConfig => {
@@ -371,13 +410,21 @@ impl Orchestrator {
                 Response::Config(config)
             }
             Request::UpdateConfig { config } => {
-                info!("UpdateConfig received — saving config");
+                info!(
+                    "UpdateConfig received — saving config & broadcasting performance parameters"
+                );
                 if let Err(e) = state.config_store.save(&config) {
                     tracing::error!("Failed to save config: {}", e);
                     Response::Error {
                         reason: e.to_string(),
                     }
                 } else {
+                    for tx in state.wallpaper_txs.values() {
+                        let _ = tx.send(RenderCommand::SetTargetFps(config.performance.target_fps));
+                        let _ = tx.send(RenderCommand::SetPerformanceProfile(
+                            config.performance.default_profile,
+                        ));
+                    }
                     Response::Config(config)
                 }
             }
