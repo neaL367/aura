@@ -58,6 +58,7 @@ gpu-allocator  = { version = "0.28", default-features = false, features = ["vulk
 image       = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif", "webp", "tiff"] }
 gif         = "0.14"
 h264-reader = "0.7"
+chrono      = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 # UI — only wallpaper-ui depends on this
 eframe      = { version = "0.35", default-features = false, features = ["default_fonts", "wgpu"] }

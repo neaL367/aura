@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 use aura_core::wallpaper::{MediaKind, WallpaperId, WallpaperMeta, detect_media_kind};
 use tracing::{info, warn};
@@ -82,7 +81,17 @@ impl LibraryScanner {
 
         let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
         let (width, height) = match kind {
-            MediaKind::Image | MediaKind::Gif => image::image_dimensions(path).unwrap_or((0, 0)),
+            MediaKind::Image | MediaKind::Gif => {
+                let (w, h) = image::image_dimensions(path).ok()?;
+                if w == 0 || h == 0 {
+                    warn!(
+                        "Media file {:?} has invalid dimensions ({}, {})",
+                        path, w, h
+                    );
+                    return None;
+                }
+                (w, h)
+            }
             MediaKind::Video => (0, 0),
         };
 
@@ -102,9 +111,5 @@ impl LibraryScanner {
 }
 
 pub fn chrono_iso8601_now() -> String {
-    let now = SystemTime::now();
-    let duration = now
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
-    format!("UNIX-{}", duration.as_secs())
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
