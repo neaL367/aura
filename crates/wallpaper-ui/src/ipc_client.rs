@@ -16,10 +16,7 @@ pub struct UiIpcClient {
     wallpapers: Arc<Mutex<Vec<WallpaperEntry>>>,
     config: Arc<Mutex<Option<aura_core::config::AppConfig>>>,
     last_error: Arc<Mutex<Option<String>>>,
-    cmd_tx: tokio::sync::mpsc::UnboundedSender<(
-        Request,
-        tokio::sync::oneshot::Sender<Result<Response, String>>,
-    )>,
+    cmd_tx: tokio::sync::mpsc::UnboundedSender<Request>,
 }
 
 impl UiIpcClient {
@@ -33,10 +30,7 @@ impl UiIpcClient {
         let config_clone = config.clone();
         let last_error_clone = last_error.clone();
 
-        let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<(
-            Request,
-            tokio::sync::oneshot::Sender<Result<Response, String>>,
-        )>();
+        let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<Request>();
 
         std::thread::Builder::new()
             .name("ipc-ui-worker".into())
@@ -47,7 +41,8 @@ impl UiIpcClient {
                 {
                     Ok(rt) => rt,
                     Err(e) => {
-                        *status_clone.lock().unwrap() = ConnectionStatus::Error(e.to_string());
+                        *status_clone.lock().unwrap_or_else(|err| err.into_inner()) =
+                            ConnectionStatus::Error(e.to_string());
                         ctx.request_repaint();
                         return;
                     }
@@ -55,25 +50,35 @@ impl UiIpcClient {
 
                 rt.block_on(async move {
                     loop {
-                        *status_clone.lock().unwrap() = ConnectionStatus::Connecting;
+                        *status_clone.lock().unwrap_or_else(|err| err.into_inner()) =
+                            ConnectionStatus::Connecting;
                         ctx.request_repaint();
                         match IpcClient::connect().await {
                             Ok(mut client) => {
                                 match client.send(Request::GetStatus).await {
                                     Ok(Response::Status(s)) => {
-                                        *status_clone.lock().unwrap() = ConnectionStatus::Connected(s);
+                                        *status_clone
+                                            .lock()
+                                            .unwrap_or_else(|err| err.into_inner()) =
+                                            ConnectionStatus::Connected(s);
                                     }
                                     Ok(_) => {
-                                        *status_clone.lock().unwrap() = ConnectionStatus::Connected(DaemonStatus {
-                                            protocol_version: 1,
-                                            active_monitors: 0,
-                                            assigned_wallpapers: 0,
-                                            is_paused: false,
-                                            monitors: vec![],
-                                        });
+                                        *status_clone
+                                            .lock()
+                                            .unwrap_or_else(|err| err.into_inner()) =
+                                            ConnectionStatus::Connected(DaemonStatus {
+                                                protocol_version: 1,
+                                                active_monitors: 0,
+                                                assigned_wallpapers: 0,
+                                                is_paused: false,
+                                                monitors: vec![],
+                                            });
                                     }
                                     Err(e) => {
-                                        *status_clone.lock().unwrap() = ConnectionStatus::Error(e.to_string());
+                                        *status_clone
+                                            .lock()
+                                            .unwrap_or_else(|err| err.into_inner()) =
+                                            ConnectionStatus::Error(e.to_string());
                                         ctx.request_repaint();
                                         tokio::time::sleep(Duration::from_secs(2)).await;
                                         continue;
@@ -82,61 +87,68 @@ impl UiIpcClient {
                                 ctx.request_repaint();
 
                                 // Initial wallpaper list fetch
-                                if let Ok(Response::WallpaperList(list)) = client.send(Request::ListWallpapers).await {
-                                    tracing::info!("UI initial fetch received {} wallpaper(s) over IPC", list.len());
-                                    *wallpapers_clone.lock().unwrap() = list;
+                                if let Ok(Response::WallpaperList(list)) =
+                                    client.send(Request::ListWallpapers).await
+                                {
+                                    tracing::info!(
+                                        "UI initial fetch received {} wallpaper(s) over IPC",
+                                        list.len()
+                                    );
+                                    *wallpapers_clone
+                                        .lock()
+                                        .unwrap_or_else(|err| err.into_inner()) = list;
                                     ctx.request_repaint();
                                 }
 
+                                let mut health_check =
+                                    tokio::time::interval(Duration::from_secs(3));
                                 loop {
                                     tokio::select! {
                                         cmd = cmd_rx.recv() => {
                                             match cmd {
-                                                 Some((req, resp_tx)) => {
-                                                     tracing::info!("UI sending IPC request: {:?}", req);
-                                                     let res = client.send(req).await;
-                                                     match &res {
-                                                         Ok(Response::Status(s)) => {
-                                                             tracing::info!("UI received Status update: {} monitor(s)", s.active_monitors);
-                                                             *status_clone.lock().unwrap() = ConnectionStatus::Connected(s.clone());
-                                                             *last_error_clone.lock().unwrap() = None;
-                                                         }
-                                                         Ok(Response::WallpaperList(list)) => {
-                                                             tracing::info!("UI received WallpaperList with {} wallpaper(s)", list.len());
-                                                             *wallpapers_clone.lock().unwrap() = list.clone();
-                                                             *last_error_clone.lock().unwrap() = None;
-                                                         }
-                                                         Ok(Response::Config(c)) => {
-                                                             tracing::info!("UI received Config update");
-                                                             *config_clone.lock().unwrap() = Some(c.clone());
-                                                             *last_error_clone.lock().unwrap() = None;
-                                                         }
-                                                         Ok(Response::Error { reason }) => {
-                                                             tracing::warn!("Daemon returned error: {}", reason);
-                                                             *last_error_clone.lock().unwrap() = Some(reason.clone());
-                                                         }
-                                                         Ok(_) => {
-                                                             *last_error_clone.lock().unwrap() = None;
-                                                         }
-                                                         Err(e) => {
-                                                             tracing::warn!("IPC transport error: {}", e);
-                                                             *last_error_clone.lock().unwrap() = Some(e.to_string());
-                                                         }
-                                                     }
-                                                     ctx.request_repaint();
-                                                     let _ = resp_tx.send(res.map_err(|e| e.to_string()));
-                                                     ctx.request_repaint();
-                                                 }
+                                                Some(req) => {
+                                                    tracing::info!("UI sending IPC request: {:?}", req);
+                                                    let res = client.send(req).await;
+                                                    match &res {
+                                                        Ok(Response::Status(s)) => {
+                                                            tracing::info!("UI received Status update: {} monitor(s)", s.active_monitors);
+                                                            *status_clone.lock().unwrap_or_else(|err| err.into_inner()) = ConnectionStatus::Connected(s.clone());
+                                                            *last_error_clone.lock().unwrap_or_else(|err| err.into_inner()) = None;
+                                                        }
+                                                        Ok(Response::WallpaperList(list)) => {
+                                                            tracing::info!("UI received WallpaperList with {} wallpaper(s)", list.len());
+                                                            *wallpapers_clone.lock().unwrap_or_else(|err| err.into_inner()) = list.clone();
+                                                            *last_error_clone.lock().unwrap_or_else(|err| err.into_inner()) = None;
+                                                        }
+                                                        Ok(Response::Config(c)) => {
+                                                            tracing::info!("UI received Config update");
+                                                            *config_clone.lock().unwrap_or_else(|err| err.into_inner()) = Some(c.clone());
+                                                            *last_error_clone.lock().unwrap_or_else(|err| err.into_inner()) = None;
+                                                        }
+                                                        Ok(Response::Error { reason }) => {
+                                                            tracing::warn!("Daemon returned error: {}", reason);
+                                                            *last_error_clone.lock().unwrap_or_else(|err| err.into_inner()) = Some(reason.clone());
+                                                        }
+                                                        Ok(_) => {
+                                                            *last_error_clone.lock().unwrap_or_else(|err| err.into_inner()) = None;
+                                                        }
+                                                        Err(e) => {
+                                                            tracing::warn!("IPC transport error: {}", e);
+                                                            *last_error_clone.lock().unwrap_or_else(|err| err.into_inner()) = Some(e.to_string());
+                                                        }
+                                                    }
+                                                    ctx.request_repaint();
+                                                }
                                                 None => return,
                                             }
                                         }
-                                        _ = tokio::time::sleep(Duration::from_secs(3)) => {
+                                        _ = health_check.tick() => {
                                             match client.send(Request::GetStatus).await {
                                                 Ok(Response::Status(s)) => {
-                                                    *status_clone.lock().unwrap() = ConnectionStatus::Connected(s);
+                                                    *status_clone.lock().unwrap_or_else(|err| err.into_inner()) = ConnectionStatus::Connected(s);
                                                 }
                                                 Err(_e) => {
-                                                    *status_clone.lock().unwrap() = ConnectionStatus::Disconnected;
+                                                    *status_clone.lock().unwrap_or_else(|err| err.into_inner()) = ConnectionStatus::Disconnected;
                                                     ctx.request_repaint();
                                                     break;
                                                 }
@@ -148,7 +160,8 @@ impl UiIpcClient {
                                 }
                             }
                             Err(_) => {
-                                *status_clone.lock().unwrap() = ConnectionStatus::Disconnected;
+                                *status_clone.lock().unwrap_or_else(|err| err.into_inner()) =
+                                    ConnectionStatus::Disconnected;
                                 ctx.request_repaint();
                                 tokio::time::sleep(Duration::from_secs(2)).await;
                             }
@@ -203,7 +216,6 @@ impl UiIpcClient {
     }
 
     pub fn send(&self, req: Request) {
-        let (tx, _rx) = tokio::sync::oneshot::channel();
-        let _ = self.cmd_tx.send((req, tx));
+        let _ = self.cmd_tx.send(req);
     }
 }
