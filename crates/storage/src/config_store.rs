@@ -27,7 +27,7 @@ impl ConfigStore {
     ///
     /// - Missing file → returns `AppConfig::default()`.
     /// - Corrupt file → returns `StorageError::Corrupt`.
-    /// - Old version  → migrates in memory and saves back.
+    /// - Schema mismatch → runs migration / version check safety net.
     pub fn load(&self) -> Result<AppConfig, StorageError> {
         if !self.path.exists() {
             info!("No config file at {:?}; creating default config", self.path);
@@ -40,9 +40,13 @@ impl ConfigStore {
         let mut cfg: AppConfig = toml::from_str(&raw)
             .map_err(|e| StorageError::Corrupt(format!("TOML parse error: {}", e)))?;
 
-        // Run migration if schema version is older.
-        if cfg.version < CONFIG_VERSION {
-            warn!(from = cfg.version, to = CONFIG_VERSION, "Migrating config");
+        // Run migration / version check if schema version does not match CONFIG_VERSION.
+        if cfg.version != CONFIG_VERSION {
+            warn!(
+                from = cfg.version,
+                to = CONFIG_VERSION,
+                "Checking config schema version"
+            );
             cfg = migration::migrate(cfg)?;
             self.save(&cfg)?;
         }

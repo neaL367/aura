@@ -37,7 +37,7 @@ pub fn atomic_save_bytes(path: &Path, bytes: &[u8]) -> Result<(), StorageError> 
 
         // SAFETY: `from_wide` and `to_wide` are null-terminated wide string vectors derived via `to_wide`
         // that remain allocated and valid on the stack for the entire duration of the MoveFileExW Win32 FFI call.
-        let res = unsafe {
+        let mut res = unsafe {
             MoveFileExW(
                 PCWSTR(from_wide.as_ptr()),
                 PCWSTR(to_wide.as_ptr()),
@@ -46,17 +46,27 @@ pub fn atomic_save_bytes(path: &Path, bytes: &[u8]) -> Result<(), StorageError> 
         };
 
         if res.is_err() {
-            let _ = std::fs::remove_file(path);
-            if let Err(e) = std::fs::rename(&tmp_path, path) {
-                let _ = std::fs::remove_file(&tmp_path);
-                return Err(StorageError::Io(e));
-            }
+            // Retry MoveFileExW once after a short 10ms delay for transient file locks (e.g., antivirus scan).
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            res = unsafe {
+                MoveFileExW(
+                    PCWSTR(from_wide.as_ptr()),
+                    PCWSTR(to_wide.as_ptr()),
+                    MOVEFILE_REPLACE_EXISTING,
+                )
+            };
+        }
+
+        if let Err(e) = res {
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(StorageError::Io(std::io::Error::from_raw_os_error(
+                e.code().0,
+            )));
         }
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = std::fs::remove_file(path);
         if let Err(e) = std::fs::rename(&tmp_path, path) {
             let _ = std::fs::remove_file(&tmp_path);
             return Err(StorageError::Io(e));
