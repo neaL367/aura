@@ -1,7 +1,7 @@
 use windows::{
     Win32::{
         Foundation::{CloseHandle, HANDLE},
-        System::Threading::{CreateMutexW, ReleaseMutex},
+        System::Threading::CreateMutexW,
     },
     core::w,
 };
@@ -11,7 +11,7 @@ use crate::error::PlatformError;
 /// Named-mutex process singleton.
 ///
 /// Ensures only one `wallpaperd` instance runs at a time.
-/// Drop releases the mutex.
+/// Closing the handle on Drop releases the named kernel mutex object.
 pub struct ProcessSingleton {
     mutex: HANDLE,
 }
@@ -26,7 +26,7 @@ impl ProcessSingleton {
         // SAFETY: CreateMutexW with a valid name; initial owner = false.
         let mutex = unsafe { CreateMutexW(None, false, MUTEX_NAME)? };
 
-        // A handle returned but the mutex already exists — check if we own it.
+        // A handle returned but the mutex already exists — check if another process created it.
         let last_error = unsafe { windows::Win32::Foundation::GetLastError() };
         if last_error == windows::Win32::Foundation::ERROR_ALREADY_EXISTS {
             unsafe {
@@ -42,9 +42,8 @@ impl ProcessSingleton {
 impl Drop for ProcessSingleton {
     fn drop(&mut self) {
         if !self.mutex.is_invalid() {
-            // SAFETY: Valid owned handle.
+            // SAFETY: Valid owned handle. Closing the handle releases the named mutex kernel object.
             unsafe {
-                let _ = ReleaseMutex(self.mutex);
                 let _ = CloseHandle(self.mutex);
             }
         }

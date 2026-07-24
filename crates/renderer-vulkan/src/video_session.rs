@@ -53,8 +53,21 @@ impl VulkanVideoSession {
     ///
     /// # Safety
     /// Must be called when GPU execution using this session has completed.
-    pub unsafe fn destroy(&mut self, _context: &VulkanContext) {
-        self.dpb_slots.clear();
+    pub unsafe fn destroy(&mut self, context: &VulkanContext) {
+        let mut allocator_lock = context.allocator.lock().unwrap();
+        for slot in self.dpb_slots.drain(..) {
+            unsafe {
+                if slot.view != vk::ImageView::null() {
+                    context.device.destroy_image_view(slot.view, None);
+                }
+                if slot.image != vk::Image::null() {
+                    context.device.destroy_image(slot.image, None);
+                }
+                if let (Some(allocator), Some(alloc)) = (allocator_lock.as_mut(), slot.allocation) {
+                    let _ = allocator.free(alloc);
+                }
+            }
+        }
         self.session = vk::VideoSessionKHR::null();
         self.session_parameters = vk::VideoSessionParametersKHR::null();
     }
