@@ -26,34 +26,64 @@ pub fn setup_host_window_placement(
                     x: info.x,
                     y: info.y,
                 };
-                let _ = ScreenToClient(workerw, &mut pt);
-                let _ = MoveWindow(
+
+                // Explicitly check ScreenToClient return value (BOOL) to prevent corrupt coordinate placement
+                if !ScreenToClient(workerw, &mut pt).as_bool() {
+                    tracing::warn!(
+                        "ScreenToClient failed for WorkerW {:?}, monitor {}; coordinates ({}, {}) remain unmodified",
+                        workerw.0,
+                        info.id,
+                        info.x,
+                        info.y
+                    );
+                }
+
+                if let Err(e) = MoveWindow(
                     hwnd,
                     pt.x,
                     pt.y,
                     info.width as i32,
                     info.height as i32,
                     true,
-                );
+                ) {
+                    tracing::warn!(
+                        "MoveWindow failed for monitor {} host window: {}",
+                        info.id,
+                        e
+                    );
+                }
+
                 let _ = ShowWindow(hwnd, SW_SHOW);
                 let _ = InvalidateRect(Some(hwnd), None, true);
 
                 let visible = IsWindowVisible(hwnd).as_bool();
                 let mut wrect = RECT::default();
-                let _ = GetWindowRect(hwnd, &mut wrect);
-                tracing::info!(
-                    "Monitor {} host window placed at client-relative ({}, {}), size {}x{}; resulting screen rect ({},{})-({},{}) visible={}",
-                    info.id,
-                    pt.x,
-                    pt.y,
-                    info.width,
-                    info.height,
-                    wrect.left,
-                    wrect.top,
-                    wrect.right,
-                    wrect.bottom,
-                    visible
-                );
+                let rect_ok = GetWindowRect(hwnd, &mut wrect).is_ok();
+                if rect_ok {
+                    tracing::info!(
+                        "Monitor {} host window placed at client-relative ({}, {}), size {}x{}; resulting screen rect ({},{})-({},{}) visible={}",
+                        info.id,
+                        pt.x,
+                        pt.y,
+                        info.width,
+                        info.height,
+                        wrect.left,
+                        wrect.top,
+                        wrect.right,
+                        wrect.bottom,
+                        visible
+                    );
+                } else {
+                    tracing::warn!(
+                        "Monitor {} host window placed at ({}, {}), size {}x{}, but GetWindowRect failed; visible={}",
+                        info.id,
+                        pt.x,
+                        pt.y,
+                        info.width,
+                        info.height,
+                        visible
+                    );
+                }
             }
         }
     } else {

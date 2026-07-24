@@ -40,7 +40,11 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
         let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
 
         let mut client_rect = windows::Win32::Foundation::RECT::default();
-        let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(workerw, &mut client_rect);
+        if let Err(e) =
+            windows::Win32::UI::WindowsAndMessaging::GetClientRect(workerw, &mut client_rect)
+        {
+            tracing::warn!("GetClientRect failed for WorkerW {:?}: {}", workerw.0, e);
+        }
         let client_w = client_rect.right - client_rect.left;
         let client_h = client_rect.bottom - client_rect.top;
 
@@ -74,7 +78,7 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
         use windows::Win32::UI::WindowsAndMessaging::GWL_EXSTYLE;
         SetWindowLongPtrW(host_hwnd, GWL_EXSTYLE, 0);
 
-        let _ = SetWindowPos(
+        if let Err(e) = SetWindowPos(
             host_hwnd,
             Some(HWND_BOTTOM),
             0,
@@ -85,7 +89,13 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
                 | windows::Win32::UI::WindowsAndMessaging::SWP_NOSIZE
                 | windows::Win32::UI::WindowsAndMessaging::SWP_FRAMECHANGED
                 | SWP_SHOWWINDOW,
-        );
+        ) {
+            tracing::warn!(
+                "SetWindowPos HWND_BOTTOM failed for host window {:?}: {}",
+                host_hwnd.0,
+                e
+            );
+        }
 
         let _ = ShowWindow(host_hwnd, SW_SHOW);
         let _ = UpdateWindow(host_hwnd);
@@ -108,8 +118,14 @@ pub fn attach_topmost_bottom(
     use windows::Win32::UI::WindowsAndMessaging::{HWND_BOTTOM, MoveWindow, SWP_SHOWWINDOW};
 
     unsafe {
-        let _ = MoveWindow(host_hwnd, x, y, width, height, true);
-        let _ = SetWindowPos(
+        if let Err(e) = MoveWindow(host_hwnd, x, y, width, height, true) {
+            tracing::warn!(
+                "MoveWindow fallback failed for host window {:?}: {}",
+                host_hwnd.0,
+                e
+            );
+        }
+        if let Err(e) = SetWindowPos(
             host_hwnd,
             Some(HWND_BOTTOM),
             0,
@@ -120,7 +136,13 @@ pub fn attach_topmost_bottom(
                 | windows::Win32::UI::WindowsAndMessaging::SWP_NOSIZE
                 | windows::Win32::UI::WindowsAndMessaging::SWP_FRAMECHANGED
                 | SWP_SHOWWINDOW,
-        );
+        ) {
+            tracing::warn!(
+                "SetWindowPos fallback failed for host window {:?}: {}",
+                host_hwnd.0,
+                e
+            );
+        }
         let _ = ShowWindow(host_hwnd, SW_SHOW);
         let _ = InvalidateRect(Some(host_hwnd), None, true);
     }
