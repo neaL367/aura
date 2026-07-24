@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use aura_core::monitor::MonitorId;
 use aura_core::wallpaper::WallpaperMeta;
 use aura_ipc::protocol::{MonitorSummary, Request, Response};
-use aura_storage::{config_store::ConfigStore, library_store::LibraryStore};
+use aura_storage::{LibraryWatcher, config_store::ConfigStore, library_store::LibraryStore};
 
 use crate::assignment::AssignmentManager;
 use crate::render_thread::RenderCommand;
@@ -22,6 +22,7 @@ pub struct OrchestratorState {
     pub config_store: ConfigStore,
     pub library_store: LibraryStore,
     pub wallpaper_txs: HashMap<MonitorId, crossbeam_channel::Sender<RenderCommand>>,
+    pub watcher: Option<LibraryWatcher>,
 }
 
 impl OrchestratorState {

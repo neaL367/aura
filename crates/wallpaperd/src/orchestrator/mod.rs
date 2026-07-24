@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use aura_core::monitor::MonitorId;
 use aura_ipc::protocol::{MonitorSummary, Request, Response};
-use aura_storage::{config_store::ConfigStore, library_store::LibraryStore};
+use aura_storage::{LibraryWatcher, config_store::ConfigStore, library_store::LibraryStore};
 use tracing::info;
 
 use crate::assignment::AssignmentManager;
@@ -70,12 +70,19 @@ impl Orchestrator {
                 config_store,
                 library_store,
                 wallpaper_txs,
+                watcher: None,
             })),
             shutdown_tx,
         };
 
         orchestrator.trigger_auto_refresh();
         orchestrator
+    }
+
+    pub fn set_watcher(&self, watcher: LibraryWatcher) {
+        if let Ok(mut state) = self.state.lock() {
+            state.watcher = Some(watcher);
+        }
     }
 
     pub fn scan_paths(&self) -> Vec<PathBuf> {

@@ -65,4 +65,13 @@ impl LibraryWatcher {
             }
         }
     }
+
+    /// Remove a path from the active filesystem watcher.
+    pub fn remove_path(&mut self, path: &Path) {
+        if let Err(e) = self._debouncer.unwatch(path) {
+            tracing::warn!("Failed to unwatch scan path {}: {}", path.display(), e);
+        } else {
+            tracing::info!("Filesystem watcher unmonitored {}", path.display());
+        }
+    }
 }

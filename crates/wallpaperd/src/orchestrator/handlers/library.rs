@@ -99,6 +99,16 @@ pub(super) fn handle_update_scan_path(
                 reason: format!("Failed to update scan path: {}", e),
             };
         }
+
+        // Live update the active filesystem watcher
+        if let Some(watcher) = &mut state.watcher {
+            if is_add {
+                watcher.add_path(&path);
+            } else {
+                watcher.remove_path(&path);
+            }
+        }
+
         paths
     };
 

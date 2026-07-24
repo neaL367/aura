@@ -99,10 +99,11 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
 
     let orchestrator_watcher = orchestrator.clone();
     let scan_paths = orchestrator.scan_paths();
-    let _watcher = aura_storage::LibraryWatcher::new(&scan_paths, move || {
+    if let Ok(watcher) = aura_storage::LibraryWatcher::new(&scan_paths, move || {
         orchestrator_watcher.trigger_auto_refresh();
-    })
-    .ok();
+    }) {
+        orchestrator.set_watcher(watcher);
+    }
 
     tracing::info!("IPC server listening on \\\\.\\pipe\\aura-wallpaperd");
 
