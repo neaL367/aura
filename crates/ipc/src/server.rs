@@ -40,17 +40,42 @@ impl IpcServer {
         info!("IPC server listening on {}", self.pipe_name);
 
         loop {
-            let server = ServerOptions::new()
+            let server = match ServerOptions::new()
                 .first_pipe_instance(false)
                 .create(&self.pipe_name)
-                .map_err(IpcError::Io)?;
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!(
+                        "Failed to create named pipe instance: {}; retrying in 100ms",
+                        e
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    continue;
+                }
+            };
 
             // Wait for a connection or shutdown.
             tokio::select! {
                 result = server.connect() => {
-                    result.map_err(IpcError::Io)?;
-                    let handler = self.handler.clone();
-                    tokio::spawn(handle_client(server, handler));
+                    match result {
+                        Ok(()) => {
+                            let handler = self.handler.clone();
+                            tokio::spawn(handle_client(server, handler));
+                        }
+                        Err(e) => {
+                            // On Windows, if a client connects between pipe creation and connect(),
+                            // ConnectNamedPipe returns ERROR_PIPE_CONNECTED (535 / 0x217) or std::io::ErrorKind::AlreadyExists.
+                            // This indicates the client has already connected and the pipe instance is valid.
+                            if e.raw_os_error() == Some(535) || e.kind() == std::io::ErrorKind::AlreadyExists {
+                                let handler = self.handler.clone();
+                                tokio::spawn(handle_client(server, handler));
+                            } else {
+                                warn!("IPC pipe connect error: {}; retrying in 100ms", e);
+                                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                            }
+                        }
+                    }
                 }
                 _ = shutdown.changed() => {
                     info!("IPC server shutting down");
