@@ -78,9 +78,19 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
         use windows::Win32::UI::WindowsAndMessaging::GWL_EXSTYLE;
         SetWindowLongPtrW(host_hwnd, GWL_EXSTYLE, 0);
 
+        use windows::Win32::UI::WindowsAndMessaging::FindWindowExW;
+        use windows::core::w;
+
+        let def_view = FindWindowExW(Some(workerw), None, w!("SHELLDLL_DefView"), None).unwrap_or_default();
+        let insert_after = if !def_view.0.is_null() {
+            def_view
+        } else {
+            HWND_BOTTOM
+        };
+
         if let Err(e) = SetWindowPos(
             host_hwnd,
-            Some(HWND_BOTTOM),
+            Some(insert_after),
             0,
             0,
             0,
@@ -91,7 +101,7 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
                 | SWP_SHOWWINDOW,
         ) {
             tracing::warn!(
-                "SetWindowPos HWND_BOTTOM failed for host window {:?}: {}",
+                "SetWindowPos failed for host window {:?}: {}",
                 host_hwnd.0,
                 e
             );

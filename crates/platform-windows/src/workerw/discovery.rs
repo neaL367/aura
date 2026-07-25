@@ -13,11 +13,13 @@ use windows::{
 
 use crate::error::PlatformError;
 
+#[allow(dead_code)]
 pub(super) struct ScanResult {
     pub target: Option<HWND>,
     pub candidates: Vec<isize>,
 }
 
+#[allow(dead_code)]
 pub(super) struct ScanContext {
     pub target: Option<HWND>,
     pub candidates: Vec<isize>,
@@ -123,33 +125,17 @@ pub fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformError> {
         );
     }
 
-    // Step 3: Poll for WorkerW up to ~2s, with candidate set stability detection.
-    let mut prev_candidates: Option<Vec<isize>> = None;
-
-    for i in 0..8 {
+    // Step 3: Poll for WorkerW up to ~1.2s (12 attempts x 100ms) for Explorer to split.
+    for i in 0..12 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
         let scan = find_workerw_pass();
         if let Some(target) = scan.target {
             tracing::info!(
-                "WorkerW split discovery succeeded (attempt {}/8): found dedicated WorkerW window HWND({:?})",
+                "WorkerW split discovery succeeded (attempt {}/12): found dedicated WorkerW window HWND({:?})",
                 i + 1,
                 target.0
             );
             return Ok(target);
-        }
-
-        if prev_candidates.as_ref() == Some(&scan.candidates) {
-            tracing::info!(
-                "WorkerW candidate set unchanged between attempts {} and {} ({} candidates inspected); short-circuiting to Progman fallback",
-                i,
-                i + 1,
-                scan.candidates.len()
-            );
-            break;
-        }
-        prev_candidates = Some(scan.candidates);
-
-        if i < 7 {
-            std::thread::sleep(std::time::Duration::from_millis(250));
         }
     }
 

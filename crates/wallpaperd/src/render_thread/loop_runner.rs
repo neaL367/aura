@@ -105,6 +105,12 @@ pub fn run_render_loop(params: RenderLoopParams) {
                             }
                             Some(MediaKind::Image) => {
                                 load_and_upload_static_image(&new_path, &mut renderer, &context);
+                                if renderer.frame(&context, [0.0, 0.0, 0.0, 1.0]).is_ok() {
+                                    counter.fetch_add(1, Ordering::Relaxed);
+                                    renderer.trim_staging(&context);
+                                    aura_platform_windows::trim_working_set();
+                                    is_dirty = false;
+                                }
                             }
                             _ => {
                                 tracing::warn!(
