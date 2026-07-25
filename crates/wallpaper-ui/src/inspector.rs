@@ -19,8 +19,8 @@ impl InspectorPanel {
     pub fn show_placeholder(&mut self, ui: &mut egui::Ui) {
         let frame = egui::Frame::new()
             .fill(theme::BG_INSPECTOR)
-            .corner_radius(theme::RADIUS_MD)
-            .stroke(egui::Stroke::new(1.0, theme::BORDER_SUBTLE))
+            .corner_radius(0.0)
+            .stroke(egui::Stroke::NONE)
             .inner_margin(egui::Margin::same(theme::SPACING_LG as i8));
 
         frame.show(ui, |ui| {
@@ -59,8 +59,8 @@ impl InspectorPanel {
     ) {
         let frame = egui::Frame::new()
             .fill(theme::BG_INSPECTOR)
-            .corner_radius(theme::RADIUS_MD)
-            .stroke(egui::Stroke::new(1.0, theme::BORDER_SUBTLE))
+            .corner_radius(0.0)
+            .stroke(egui::Stroke::NONE)
             .inner_margin(egui::Margin::same(theme::SPACING_LG as i8));
 
         frame.show(ui, |ui| {

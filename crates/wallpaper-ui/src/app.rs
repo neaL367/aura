@@ -121,8 +121,8 @@ impl eframe::App for AuraApp {
                         ui.set_min_height(full_height);
                         let content_frame = egui::Frame::new()
                             .fill(crate::theme::CONTENT_CARD)
-                            .corner_radius(crate::theme::RADIUS_MD)
-                            .stroke(egui::Stroke::new(1.0, crate::theme::BORDER_SUBTLE))
+                            .corner_radius(0.0)
+                            .stroke(egui::Stroke::NONE)
                             .inner_margin(egui::Margin::symmetric(
                                 crate::theme::SPACING_LG as i8,
                                 crate::theme::SPACING_LG as i8,

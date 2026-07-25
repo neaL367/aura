@@ -13,8 +13,8 @@ impl Sidebar {
         let sidebar_id = ui.make_persistent_id("aura_sidebar");
         let sidebar_frame = egui::Frame::new()
             .fill(theme::BG_SIDEBAR)
-            .corner_radius(theme::RADIUS_MD)
-            .stroke(egui::Stroke::new(1.0, theme::BORDER_SUBTLE));
+            .corner_radius(0.0)
+            .stroke(egui::Stroke::NONE);
 
         sidebar_frame.show(ui, |ui| {
             ui.set_min_width(theme::SIDEBAR_WIDTH);
