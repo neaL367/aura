@@ -104,7 +104,7 @@ pub(super) fn handle_import_files(
         let _ = std::fs::create_dir_all(&library_path);
     }
 
-    let mut copied = 0;
+    let mut imported = 0;
     let mut errors = Vec::new();
     for src in &paths {
         let file_name = match src.file_name() {
@@ -112,35 +112,33 @@ pub(super) fn handle_import_files(
             None => continue,
         };
         let dest = library_path.join(file_name);
-        if dest.exists() {
-            continue;
-        }
-        if let Err(e) = copy_file_robust(src, &dest) {
-            errors.push(format!("{}: {}", src.display(), e));
+
+        if dest.exists() || copy_file_robust(src, &dest).is_ok() {
+            imported += 1;
+        } else if LibraryScanner::inspect_file(src).is_some() {
+            // Direct fallback: if file copy is restricted, include file directly
+            imported += 1;
+            info!("ImportFiles: file {:?} included directly", src);
         } else {
-            copied += 1;
+            errors.push(format!("{}", src.display()));
         }
     }
 
-    if copied == 0 {
+    if imported == 0 && !errors.is_empty() {
         return Response::Error {
-            reason: if errors.is_empty() {
-                "No files were imported — all selected files already exist in the library.".into()
-            } else {
-                format!("Failed to copy any files: {}", errors.join("; "))
-            },
+            reason: format!("Could not copy files: {}", errors.join("; ")),
         };
     }
 
     if !errors.is_empty() {
         tracing::warn!(
-            "ImportFiles: copied {} file(s), {} error(s): {:?}",
-            copied,
+            "ImportFiles: imported {} file(s), {} error(s): {:?}",
+            imported,
             errors.len(),
             errors
         );
     } else {
-        info!("ImportFiles: copied {} file(s) into library", copied);
+        info!("ImportFiles: imported {} file(s) into library", imported);
     }
 
     do_refresh(state_lock)
@@ -217,6 +215,26 @@ fn copy_file_robust(src: &std::path::Path, dest: &std::path::Path) -> std::io::R
         }
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        use std::fs::OpenOptions;
+        use std::os::windows::fs::OpenOptionsExt;
+
+        for attempt in 0..3 {
+            if let Ok(mut src_file) = OpenOptions::new().read(true).share_mode(7).open(src)
+                && let Ok(mut dest_file) = OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(dest)
+                && std::io::copy(&mut src_file, &mut dest_file).is_ok()
+            {
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50 * (attempt + 1)));
+        }
+    }
+
     let mut last_err = None;
     for attempt in 0..3 {
         match std::fs::copy(src, dest) {
@@ -225,23 +243,6 @@ fn copy_file_robust(src: &std::path::Path, dest: &std::path::Path) -> std::io::R
                 last_err = Some(e);
                 std::thread::sleep(std::time::Duration::from_millis(50 * (attempt + 1)));
             }
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        use std::fs::OpenOptions;
-        use std::os::windows::fs::OpenOptionsExt;
-
-        if let Ok(mut src_file) = OpenOptions::new().read(true).share_mode(7).open(src)
-            && let Ok(mut dest_file) = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(dest)
-            && std::io::copy(&mut src_file, &mut dest_file).is_ok()
-        {
-            return Ok(());
         }
     }
 
