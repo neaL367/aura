@@ -9,7 +9,7 @@ use aura_ipc::protocol::{MonitorSummary, Request, Response};
 use aura_storage::{LibraryWatcher, config_store::ConfigStore, library_store::LibraryStore};
 use tracing::info;
 
-use crate::assignment::AssignmentManager;
+use crate::assignment_manager::AssignmentManager;
 use crate::render_thread::RenderCommand;
 pub use handlers::OrchestratorState;
 

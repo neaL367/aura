@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use aura_platform_windows::PlatformError;
 use aura_platform_windows::event_pump::{EventPump, HostEvent};
-use aura_platform_windows::monitor_enum::MonitorEnumerator;
+use aura_platform_windows::monitor_enumerator::MonitorEnumerator;
 use aura_platform_windows::singleton::ProcessSingleton;
 use aura_platform_windows::workerw::WorkerWManager;
 use aura_renderer_vulkan::VulkanContext;
@@ -18,7 +18,7 @@ static CTRLC_REQUESTED: std::sync::LazyLock<Arc<AtomicBool>> =
     std::sync::LazyLock::new(|| Arc::new(AtomicBool::new(false)));
 
 use crate::orchestrator::Orchestrator;
-use crate::perf::PerfMonitor;
+use crate::perf_monitor::PerfMonitor;
 use crate::recovery::RecoveryManager;
 use crate::render_coordinator::RenderCoordinator;
 use crate::render_thread;

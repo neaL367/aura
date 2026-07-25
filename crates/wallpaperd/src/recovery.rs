@@ -28,7 +28,7 @@ impl RecoveryManager {
         tracing::info!("RecoveryManager: Re-enumerating monitors after display change...");
         #[cfg(target_os = "windows")]
         {
-            aura_platform_windows::monitor_enum::MonitorEnumerator::enumerate()
+            aura_platform_windows::monitor_enumerator::MonitorEnumerator::enumerate()
         }
         #[cfg(not(target_os = "windows"))]
         {

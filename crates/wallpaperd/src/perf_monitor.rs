@@ -54,7 +54,7 @@ impl PerfMonitor {
                     0.0
                 };
 
-                let (working_set_mb, private_mb) = aura_platform_windows::get_process_memory_mb();
+                let (working_set_mb, private_mb) = aura_platform_windows::process_memory_mb();
 
                 if frames == 0 {
                     info!(

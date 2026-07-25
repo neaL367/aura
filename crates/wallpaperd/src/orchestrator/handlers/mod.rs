@@ -10,7 +10,7 @@ use aura_core::wallpaper::WallpaperMeta;
 use aura_ipc::protocol::{MonitorSummary, Request, Response};
 use aura_storage::{LibraryWatcher, config_store::ConfigStore, library_store::LibraryStore};
 
-use crate::assignment::AssignmentManager;
+use crate::assignment_manager::AssignmentManager;
 use crate::render_thread::RenderCommand;
 
 pub struct OrchestratorState {
