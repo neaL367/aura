@@ -81,7 +81,8 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
         use windows::Win32::UI::WindowsAndMessaging::FindWindowExW;
         use windows::core::w;
 
-        let def_view = FindWindowExW(Some(workerw), None, w!("SHELLDLL_DefView"), None).unwrap_or_default();
+        let def_view =
+            FindWindowExW(Some(workerw), None, w!("SHELLDLL_DefView"), None).unwrap_or_default();
         let insert_after = if !def_view.0.is_null() {
             def_view
         } else {

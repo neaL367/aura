@@ -4,11 +4,11 @@
 //!
 //! - `workerw`: WorkerW discovery and `ensure_attached()`.
 //! - `host_window`: Per-monitor HWND lifecycle (create, destroy, recreate).
-//! - `monitor_enum`: Stable monitor enumeration with device-path IDs.
+//! - `monitor_enumerator`: Stable monitor enumeration with device-path IDs.
 //! - `singleton`: Named-mutex process singleton.
 //! - `event_pump`: Win32 message loop and `HostEvent` enum.
 //! - `power`: Power / session change notifications.
-//! - `mf_video`: Media Foundation video decoder.
+//! - `mf_video_decoder`: Media Foundation video decoder.
 
 #[cfg(target_os = "windows")]
 pub mod error;
@@ -19,9 +19,9 @@ pub mod h264_parser;
 #[cfg(target_os = "windows")]
 pub mod host_window;
 #[cfg(target_os = "windows")]
-pub mod mf_video;
+pub mod mf_video_decoder;
 #[cfg(target_os = "windows")]
-pub mod monitor_enum;
+pub mod monitor_enumerator;
 #[cfg(target_os = "windows")]
 pub mod power;
 #[cfg(target_os = "windows")]
@@ -32,7 +32,7 @@ pub mod workerw;
 #[cfg(target_os = "windows")]
 pub use error::PlatformError;
 #[cfg(target_os = "windows")]
-pub use mf_video::{MfH264Demuxer, MfVideoDecoder};
+pub use mf_video_decoder::{MfH264Demuxer, MfVideoDecoder};
 
 #[cfg(target_os = "windows")]
 pub fn enable_dpi_awareness() -> Result<(), PlatformError> {
@@ -47,7 +47,7 @@ pub fn enable_dpi_awareness() -> Result<(), PlatformError> {
 
 /// Returns process RAM memory usage `(working_set_mb, private_bytes_mb)`.
 #[cfg(target_os = "windows")]
-pub fn get_process_memory_mb() -> (f32, f32) {
+pub fn process_memory_mb() -> (f32, f32) {
     use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
     use windows::Win32::System::Threading::GetCurrentProcess;
 
@@ -258,7 +258,7 @@ pub mod stub {
     pub fn enable_dpi_awareness() -> Result<(), PlatformError> {
         Ok(())
     }
-    pub fn get_process_memory_mb() -> (f32, f32) {
+    pub fn process_memory_mb() -> (f32, f32) {
         (0.0, 0.0)
     }
 }
