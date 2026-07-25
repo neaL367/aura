@@ -24,6 +24,7 @@ impl GalleryPanel {
         let available = ui.available_width();
 
         egui::ScrollArea::vertical()
+            .id_salt("gallery_scroll")
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 // Header row

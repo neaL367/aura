@@ -27,6 +27,7 @@ impl InspectorPanel {
             ui.set_min_height(ui.available_height());
             ui.set_min_width(ui.available_width());
             egui::ScrollArea::vertical()
+                .id_salt("inspector_placeholder_scroll")
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.vertical_centered(|ui| {
@@ -66,6 +67,7 @@ impl InspectorPanel {
             ui.set_min_height(ui.available_height());
             ui.set_min_width(ui.available_width());
             egui::ScrollArea::vertical()
+                .id_salt("inspector_scroll")
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.vertical(|ui| {

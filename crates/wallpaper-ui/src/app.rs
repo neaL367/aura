@@ -112,7 +112,7 @@ impl eframe::App for AuraApp {
                         Sidebar::show(ui, &mut self.active_tab);
                     });
 
-                    ui.add_space(gap);
+                    ui.add(egui::Separator::default().vertical());
 
                     // Content column
                     ui.vertical(|ui| {
@@ -143,7 +143,7 @@ impl eframe::App for AuraApp {
 
                     // Inspector column — only on Gallery page
                     if show_inspector {
-                        ui.add_space(gap);
+                        ui.add(egui::Separator::default().vertical());
                         let monitors = match self.ipc_client.status() {
                             crate::ipc_client::ConnectionStatus::Connected(ref s) => {
                                 s.monitors.clone()
