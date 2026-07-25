@@ -12,7 +12,7 @@ pub fn execute_frame(
 ) -> Result<(), VulkanError> {
     renderer.frame_sync.wait_and_reset(&context.device)?;
 
-    let (image_index, _) = unsafe {
+    let (image_index, suboptimal) = unsafe {
         renderer
             .swapchain
             .swapchain_loader
@@ -31,6 +31,10 @@ pub fn execute_frame(
             })?
     };
 
+    if suboptimal {
+        return Err(VulkanError::SwapchainOutOfDate);
+    }
+
     let framebuffer = renderer.framebuffers[image_index as usize];
 
     unsafe {
@@ -40,7 +44,7 @@ pub fn execute_frame(
                 renderer.command_buffer,
                 vk::CommandBufferResetFlags::empty(),
             )
-            .ok();
+            .map_err(|e| VulkanError::Render(format!("reset_command_buffer failed: {}", e)))?;
     }
 
     let begin_info =
@@ -50,7 +54,7 @@ pub fn execute_frame(
         context
             .device
             .begin_command_buffer(renderer.command_buffer, &begin_info)
-            .ok();
+            .map_err(|e| VulkanError::Render(format!("begin_command_buffer failed: {}", e)))?;
     }
 
     let clear_value = vk::ClearValue {
@@ -157,7 +161,7 @@ pub fn execute_frame(
         context
             .device
             .end_command_buffer(renderer.command_buffer)
-            .ok();
+            .map_err(|e| VulkanError::Render(format!("end_command_buffer failed: {}", e)))?;
     }
 
     let wait_semaphores = [renderer.frame_sync.image_available_semaphore];
