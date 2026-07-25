@@ -34,6 +34,6 @@ impl LibraryStore {
     /// Persist the full list of wallpaper metadata (atomic write).
     pub fn save(&self, entries: &[WallpaperMeta]) -> Result<(), StorageError> {
         let serialised = serde_json::to_string_pretty(entries)?;
-        crate::atomic::atomic_save_file(&self.path, &serialised)
+        crate::atomic_file::atomic_save_file(&self.path, &serialised)
     }
 }

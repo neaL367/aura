@@ -1,6 +1,6 @@
 //! `aura-storage` — Configuration and wallpaper library metadata persistence.
 
-pub mod atomic;
+pub mod atomic_file;
 pub mod config_store;
 pub mod error;
 pub mod library_store;

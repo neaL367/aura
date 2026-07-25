@@ -57,6 +57,6 @@ impl ConfigStore {
     /// Write configuration to disk atomically (write to `.tmp`, then atomic rename).
     pub fn save(&self, config: &AppConfig) -> Result<(), StorageError> {
         let serialised = toml::to_string_pretty(config)?;
-        crate::atomic::atomic_save_file(&self.path, &serialised)
+        crate::atomic_file::atomic_save_file(&self.path, &serialised)
     }
 }
