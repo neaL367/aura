@@ -5,7 +5,7 @@ use windows::{
         Foundation::{HWND, LPARAM, WPARAM},
         UI::WindowsAndMessaging::{
             EnumWindows, FindWindowExW, FindWindowW, GW_HWNDNEXT, GetClassNameW, GetDesktopWindow,
-            GetWindow, SEND_MESSAGE_TIMEOUT_FLAGS, SendMessageTimeoutW,
+            GetWindow, SMTO_ABORTIFHUNG, SendMessageTimeoutW,
         },
     },
     core::{BOOL, w},
@@ -100,7 +100,7 @@ pub fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformError> {
         target_msg_hwnd.0
     );
 
-    // Step 2: Send 0x052C (idempotent double-dispatch).
+    // Step 2: Send 0x052C (idempotent double-dispatch with SMTO_ABORTIFHUNG).
     let mut _result: usize = 0;
     unsafe {
         SendMessageTimeoutW(
@@ -108,8 +108,8 @@ pub fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformError> {
             0x052C,
             WPARAM(0x0D),
             LPARAM(1),
-            SEND_MESSAGE_TIMEOUT_FLAGS(0),
-            1000,
+            SMTO_ABORTIFHUNG,
+            500,
             Some(&raw mut _result),
         );
         SendMessageTimeoutW(
@@ -117,8 +117,8 @@ pub fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformError> {
             0x052C,
             WPARAM(0),
             LPARAM(0),
-            SEND_MESSAGE_TIMEOUT_FLAGS(0),
-            1000,
+            SMTO_ABORTIFHUNG,
+            500,
             Some(&raw mut _result),
         );
     }

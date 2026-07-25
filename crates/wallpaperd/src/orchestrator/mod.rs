@@ -122,11 +122,46 @@ impl Orchestrator {
         if let Ok(mut state) = self.state.lock() {
             state.active_monitors = monitors.len();
             state.monitors = monitors;
-            state.wallpaper_txs = wallpaper_txs;
+            state.wallpaper_txs = wallpaper_txs.clone();
             info!(
                 "Orchestrator monitors updated — now active: {} monitor(s)",
                 state.active_monitors
             );
+
+            let config = state.config_store.load().unwrap_or_default();
+
+            for (mon_id, tx) in &wallpaper_txs {
+                let wallpaper_id = state.assignments.get(mon_id).copied().or_else(|| {
+                    config
+                        .assignments
+                        .iter()
+                        .find(|a| a.monitor_id == *mon_id)
+                        .map(|a| a.wallpaper_id)
+                });
+
+                if let Some(wallpaper_id) = wallpaper_id
+                    && let Some(meta) = state
+                        .library_items
+                        .iter()
+                        .find(|item| item.id == wallpaper_id)
+                        .cloned()
+                {
+                    let fit_mode = config
+                        .assignments
+                        .iter()
+                        .find(|a| a.monitor_id == *mon_id)
+                        .map(|a| a.fit_mode);
+
+                    info!(
+                        "Flushing active wallpaper assignment {:?} (fit_mode: {:?}) to monitor channel {:?}",
+                        meta.path, fit_mode, mon_id
+                    );
+                    let _ = tx.send(RenderCommand::SetWallpaper {
+                        path: meta.path,
+                        fit_mode,
+                    });
+                }
+            }
         }
     }
 
