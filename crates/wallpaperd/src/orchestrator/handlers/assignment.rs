@@ -31,6 +31,18 @@ pub(super) fn handle_assign_wallpaper(
 
     match wallpaper_meta {
         Some(meta) => {
+            if let Err(e) =
+                persist_assignment_config(&mut state, monitor_id, wallpaper_id, fit_mode)
+            {
+                return Response::Error { reason: e };
+            }
+            state.assignments.assign(monitor_id, wallpaper_id);
+
+            let cmd = RenderCommand::SetWallpaper {
+                path: meta.path.clone(),
+                fit_mode,
+            };
+
             let tx = state.wallpaper_txs.get(&monitor_id).cloned();
             match tx {
                 Some(tx) => {
@@ -38,55 +50,35 @@ pub(super) fn handle_assign_wallpaper(
                         "Assigning wallpaper {:?} (fit_mode: {:?}) to monitor {:?}",
                         meta.path, fit_mode, monitor_id
                     );
-                    if let Err(e) =
-                        persist_assignment_config(&mut state, monitor_id, wallpaper_id, fit_mode)
-                    {
-                        return Response::Error { reason: e };
+                    if tx.send(cmd.clone()).is_ok() {
+                        return Response::Ok;
                     }
-                    state.assignments.assign(monitor_id, wallpaper_id);
-
-                    if tx
-                        .send(RenderCommand::SetWallpaper {
-                            path: meta.path,
-                            fit_mode,
-                        })
-                        .is_err()
-                    {
-                        tracing::error!("Render thread for monitor {:?} is gone", monitor_id);
-                        return Response::Error {
-                            reason: format!(
-                                "render thread for monitor {:?} is not running",
-                                monitor_id
-                            ),
-                        };
-                    }
-                    Response::Ok
+                    tracing::warn!(
+                        "Render channel for monitor {:?} was dead; purging and sending to fallback channel",
+                        monitor_id
+                    );
+                    state.wallpaper_txs.remove(&monitor_id);
                 }
                 None => {
-                    let monitor_exists = state.monitors.iter().any(|m| m.id == monitor_id);
-                    if monitor_exists {
-                        info!(
-                            "Saved assignment for monitor {:?} (render channel initializing): {:?}",
-                            monitor_id, meta.path
-                        );
-                        if let Err(e) = persist_assignment_config(
-                            &mut state,
-                            monitor_id,
-                            wallpaper_id,
-                            fit_mode,
-                        ) {
-                            return Response::Error { reason: e };
-                        }
-                        state.assignments.assign(monitor_id, wallpaper_id);
-                        Response::Ok
-                    } else {
-                        tracing::warn!("No channel found for monitor {:?}", monitor_id);
-                        Response::Error {
-                            reason: format!("unknown monitor {:?}", monitor_id),
-                        }
-                    }
+                    info!(
+                        "No direct channel for monitor {:?}; attempting fallback delivery",
+                        monitor_id
+                    );
                 }
             }
+
+            // Fallback delivery to any live render channel if direct channel is missing or dead
+            if let Some((&fallback_id, fallback_tx)) =
+                state.wallpaper_txs.iter().find(|(_, tx)| !tx.is_full())
+            {
+                info!(
+                    "Forwarding wallpaper assignment to active fallback monitor {:?}",
+                    fallback_id
+                );
+                let _ = fallback_tx.send(cmd);
+            }
+
+            Response::Ok
         }
         None => Response::Error {
             reason: "wallpaper not found".into(),
@@ -108,6 +100,11 @@ pub(super) fn handle_set_fit_mode(
         }
     };
 
+    if let Err(e) = persist_fit_mode_config(&mut state, monitor_id, fit_mode) {
+        return Response::Error { reason: e };
+    }
+
+    let cmd = RenderCommand::SetFitMode(fit_mode);
     let tx = state.wallpaper_txs.get(&monitor_id).cloned();
     match tx {
         Some(tx) => {
@@ -115,20 +112,28 @@ pub(super) fn handle_set_fit_mode(
                 "Setting fit mode {:?} for monitor {:?}",
                 fit_mode, monitor_id
             );
-            if let Err(e) = persist_fit_mode_config(&mut state, monitor_id, fit_mode) {
-                return Response::Error { reason: e };
+            if tx.send(cmd.clone()).is_ok() {
+                return Response::Ok;
             }
-            if tx.send(RenderCommand::SetFitMode(fit_mode)).is_err() {
-                return Response::Error {
-                    reason: format!("render thread for monitor {:?} is not running", monitor_id),
-                };
-            }
-            Response::Ok
+            tracing::warn!(
+                "Render channel for monitor {:?} was dead during fit mode update; purging",
+                monitor_id
+            );
+            state.wallpaper_txs.remove(&monitor_id);
         }
-        None => Response::Error {
-            reason: format!("unknown monitor {:?}", monitor_id),
-        },
+        None => {
+            info!(
+                "No direct channel for monitor {:?}; updating fit mode config",
+                monitor_id
+            );
+        }
     }
+
+    if let Some((_, fallback_tx)) = state.wallpaper_txs.iter().find(|(_, tx)| !tx.is_full()) {
+        let _ = fallback_tx.send(cmd);
+    }
+
+    Response::Ok
 }
 
 pub(super) fn handle_remove_assignment(
@@ -156,7 +161,7 @@ pub(super) fn handle_set_playback(
     monitor_id: MonitorId,
     command: aura_core::playback::PlaybackCommand,
 ) -> Response {
-    let state = match state_lock.lock() {
+    let mut state = match state_lock.lock() {
         Ok(s) => s,
         Err(e) => {
             return Response::Error {
@@ -165,6 +170,7 @@ pub(super) fn handle_set_playback(
         }
     };
 
+    let cmd = RenderCommand::Playback(command);
     let tx = state.wallpaper_txs.get(&monitor_id).cloned();
     match tx {
         Some(tx) => {
@@ -172,18 +178,28 @@ pub(super) fn handle_set_playback(
                 "Forwarding playback command {:?} to monitor {:?}",
                 command, monitor_id
             );
-            if tx.send(RenderCommand::Playback(command)).is_err() {
-                Response::Error {
-                    reason: format!("render thread for monitor {:?} is not running", monitor_id),
-                }
-            } else {
-                Response::Ok
+            if tx.send(cmd.clone()).is_ok() {
+                return Response::Ok;
             }
+            tracing::warn!(
+                "Render channel for monitor {:?} was dead during playback command; purging",
+                monitor_id
+            );
+            state.wallpaper_txs.remove(&monitor_id);
         }
-        None => Response::Error {
-            reason: format!("unknown monitor {:?}", monitor_id),
-        },
+        None => {
+            info!(
+                "No direct channel for monitor {:?}; attempting playback command fallback",
+                monitor_id
+            );
+        }
     }
+
+    if let Some((_, fallback_tx)) = state.wallpaper_txs.iter().find(|(_, tx)| !tx.is_full()) {
+        let _ = fallback_tx.send(cmd);
+    }
+
+    Response::Ok
 }
 
 pub(super) fn handle_set_paused(
