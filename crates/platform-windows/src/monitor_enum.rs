@@ -71,7 +71,7 @@ unsafe extern "system" fn enum_monitor_callback(
             &minfo.szDevice[..minfo.szDevice.iter().position(|&c| c == 0).unwrap_or(32)],
         );
 
-        // Derive hardware-stable MonitorId using EnumDisplayDevicesW.
+        // Derive hardware-stable MonitorId using EnumDisplayDevicesW (trying EDD_GET_DEVICE_INTERFACE_NAME and standard flag 0).
         let mut hardware_id = device_name.clone();
         let mut disp_dev: DISPLAY_DEVICEW = unsafe { std::mem::zeroed() };
         disp_dev.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as u32;
@@ -79,6 +79,9 @@ unsafe extern "system" fn enum_monitor_callback(
         unsafe {
             use windows::core::PCWSTR;
             let sz_device_ptr = minfo.szDevice.as_ptr();
+            let mut found_id = None;
+
+            // Flag 1: EDD_GET_DEVICE_INTERFACE_NAME
             if EnumDisplayDevicesW(PCWSTR(sz_device_ptr), 0, &mut disp_dev, 1).as_bool() {
                 let dev_id = String::from_utf16_lossy(
                     &disp_dev.DeviceID[..disp_dev
@@ -88,8 +91,30 @@ unsafe extern "system" fn enum_monitor_callback(
                         .unwrap_or(128)],
                 );
                 if !dev_id.trim().is_empty() {
-                    hardware_id = dev_id;
+                    found_id = Some(dev_id);
                 }
+            }
+
+            // Fallback flag 0: standard display device query
+            if found_id.is_none() {
+                disp_dev = std::mem::zeroed();
+                disp_dev.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as u32;
+                if EnumDisplayDevicesW(PCWSTR(sz_device_ptr), 0, &mut disp_dev, 0).as_bool() {
+                    let dev_id = String::from_utf16_lossy(
+                        &disp_dev.DeviceID[..disp_dev
+                            .DeviceID
+                            .iter()
+                            .position(|&c| c == 0)
+                            .unwrap_or(128)],
+                    );
+                    if !dev_id.trim().is_empty() {
+                        found_id = Some(dev_id);
+                    }
+                }
+            }
+
+            if let Some(dev_id) = found_id {
+                hardware_id = dev_id;
             }
         }
 
