@@ -115,19 +115,8 @@ pub(super) fn handle_set_fit_mode(
                 "Setting fit mode {:?} for monitor {:?}",
                 fit_mode, monitor_id
             );
-            if let Err(e) = state.mutate_config(|config| {
-                if let Some(pos) = config
-                    .assignments
-                    .iter()
-                    .position(|a| a.monitor_id == monitor_id)
-                {
-                    config.assignments[pos].fit_mode = fit_mode;
-                }
-            }) {
-                tracing::error!("Failed to persist fit mode: {}", e);
-                return Response::Error {
-                    reason: format!("Failed to save fit mode: {}", e),
-                };
+            if let Err(e) = persist_fit_mode_config(&mut state, monitor_id, fit_mode) {
+                return Response::Error { reason: e };
             }
             if tx.send(RenderCommand::SetFitMode(fit_mode)).is_err() {
                 return Response::Error {
@@ -155,19 +144,8 @@ pub(super) fn handle_remove_assignment(
         }
     };
 
-    if let Err(e) = state.mutate_config(|config| {
-        if let Some(pos) = config
-            .assignments
-            .iter()
-            .position(|a| a.monitor_id == monitor_id)
-        {
-            config.assignments.remove(pos);
-        }
-    }) {
-        tracing::error!("Failed to persist assignment removal: {}", e);
-        return Response::Error {
-            reason: format!("Failed to save assignment removal: {}", e),
-        };
+    if let Err(e) = persist_remove_assignment_config(&mut state, monitor_id) {
+        return Response::Error { reason: e };
     }
     state.assignments.remove(&monitor_id);
     Response::Ok
@@ -256,6 +234,51 @@ fn persist_assignment_config(
         .map_err(|e| {
             tracing::error!("Failed to persist wallpaper assignment: {}", e);
             format!("Failed to save assignment: {}", e)
+        })?;
+    Ok(())
+}
+
+/// Helper function to deduplicate persisting fit mode updates to `aura.toml`.
+fn persist_fit_mode_config(
+    state: &mut OrchestratorState,
+    monitor_id: MonitorId,
+    fit_mode: FitMode,
+) -> Result<(), String> {
+    state
+        .mutate_config(|config| {
+            if let Some(pos) = config
+                .assignments
+                .iter()
+                .position(|a| a.monitor_id == monitor_id)
+            {
+                config.assignments[pos].fit_mode = fit_mode;
+            }
+        })
+        .map_err(|e| {
+            tracing::error!("Failed to persist fit mode: {}", e);
+            format!("Failed to save fit mode: {}", e)
+        })?;
+    Ok(())
+}
+
+/// Helper function to deduplicate persisting assignment removals from `aura.toml`.
+fn persist_remove_assignment_config(
+    state: &mut OrchestratorState,
+    monitor_id: MonitorId,
+) -> Result<(), String> {
+    state
+        .mutate_config(|config| {
+            if let Some(pos) = config
+                .assignments
+                .iter()
+                .position(|a| a.monitor_id == monitor_id)
+            {
+                config.assignments.remove(pos);
+            }
+        })
+        .map_err(|e| {
+            tracing::error!("Failed to persist assignment removal: {}", e);
+            format!("Failed to save assignment removal: {}", e)
         })?;
     Ok(())
 }
