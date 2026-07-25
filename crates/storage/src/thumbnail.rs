@@ -97,7 +97,13 @@ impl ThumbnailStore {
                 StorageError::Io(std::io::Error::other(format!("JPEG encode error: {}", e)))
             })?;
 
-        crate::atomic::atomic_save_bytes(&target_file, &buf)?;
+        if let Err(e) = crate::atomic::atomic_save_bytes(&target_file, &buf) {
+            if target_file.exists() {
+                return Ok(target_file);
+            }
+            return Err(e);
+        }
+
         tracing::info!(
             "Generated thumbnail for {:?} at {:?}",
             meta.path,
