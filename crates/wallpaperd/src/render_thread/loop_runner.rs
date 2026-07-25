@@ -170,17 +170,20 @@ pub fn run_render_loop(params: RenderLoopParams) {
                 match renderer.frame(&context, [0.0, 0.0, 0.0, 1.0]) {
                     Ok(_) => {
                         counter.fetch_add(1, Ordering::Relaxed);
+                        is_dirty = false;
                     }
                     Err(VulkanError::SwapchainOutOfDate) => {
                         if let Err(e) = renderer.resize(&context, width, height) {
                             tracing::warn!("Swapchain resize failed: {}", e);
+                        } else if renderer.frame(&context, [0.0, 0.0, 0.0, 1.0]).is_ok() {
+                            counter.fetch_add(1, Ordering::Relaxed);
+                            is_dirty = false;
                         }
                     }
                     Err(e) => {
                         tracing::warn!("Render frame failed: {}", e);
                     }
                 }
-                is_dirty = false;
             }
             let sleep_ms = match current_profile {
                 aura_core::playback::PerformanceProfile::Balanced => {
@@ -193,22 +196,29 @@ pub fn run_render_loop(params: RenderLoopParams) {
         } else {
             // Static image content: draw once when dirty, then sleep (0% CPU/GPU idle)
             if is_dirty {
+                let mut rendered = false;
                 match renderer.frame(&context, [0.0, 0.0, 0.0, 1.0]) {
                     Ok(_) => {
                         counter.fetch_add(1, Ordering::Relaxed);
+                        rendered = true;
                     }
                     Err(VulkanError::SwapchainOutOfDate) => {
                         if let Err(e) = renderer.resize(&context, width, height) {
                             tracing::warn!("Swapchain resize failed: {}", e);
+                        } else if renderer.frame(&context, [0.0, 0.0, 0.0, 1.0]).is_ok() {
+                            counter.fetch_add(1, Ordering::Relaxed);
+                            rendered = true;
                         }
                     }
                     Err(e) => {
                         tracing::warn!("Render frame failed: {}", e);
                     }
                 }
-                renderer.trim_staging(&context);
-                aura_platform_windows::trim_working_set();
-                is_dirty = false;
+                if rendered {
+                    renderer.trim_staging(&context);
+                    aura_platform_windows::trim_working_set();
+                    is_dirty = false;
+                }
             } else {
                 std::thread::sleep(Duration::from_millis(50));
             }
