@@ -52,11 +52,12 @@ pub fn update_descriptor_set(
     texture: &GpuTexture,
     fit_mode: FitMode,
     repeat_sampler: vk::Sampler,
+    border_sampler: vk::Sampler,
 ) {
-    let sampler = if fit_mode == FitMode::Tile {
-        repeat_sampler
-    } else {
-        texture.sampler
+    let sampler = match fit_mode {
+        FitMode::Tile => repeat_sampler,
+        FitMode::Fit | FitMode::Center => border_sampler,
+        _ => texture.sampler,
     };
 
     let image_info = vk::DescriptorImageInfo::default()

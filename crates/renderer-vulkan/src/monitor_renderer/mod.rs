@@ -28,6 +28,7 @@ pub struct MonitorRenderer {
     pub active_texture: Option<GpuTexture>,
     pub active_fit_mode: FitMode,
     pub repeat_sampler: vk::Sampler,
+    pub border_sampler: vk::Sampler,
     pub uploader: StagingUploader,
     pub virtual_x: i32,
     pub virtual_y: i32,
@@ -103,6 +104,23 @@ impl MonitorRenderer {
                 .map_err(|e| VulkanError::Texture(e.to_string()))?
         };
 
+        let border_sampler_info = vk::SamplerCreateInfo::default()
+            .mag_filter(vk::Filter::LINEAR)
+            .min_filter(vk::Filter::LINEAR)
+            .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
+            .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_BORDER)
+            .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_BORDER)
+            .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_BORDER)
+            .border_color(vk::BorderColor::FLOAT_TRANSPARENT_BLACK)
+            .max_anisotropy(1.0);
+
+        let border_sampler = unsafe {
+            context
+                .device
+                .create_sampler(&border_sampler_info, None)
+                .map_err(|e| VulkanError::Texture(e.to_string()))?
+        };
+
         let uploader = StagingUploader::create(context, upload_command_buffer)?;
 
         Ok(Self {
@@ -120,6 +138,7 @@ impl MonitorRenderer {
             active_texture: None,
             active_fit_mode: FitMode::Fill,
             repeat_sampler,
+            border_sampler,
             uploader,
             virtual_x: 0,
             virtual_y: 0,
@@ -181,6 +200,7 @@ impl MonitorRenderer {
                 texture,
                 self.active_fit_mode,
                 self.repeat_sampler,
+                self.border_sampler,
             );
         }
 
@@ -202,6 +222,7 @@ impl MonitorRenderer {
                 texture,
                 fit_mode,
                 self.repeat_sampler,
+                self.border_sampler,
             );
         }
     }
@@ -252,6 +273,11 @@ impl MonitorRenderer {
             if self.repeat_sampler != vk::Sampler::null() {
                 context.device.destroy_sampler(self.repeat_sampler, None);
                 self.repeat_sampler = vk::Sampler::null();
+            }
+
+            if self.border_sampler != vk::Sampler::null() {
+                context.device.destroy_sampler(self.border_sampler, None);
+                self.border_sampler = vk::Sampler::null();
             }
 
             resources::destroy_framebuffers(&context.device, &mut self.framebuffers);
