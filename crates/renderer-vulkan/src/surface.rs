@@ -43,7 +43,7 @@ impl Surface {
     }
 
     /// Query whether the graphics queue family supports presentation on this surface.
-    pub fn get_support(
+    pub fn support(
         &self,
         physical_device: vk::PhysicalDevice,
         queue_family_index: u32,
@@ -61,7 +61,7 @@ impl Surface {
     }
 
     /// Query physical device surface capabilities (extent limits, image count limits, transforms).
-    pub fn get_capabilities(
+    pub fn capabilities(
         &self,
         physical_device: vk::PhysicalDevice,
     ) -> Result<vk::SurfaceCapabilitiesKHR, VulkanError> {
@@ -74,7 +74,7 @@ impl Surface {
     }
 
     /// Query supported surface formats (e.g. `B8G8R8A8_UNORM` / `SRGB`).
-    pub fn get_formats(
+    pub fn formats(
         &self,
         physical_device: vk::PhysicalDevice,
     ) -> Result<Vec<vk::SurfaceFormatKHR>, VulkanError> {
@@ -87,7 +87,7 @@ impl Surface {
     }
 
     /// Query supported present modes (e.g. `FIFO`, `MAILBOX`, `IMMEDIATE`).
-    pub fn get_present_modes(
+    pub fn present_modes(
         &self,
         physical_device: vk::PhysicalDevice,
     ) -> Result<Vec<vk::PresentModeKHR>, VulkanError> {

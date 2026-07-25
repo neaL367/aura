@@ -26,9 +26,9 @@ impl Swapchain {
     ) -> Result<Self, VulkanError> {
         let swapchain_loader = ash::khr::swapchain::Device::new(&context.instance, &context.device);
 
-        let caps = surface.get_capabilities(context.physical_device)?;
-        let formats = surface.get_formats(context.physical_device)?;
-        let present_modes = surface.get_present_modes(context.physical_device)?;
+        let caps = surface.capabilities(context.physical_device)?;
+        let formats = surface.formats(context.physical_device)?;
+        let present_modes = surface.present_modes(context.physical_device)?;
 
         // Choose surface format (prefer BGRA8 UNORM or RGBA8 UNORM)
         let format = formats

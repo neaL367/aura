@@ -48,7 +48,7 @@ impl MonitorRenderer {
     ) -> Result<Self, VulkanError> {
         let surface = Surface::create_win32(context, hwnd)?;
 
-        if !surface.get_support(context.physical_device, context.graphics_queue_family)? {
+        if !surface.support(context.physical_device, context.graphics_queue_family)? {
             return Err(VulkanError::Surface(
                 "Graphics queue family does not support presentation on this surface".into(),
             ));
