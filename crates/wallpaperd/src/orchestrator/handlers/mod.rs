@@ -67,10 +67,11 @@ pub fn handle_request(
         Request::PauseAll => assignment::handle_set_paused(state_lock, true),
         Request::ResumeAll => assignment::handle_set_paused(state_lock, false),
         Request::RefreshLibrary => library::handle_refresh_library(state_lock),
-        Request::AddScanPath { path } => library::handle_update_scan_path(state_lock, path, true),
-        Request::RemoveScanPath { path } => {
-            library::handle_update_scan_path(state_lock, path, false)
+        Request::ImportFiles { paths } => library::handle_import_files(state_lock, paths),
+        Request::SetWallpaperLibrary { path } => {
+            library::handle_set_wallpaper_library(state_lock, path)
         }
+        Request::GetWallpaperLibrary => library::handle_get_wallpaper_library(state_lock),
         Request::GetConfig => status::handle_get_config(state_lock),
         Request::UpdateConfig { config } => status::handle_update_config(state_lock, config),
         Request::Shutdown => {

@@ -29,8 +29,8 @@ impl Orchestrator {
         let config_path = ConfigStore::default_path();
         let config_store = ConfigStore::new(&config_path);
         let mut config = config_store.load().unwrap_or_default();
-        if config.library.scan_paths.is_empty() {
-            config.library.scan_paths = aura_core::config::LibraryConfig::default().scan_paths;
+        if !config.library.library_path.is_dir() {
+            config.library.library_path = aura_core::config::LibraryConfig::default().library_path;
             let _ = config_store.save(&config);
         }
 
@@ -85,10 +85,10 @@ impl Orchestrator {
         }
     }
 
-    pub fn scan_paths(&self) -> Vec<PathBuf> {
+    pub fn library_path(&self) -> PathBuf {
         let state = self.state.lock().unwrap();
         let config = state.config_store.load().unwrap_or_default();
-        config.library.scan_paths
+        config.library.library_path
     }
 
     pub fn trigger_auto_refresh(&self) {

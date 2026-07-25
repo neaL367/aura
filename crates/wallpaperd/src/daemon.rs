@@ -98,8 +98,8 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
         .map_err(|_| DaemonError::ThreadSpawn)?;
 
     let orchestrator_watcher = orchestrator.clone();
-    let scan_paths = orchestrator.scan_paths();
-    if let Ok(watcher) = aura_storage::LibraryWatcher::new(&scan_paths, move || {
+    let library_path = orchestrator.library_path();
+    if let Ok(watcher) = aura_storage::LibraryWatcher::new(&[library_path], move || {
         orchestrator_watcher.trigger_auto_refresh();
     }) {
         orchestrator.set_watcher(watcher);
