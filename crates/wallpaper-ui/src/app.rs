@@ -30,6 +30,7 @@ pub struct AuraApp {
     active_tab: Tab,
     selected_wallpaper: Option<WallpaperEntry>,
     last_interaction: Instant,
+    trimmed_since_idle: bool,
 }
 
 impl AuraApp {
@@ -45,6 +46,7 @@ impl AuraApp {
             active_tab: Tab::Gallery,
             selected_wallpaper: None,
             last_interaction: Instant::now(),
+            trimmed_since_idle: false,
         }
     }
 }
@@ -60,6 +62,7 @@ impl eframe::App for AuraApp {
                 || i.smooth_scroll_delta != egui::Vec2::ZERO
         }) {
             self.last_interaction = Instant::now();
+            self.trimmed_since_idle = false;
         }
 
         // --- Bottom: Status Bar ---
@@ -104,6 +107,8 @@ impl eframe::App for AuraApp {
                     };
 
                 ui.horizontal(|ui| {
+                    // Zero out default spacing — we manage gaps manually
+                    ui.spacing_mut().item_spacing.x = 0.0;
                     // Sidebar column
                     ui.vertical(|ui| {
                         ui.set_min_width(sidebar_w);
@@ -150,12 +155,23 @@ impl eframe::App for AuraApp {
                             }
                             _ => Vec::new(),
                         };
+                        let assignments = self
+                            .ipc_client
+                            .config()
+                            .map(|c| c.assignments.clone())
+                            .unwrap_or_default();
                         ui.vertical(|ui| {
                             ui.set_min_width(inspector_width);
                             ui.set_max_width(inspector_width);
                             ui.set_min_height(full_height);
                             if let Some(ref entry) = self.selected_wallpaper {
-                                self.inspector.show(ui, entry, &self.ipc_client, &monitors);
+                                self.inspector.show(
+                                    ui,
+                                    entry,
+                                    &self.ipc_client,
+                                    &monitors,
+                                    &assignments,
+                                );
                             } else {
                                 self.inspector.show_placeholder(ui);
                             }
@@ -166,12 +182,11 @@ impl eframe::App for AuraApp {
 
         if prev_tab != self.active_tab {
             self.selected_wallpaper = None;
-            trim_ui_working_set();
         }
 
-        if self.last_interaction.elapsed() > Duration::from_secs(3) {
+        if self.last_interaction.elapsed() > Duration::from_secs(3) && !self.trimmed_since_idle {
             trim_ui_working_set();
-            ui.ctx().request_repaint_after(Duration::from_millis(500));
+            self.trimmed_since_idle = true;
         }
     }
 }

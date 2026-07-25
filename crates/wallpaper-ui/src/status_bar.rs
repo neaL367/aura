@@ -68,7 +68,7 @@ impl StatusBar {
                         });
                     });
                 }
-                ConnectionStatus::Error(_reason) => {
+                ConnectionStatus::Error(reason) => {
                     theme::badge_frame(theme::STATUS_BADGE_DISCONNECTED).show(ui, |ui| {
                         ui.horizontal(|ui| {
                             theme::connection_dot(ui, theme::STATUS_DISCONNECTED);
@@ -77,7 +77,8 @@ impl StatusBar {
                                     .size(theme::FONT_LABEL)
                                     .strong()
                                     .color(theme::STATUS_DISCONNECTED),
-                            );
+                            )
+                            .on_hover_text(reason);
                         });
                     });
                 }

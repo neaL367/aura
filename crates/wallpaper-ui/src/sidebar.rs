@@ -84,7 +84,6 @@ impl Sidebar {
         // Background fill with rounded corners
         ui.painter().rect_filled(rect, 0.0, hover_bg);
 
-        // Icon text
         let icon_pos = egui::pos2(rect.center().x, rect.center().y - theme::SPACING_XS);
         ui.painter().text(
             icon_pos,

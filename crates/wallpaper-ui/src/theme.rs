@@ -229,7 +229,11 @@ pub fn card_frame<Id: Into<egui::Id>>(
     let rect = inner.response.rect;
     let response = ui.interact(rect, id, egui::Sense::click());
 
-    ui.ctx().data_mut(|d| d.insert_temp(id, response.hovered()));
+    let is_hovered = response.hovered();
+    if is_hovered != was_hovered {
+        ui.ctx().request_repaint();
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(id, is_hovered));
 
     response
 }
@@ -314,6 +318,20 @@ pub fn badge_frame(bg: Color32) -> Frame {
 }
 
 // ---------------------------------------------------------------------------
+// URI helpers
+// ---------------------------------------------------------------------------
+
+/// Build a `file:///` URI from a Windows path.  Converts backslashes to
+/// forward slashes so egui's image loaders can parse the URI correctly.
+pub fn file_uri(path: &std::path::Path) -> String {
+    let s = path.to_string_lossy();
+    let normalized: String = s.replace('\\', "/");
+    // Percent-encode '#' since it's a URI fragment delimiter.
+    let normalized = normalized.replace('#', "%23");
+    format!("file:///{}", normalized)
+}
+
+// ---------------------------------------------------------------------------
 // Setup — Geist fonts + light mode Visuals
 // ---------------------------------------------------------------------------
 
@@ -342,6 +360,11 @@ pub fn setup_theme(ctx: &egui::Context) {
         .get_mut(&FontFamily::Proportional)
         .unwrap()
         .insert(1, "Geist-Medium".to_owned());
+    fonts
+        .families
+        .entry(FontFamily::Name("geist-medium".into()))
+        .or_default()
+        .push("Geist-Medium".to_owned());
 
     ctx.set_fonts(fonts);
 

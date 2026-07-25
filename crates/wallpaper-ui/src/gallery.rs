@@ -135,7 +135,7 @@ impl GalleryPanel {
                 // Thumbnail
                 let thumbnail_size = egui::vec2(theme::CARD_WIDTH - 2.0 * theme::SPACING_MD, 120.0);
                 if let Some(ref thumb) = entry.thumbnail_path {
-                    let uri = format!("file:///{}", thumb.display());
+                    let uri = theme::file_uri(thumb);
                     ui.add(
                         egui::Image::new(&uri)
                             .fit_to_exact_size(thumbnail_size)

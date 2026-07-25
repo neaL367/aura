@@ -375,6 +375,9 @@ fn reconcile_monitors(
         }
     };
 
+    #[cfg(target_os = "windows")]
+    pump_messages_once();
+
     let workerw = workerw_manager.workerw();
     let current_ids = coordinator.active_monitor_ids();
     let new_ids: std::collections::HashSet<_> = new_monitors.iter().map(|m| m.id).collect();
@@ -460,6 +463,9 @@ fn reconcile_monitors(
                     tracing::error!("Failed to create monitor context for new monitor: {}", e);
                 }
             }
+            // Keep the message queue alive during multi-monitor recreation
+            #[cfg(target_os = "windows")]
+            pump_messages_once();
         }
     }
 
@@ -474,4 +480,21 @@ fn reconcile_monitors(
         .collect();
 
     orchestrator.update_monitors(summaries, wallpaper_txs.clone());
+}
+
+/// Drain any pending Win32 messages so the window message queue doesn't go
+/// un-pumped during long operations like surface recreation.  This prevents
+/// Windows from marking the daemon as "Not Responding".
+#[cfg(target_os = "windows")]
+fn pump_messages_once() {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage,
+    };
+    let mut msg = MSG::default();
+    unsafe {
+        while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+            let _ = TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
 }

@@ -1,4 +1,7 @@
-use aura_core::wallpaper::FitMode;
+use aura_core::{
+    monitor::{MonitorAssignment, MonitorId},
+    wallpaper::{FitMode, WallpaperId},
+};
 use aura_ipc::protocol::{Request, WallpaperEntry};
 
 use crate::ipc_client::UiIpcClient;
@@ -6,12 +9,14 @@ use crate::theme;
 
 pub struct InspectorPanel {
     selected_fit_mode: FitMode,
+    prev_entry_id: Option<WallpaperId>,
 }
 
 impl InspectorPanel {
     pub fn new() -> Self {
         Self {
             selected_fit_mode: FitMode::Fill,
+            prev_entry_id: None,
         }
     }
 
@@ -56,7 +61,18 @@ impl InspectorPanel {
         entry: &WallpaperEntry,
         ipc_client: &UiIpcClient,
         monitors: &[aura_ipc::protocol::MonitorSummary],
+        assignments: &[MonitorAssignment],
     ) {
+        // Reset fit mode when a different wallpaper is selected, preferring
+        // whatever fit mode is already assigned for this wallpaper.
+        if self.prev_entry_id != Some(entry.id) {
+            let existing = assignments
+                .iter()
+                .find(|a| a.wallpaper_id == entry.id)
+                .map(|a| a.fit_mode);
+            self.selected_fit_mode = existing.unwrap_or(FitMode::Fill);
+            self.prev_entry_id = Some(entry.id);
+        }
         let frame = egui::Frame::new()
             .fill(theme::BG_INSPECTOR)
             .corner_radius(0.0)
@@ -86,7 +102,7 @@ impl InspectorPanel {
                         // Thumbnail
                         if let Some(ref thumb) = entry.thumbnail_path {
                             let thumb_size = egui::vec2(ui.available_width(), 160.0);
-                            let uri = format!("file:///{}", thumb.display());
+                            let uri = theme::file_uri(thumb);
                             ui.add(
                                 egui::Image::new(&uri)
                                     .fit_to_exact_size(thumb_size)
@@ -160,11 +176,27 @@ impl InspectorPanel {
                         if !monitors.is_empty() {
                             theme::section_label(ui, "APPLY TO MONITOR");
                             ui.add_space(theme::SPACING_SM);
+
+                            // Collect assignments targeting this wallpaper
+                            let assigned_mons: std::collections::HashSet<&MonitorId> = assignments
+                                .iter()
+                                .filter(|a| a.wallpaper_id == entry.id)
+                                .map(|a| &a.monitor_id)
+                                .collect();
+
                             for mon in monitors {
-                                let label = format!("{} ─ {}", mon.name, self.selected_fit_mode);
-                                if theme::button(ui, &label, theme::ButtonVariant::Secondary)
-                                    .clicked()
-                                {
+                                let already = assigned_mons.contains(&mon.id);
+                                let label = if already {
+                                    format!("{} ✓ Applied", mon.name)
+                                } else {
+                                    format!("{} ─ {}", mon.name, self.selected_fit_mode)
+                                };
+                                let variant = if already {
+                                    theme::ButtonVariant::Primary
+                                } else {
+                                    theme::ButtonVariant::Secondary
+                                };
+                                if theme::button(ui, &label, variant).clicked() {
                                     ipc_client.send(Request::AssignWallpaper {
                                         monitor_id: mon.id,
                                         wallpaper_id: entry.id,
@@ -172,6 +204,19 @@ impl InspectorPanel {
                                     });
                                 }
                                 ui.add_space(theme::SPACING_XS);
+                            }
+
+                            // Show generic assignments with nil (all-monitors) monitor_id
+                            let has_generic = assignments.iter().any(|a| {
+                                a.wallpaper_id == entry.id && a.monitor_id.as_uuid().is_nil()
+                            });
+                            if has_generic {
+                                ui.add_space(theme::SPACING_XS);
+                                ui.label(
+                                    egui::RichText::new("Applied to all monitors")
+                                        .size(theme::FONT_CAPTION)
+                                        .color(theme::TEXT_MUTED),
+                                );
                             }
 
                             // "Apply to All" shortcut

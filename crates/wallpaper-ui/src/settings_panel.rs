@@ -4,16 +4,23 @@ use aura_ipc::protocol::Request;
 use crate::ipc_client::UiIpcClient;
 use crate::theme;
 
-pub struct SettingsPanel;
+pub struct SettingsPanel {
+    config_requested: bool,
+}
 
 impl SettingsPanel {
     pub fn new() -> Self {
-        Self
+        Self {
+            config_requested: false,
+        }
     }
 
     pub fn show(&mut self, ui: &mut egui::Ui, ipc_client: &UiIpcClient) {
         let config_opt = ipc_client.config();
-        if config_opt.is_none() {
+        if config_opt.is_some() {
+            self.config_requested = false;
+        } else if !self.config_requested {
+            self.config_requested = true;
             ipc_client.send(Request::GetConfig);
         }
 
