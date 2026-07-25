@@ -89,7 +89,10 @@ impl HostWindow {
 
     /// True if the underlying HWND is still valid.
     pub fn is_valid(&self) -> bool {
-        self.valid
+        if !self.valid || self.hwnd.0.is_null() {
+            return false;
+        }
+        unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(self.hwnd)).as_bool() }
     }
 
     /// Mark this window as invalid (called after WorkerW destruction is detected).

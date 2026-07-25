@@ -171,9 +171,18 @@ impl RenderCoordinator {
             .find(|m| m.monitor_id == monitor_id)
     }
 
+    pub fn shutdown_all(&mut self) {
+        let ids = self.active_monitor_ids();
+        for id in ids {
+            self.remove_monitor(id);
+        }
+    }
+
     pub fn attach_all(&mut self, workerw: windows::Win32::Foundation::HWND) {
         for ctx in &self.monitors {
-            ctx.attach_to_workerw(workerw);
+            if ctx.host_window.is_valid() {
+                ctx.attach_to_workerw(workerw);
+            }
         }
     }
 

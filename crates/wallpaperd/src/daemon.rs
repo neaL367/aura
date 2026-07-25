@@ -211,10 +211,22 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
 
         match event {
             Ok(HostEvent::ExplorerRestarted) => {
-                tracing::warn!("Explorer restart signal received");
+                tracing::warn!(
+                    "Explorer restart signal received — recreating host windows and desktop attachment"
+                );
                 if RecoveryManager::handle_explorer_restart(&mut workerw_manager) {
                     attach_state = AttachState::Attached;
-                    coordinator.attach_all(workerw_manager.workerw());
+                    coordinator.shutdown_all();
+                    wallpaper_txs.clear();
+                    #[cfg(target_os = "windows")]
+                    reconcile_monitors(
+                        &vulkan_context,
+                        &mut workerw_manager,
+                        &mut coordinator,
+                        &mut wallpaper_txs,
+                        &orchestrator,
+                        wallpaper_path.as_deref(),
+                    );
                 } else {
                     attach_state = AttachState::Detached { retry_count: 0 };
                 }
@@ -250,12 +262,22 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
         // Background retry if detached.
         if let AttachState::Detached { retry_count } = &mut attach_state {
             if workerw_manager.try_find_workerw() {
-                coordinator.attach_all(workerw_manager.workerw());
                 tracing::info!(
                     "WorkerW re-attached in background retry (after {} attempts)",
                     *retry_count
                 );
                 attach_state = AttachState::Attached;
+                coordinator.shutdown_all();
+                wallpaper_txs.clear();
+                #[cfg(target_os = "windows")]
+                reconcile_monitors(
+                    &vulkan_context,
+                    &mut workerw_manager,
+                    &mut coordinator,
+                    &mut wallpaper_txs,
+                    &orchestrator,
+                    wallpaper_path.as_deref(),
+                );
             } else {
                 *retry_count += 1;
             }
@@ -362,6 +384,20 @@ fn reconcile_monitors(
 
     // 2. Process active / added / resized monitors
     for m in &new_monitors {
+        let is_invalid = coordinator
+            .find_monitor_mut(m.id)
+            .map(|ctx| !ctx.host_window.is_valid())
+            .unwrap_or(false);
+
+        if is_invalid {
+            tracing::warn!(
+                "Host window for monitor {:?} is invalid — removing context for recreation",
+                m.id
+            );
+            coordinator.remove_monitor(m.id);
+            wallpaper_txs.remove(&m.id);
+        }
+
         if let Some(ctx) = coordinator.find_monitor_mut(m.id) {
             // Check if bounds changed
             if ctx.width != m.width || ctx.height != m.height || ctx.x != m.x || ctx.y != m.y {
