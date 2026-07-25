@@ -25,12 +25,16 @@ fn test_request_serialization_roundtrip() {
         Request::PauseAll,
         Request::ResumeAll,
         Request::RefreshLibrary,
-        Request::AddScanPath {
-            path: std::path::PathBuf::from(r"C:\Wallpapers"),
+        Request::ImportFiles {
+            paths: vec![
+                std::path::PathBuf::from(r"C:\Downloads\bg1.png"),
+                std::path::PathBuf::from(r"C:\Downloads\bg2.jpg"),
+            ],
         },
-        Request::RemoveScanPath {
-            path: std::path::PathBuf::from(r"C:\Wallpapers"),
+        Request::SetWallpaperLibrary {
+            path: std::path::PathBuf::from(r"D:\Wallpapers"),
         },
+        Request::GetWallpaperLibrary,
         Request::GetConfig,
         Request::UpdateConfig {
             config: aura_core::config::AppConfig::default(),
@@ -73,15 +77,26 @@ fn test_response_serialization_roundtrip() {
                 path: std::path::PathBuf::from(r"C:\Wallpapers\test.png"),
                 kind: MediaKind::Image,
                 thumbnail_path: Some(std::path::PathBuf::from(r"C:\Thumbs\thumb1.jpg")),
+                width: 1920,
+                height: 1080,
+                duration_ms: 0,
+                file_size: 256000,
+                scanned_at: "2026-07-25T12:00:00Z".into(),
             },
             WallpaperEntry {
                 id: WallpaperId::new(),
                 path: std::path::PathBuf::from(r"C:\Wallpapers\anim.gif"),
                 kind: MediaKind::Gif,
                 thumbnail_path: None,
+                width: 800,
+                height: 600,
+                duration_ms: 3000,
+                file_size: 1024000,
+                scanned_at: "2026-07-25T12:00:01Z".into(),
             },
         ]),
         Response::Config(aura_core::config::AppConfig::default()),
+        Response::LibraryPath(std::path::PathBuf::from(r"D:\Wallpapers")),
     ];
 
     for resp in responses {

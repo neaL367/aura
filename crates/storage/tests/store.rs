@@ -87,7 +87,7 @@ fn test_config_store_load_missing_creates_default() {
     let path = dir.path().join("missing.toml");
     let store = aura_storage::config_store::ConfigStore::new(&path);
     let loaded = store.load().unwrap();
-    assert_eq!(loaded.version, 1);
+    assert_eq!(loaded.version, aura_core::config::CONFIG_VERSION);
 }
 
 #[test]

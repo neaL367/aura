@@ -5,16 +5,17 @@ use notify_debouncer_full::{
     DebounceEventResult, Debouncer, FileIdMap, new_debouncer, notify::RecursiveMode,
 };
 
-/// Debounced filesystem watcher for automatically monitoring library scan directories.
+/// Debounced filesystem watcher for automatically monitoring library directories.
 pub struct LibraryWatcher {
     _debouncer: Debouncer<notify_debouncer_full::notify::RecommendedWatcher, FileIdMap>,
+    watched: Vec<PathBuf>,
 }
 
 impl LibraryWatcher {
-    /// Create a new `LibraryWatcher` monitoring `scan_paths` with a 500ms debounce quiet period.
+    /// Create a new `LibraryWatcher` monitoring `paths` with a 500ms debounce quiet period.
     ///
-    /// When files are created, modified, or deleted within any scan path, `on_change` callback is invoked.
-    pub fn new<F>(scan_paths: &[PathBuf], mut on_change: F) -> Result<Self, String>
+    /// When files are created, modified, or deleted within any watch path, `on_change` callback is invoked.
+    pub fn new<F>(paths: &[PathBuf], mut on_change: F) -> Result<Self, String>
     where
         F: FnMut() + Send + 'static,
     {
@@ -46,9 +47,10 @@ impl LibraryWatcher {
 
         let mut watcher = Self {
             _debouncer: debouncer,
+            watched: Vec::new(),
         };
 
-        for path in scan_paths {
+        for path in paths {
             watcher.add_path(path);
         }
 
@@ -57,11 +59,12 @@ impl LibraryWatcher {
 
     /// Add a path to the active filesystem watcher.
     pub fn add_path(&mut self, path: &Path) {
-        if path.exists() {
+        if !self.watched.contains(&path.to_path_buf()) && path.exists() {
             if let Err(e) = self._debouncer.watch(path, RecursiveMode::Recursive) {
-                tracing::warn!("Failed to watch scan path {}: {}", path.display(), e);
+                tracing::warn!("Failed to watch path {}: {}", path.display(), e);
             } else {
-                tracing::info!("Filesystem watcher actively monitoring {}", path.display());
+                self.watched.push(path.to_path_buf());
+                tracing::info!("Filesystem watcher monitoring {}", path.display());
             }
         }
     }
@@ -69,9 +72,21 @@ impl LibraryWatcher {
     /// Remove a path from the active filesystem watcher.
     pub fn remove_path(&mut self, path: &Path) {
         if let Err(e) = self._debouncer.unwatch(path) {
-            tracing::warn!("Failed to unwatch scan path {}: {}", path.display(), e);
+            tracing::warn!("Failed to unwatch path {}: {}", path.display(), e);
         } else {
+            self.watched.retain(|p| p != path);
             tracing::info!("Filesystem watcher unmonitored {}", path.display());
+        }
+    }
+
+    /// Remove all watched paths and add new ones.
+    pub fn replace_paths(&mut self, paths: &[PathBuf]) {
+        let old = std::mem::take(&mut self.watched);
+        for p in &old {
+            let _ = self._debouncer.unwatch(p);
+        }
+        for p in paths {
+            self.add_path(p);
         }
     }
 }

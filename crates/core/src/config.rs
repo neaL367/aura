@@ -7,7 +7,7 @@ use crate::{monitor::MonitorAssignment, playback::PerformanceProfile};
 // ---------------------------------------------------------------------------
 
 /// Schema version for migration detection.
-pub const CONFIG_VERSION: u32 = 1;
+pub const CONFIG_VERSION: u32 = 2;
 
 /// Top-level application configuration serialised to TOML.
 ///
@@ -105,8 +105,13 @@ impl Default for PerformanceConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LibraryConfig {
-    /// Directories scanned for wallpaper files.
-    #[serde(default)]
+    /// Single root directory containing wallpaper files (scanned recursively).
+    #[serde(default = "default_library_path")]
+    pub library_path: std::path::PathBuf,
+
+    /// Transitional: v1 configs serialised `scan_paths`. Kept for deserialization
+    /// during v1→v2 migration. Removed in a future schema version.
+    #[serde(default, skip_serializing)]
     pub scan_paths: Vec<std::path::PathBuf>,
 
     /// Maximum number of thumbnails kept in the on-disk cache.
@@ -118,29 +123,35 @@ fn default_thumb_cache() -> usize {
     512
 }
 
+/// Default library path under `%USERPROFILE%/Pictures/Aura Wallpapers`.
+/// Creates the directory if it doesn't exist, so import always works without
+/// falling back to a system-owned path like `C:\Windows\Web\Wallpaper`.
+pub fn default_library_path() -> std::path::PathBuf {
+    let fallback = std::path::PathBuf::from(r"C:\Windows\Web\Wallpaper");
+
+    let user_profile = match std::env::var("USERPROFILE") {
+        Ok(p) => p,
+        Err(_) => return fallback,
+    };
+    let candidate = std::path::PathBuf::from(user_profile)
+        .join("Pictures")
+        .join("Aura Wallpapers");
+
+    if candidate.is_dir() {
+        return candidate;
+    }
+    // Attempt to create it silently; if that fails, fall back.
+    if std::fs::create_dir_all(&candidate).is_ok() {
+        return candidate;
+    }
+    fallback
+}
+
 impl Default for LibraryConfig {
     fn default() -> Self {
-        let mut scan_paths = Vec::new();
-
-        if let Ok(user_profile) = std::env::var("USERPROFILE") {
-            let user_buf = std::path::PathBuf::from(user_profile);
-            let pics = user_buf.join("Pictures");
-            if pics.is_dir() {
-                scan_paths.push(pics.clone());
-                let walls = pics.join("Wallpapers");
-                if walls.is_dir() {
-                    scan_paths.push(walls);
-                }
-            }
-        }
-
-        let win_wall = std::path::PathBuf::from(r"C:\Windows\Web\Wallpaper");
-        if win_wall.is_dir() {
-            scan_paths.push(win_wall);
-        }
-
         Self {
-            scan_paths,
+            library_path: default_library_path(),
+            scan_paths: Vec::new(),
             thumbnail_cache_limit: default_thumb_cache(),
         }
     }

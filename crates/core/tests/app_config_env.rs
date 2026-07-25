@@ -14,11 +14,11 @@ fn app_config_default_with_userprofile() {
     }
 
     let cfg = AppConfig::default();
-    // Should include the Pictures dir from our custom USERPROFILE.
-    let has_pics = cfg.library.scan_paths.iter().any(|p| p.starts_with(&pics));
+    // Should point to the Pictures dir from our custom USERPROFILE.
     assert!(
-        has_pics,
-        "default scan_paths should include USERPROFILE/Pictures"
+        cfg.library.library_path.starts_with(&pics),
+        "default library_path should be under USERPROFILE/Pictures, got {}",
+        cfg.library.library_path.display()
     );
 
     // Restore original.

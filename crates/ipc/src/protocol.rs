@@ -46,12 +46,14 @@ pub enum Request {
     PauseAll,
     /// Resume rendering on all monitors.
     ResumeAll,
-    /// Refresh the wallpaper library (rescan configured paths).
+    /// Refresh the wallpaper library (rescan library_path).
     RefreshLibrary,
-    /// Add a scan directory path to the wallpaper library.
-    AddScanPath { path: std::path::PathBuf },
-    /// Remove a scan directory path from the wallpaper library.
-    RemoveScanPath { path: std::path::PathBuf },
+    /// Import specific files into the managed library (copies them to library_path).
+    ImportFiles { paths: Vec<std::path::PathBuf> },
+    /// Set the wallpaper library root directory.
+    SetWallpaperLibrary { path: std::path::PathBuf },
+    /// Fetch the current wallpaper library path.
+    GetWallpaperLibrary,
     /// Fetch the current application configuration.
     GetConfig,
     /// Update the application configuration.
@@ -80,6 +82,8 @@ pub enum Response {
     WallpaperList(Vec<WallpaperEntry>),
     /// Response to `GetConfig`.
     Config(aura_core::config::AppConfig),
+    /// Response to `GetWallpaperLibrary`.
+    LibraryPath(std::path::PathBuf),
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +112,21 @@ pub struct WallpaperEntry {
     pub kind: aura_core::wallpaper::MediaKind,
     #[serde(default)]
     pub thumbnail_path: Option<std::path::PathBuf>,
+    /// Width in pixels (0 if unknown).
+    #[serde(default)]
+    pub width: u32,
+    /// Height in pixels (0 if unknown).
+    #[serde(default)]
+    pub height: u32,
+    /// Duration in ms for GIF/Video; 0 for static images.
+    #[serde(default)]
+    pub duration_ms: u64,
+    /// File size in bytes at scan time.
+    #[serde(default)]
+    pub file_size: u64,
+    /// ISO-8601 timestamp of last library scan.
+    #[serde(default)]
+    pub scanned_at: String,
 }
 
 impl From<&aura_core::wallpaper::WallpaperMeta> for WallpaperEntry {
@@ -117,6 +136,11 @@ impl From<&aura_core::wallpaper::WallpaperMeta> for WallpaperEntry {
             path: meta.path.clone(),
             kind: meta.kind,
             thumbnail_path: None,
+            width: meta.width,
+            height: meta.height,
+            duration_ms: meta.duration_ms,
+            file_size: meta.file_size,
+            scanned_at: meta.scanned_at.clone(),
         }
     }
 }

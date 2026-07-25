@@ -11,8 +11,16 @@ pub fn migrate(mut config: AppConfig) -> Result<AppConfig, StorageError> {
         config.version = 1;
     }
 
-    // Future migrations go here:
-    // if config.version == 1 { ... config.version = 2; }
+    // v1 → v2: replace scan_paths Vec with single library_path
+    if config.version == 1 {
+        let new_library = if config.library.scan_paths.is_empty() {
+            aura_core::config::default_library_path()
+        } else {
+            config.library.scan_paths[0].clone()
+        };
+        config.library.library_path = new_library;
+        config.version = 2;
+    }
 
     if config.version != CONFIG_VERSION {
         return Err(StorageError::Migration(format!(
