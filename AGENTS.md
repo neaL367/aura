@@ -23,6 +23,7 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 
 - **Formatting**: Always format code using `cargo fmt --all`.
 - **Clippy**: Code must have zero clippy warnings. Runs on CI with `cargo clippy --workspace --all-targets -- -D warnings`.
+- **Idiomatic Naming & Integration Tests**: Follow Rust API Guidelines (C-CASING, C-CONV, C-GETTER). Omit `get_` prefixes on query/getter methods (e.g. `surface.capabilities()`, `surface.formats()`, `platform.process_memory_mb()`). Integration test files under `crates/*/tests/` omit redundant `_test.rs` suffixes (e.g. `tests/config.rs`, `tests/codec.rs`).
 - **Win32 Error Precision**: Use `Error::from_thread()` (`GetLastError()`) strictly for genuine Win32 API failures (`RegisterWindowMessageW == 0`, `RegisterClassExW == 0`, `GetMessageW == -1`). Return descriptive domain errors (`Error::new(...)`) for non-API search misses (e.g. `Progman` lookup).
 - **Unused Scaffolding**: Binaries/crates under active development must use `#![allow(dead_code)]` at their crate root to prevent lint failures until features are fully wired up.
 - **Imports**: Avoid importing unused traits/modules to keep compile times low.
@@ -34,11 +35,11 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 - **Crate Layout & Module Boundaries**:
   - `crates/core`: Platform-independent domain types (monitors, wallpaper lifecycle, configs).
   - `crates/ipc`: Typed length-prefixed JSON protocol over `\\.\pipe\aura-wallpaperd`.
-  - `crates/storage`: TOML configs (`aura.toml` via `ConfigStore`), JSON wallpaper library cache (`library.json` via `LibraryStore`), and recursive `LibraryScanner` (multi-format media discovery: `png`, `jpg`, `jpeg`, `bmp`, `gif`, `webp`, `mp4`, `mkv`). Paths for both files are resolved under `%APPDATA%/aura` using `dirs::config_dir()`.
+  - `crates/storage`: TOML configs (`aura.toml` via `ConfigStore`), JSON wallpaper library cache (`library.json` via `LibraryStore`), atomic file updates (`atomic_file.rs`), live watcher (`LibraryWatcher`), and recursive `LibraryScanner` (multi-format media discovery: `png`, `jpg`, `jpeg`, `bmp`, `gif`, `webp`, `mp4`, `mkv`). Paths for both files are resolved under `%APPDATA%/aura` using `dirs::config_dir()`.
   - `crates/media`: Static image and GIF decoding (using disposal canvas composition).
-  - `crates/platform-windows`: Win32 native window wrappers, WorkerW attach (`workerw/` split into `discovery`, `attachment`, `manager`), event pump, and singleton.
+  - `crates/platform-windows`: Win32 native window wrappers, WorkerW attach (`workerw/` split into `discovery`, `attachment`, `manager`), event pump, `monitor_enumerator`, `mf_video_decoder`, `power`, and singleton.
   - `crates/renderer-vulkan`: Vulkan pipeline, swapchain, texture upload, and `MonitorRenderer` (`monitor_renderer/` split into `frame_pass`, `resources`).
-  - `crates/wallpaperd`: Aura background daemon coordinator (owns `WorkerW`, Vulkan render threads, IPC server). Split into focused submodules: `orchestrator/` (`handlers/` for `status`, `assignment`, `library`) and `render_thread/` (`placement`, `loop_runner`).
+  - `crates/wallpaperd`: Aura background daemon coordinator (owns `WorkerW`, Vulkan render threads, IPC server). Split into focused submodules: `orchestrator/` (`handlers/` for `status`, `assignment`, `library`), `assignment_manager`, `perf_monitor`, and `render_thread/` (`placement`, `loop_runner`).
   - `crates/wallpaper-ui`: `egui`/`eframe`-based Control Panel UI (`library_panel/` split into `card`, `mod`).
   - `tools/workerw-proof`: Phase 0 standalone WorkerW validation tool.
 
@@ -62,7 +63,8 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 
 ## 6. Storage & UI Rules
 
-- **Atomic Write on Windows**: `std::fs::rename(tmp, dest)` fails with `ERROR_ALREADY_EXISTS` if `dest` already exists on Windows (unlike POSIX `rename`). Always call `let _ = std::fs::remove_file(&dest)` before `std::fs::rename(&tmp, &dest)` in `ConfigStore::save` and `LibraryStore::save`.
+- **Atomic Write on Windows**: `std::fs::rename(tmp, dest)` fails with `ERROR_ALREADY_EXISTS` if `dest` already exists on Windows. Using `MoveFileExW` with `MOVEFILE_REPLACE_EXISTING` in `atomic_file.rs` replaces files atomically with a transient retry loop for file locks.
+- **Race-Safe Thumbnail Generation**: `ThumbnailStore::get_or_create` handles concurrent image thumbnail generation race conditions safely, ensuring clean fallback if another process writes to the thumbnail directory simultaneously.
 - **Native File Pickers**: Use `rfd::FileDialog` for all folder/file selection dialogs. `pick_folder()` opens a native Windows folder-only picker; `pick_files()` with `.add_filter("Media Files", &["png", "jpg", "gif", "webp", "mp4", ...])` opens a native file multi-select dialog. Both are synchronous blocking calls on the egui UI thread — this is acceptable.
 - **LibraryScanner File vs Directory**: `LibraryScanner::scan_paths()` handles both directory paths (`is_dir()` → recursive scan) and individual file paths (`is_file()` → direct `inspect_file`). Always route `AddScanPath` requests through `LibraryScanner::scan_paths` after adding the path to `config.library.scan_paths`.
 - **Windows File URI Scheme for egui_extras**: Local Windows file URIs for `egui_extras::install_image_loaders` MUST use 3 slashes (`file:///C:/path/to/file`). Using 2 slashes (`file://C:/...`) causes `egui` to treat `C:` as a network hostname, failing image loading and displaying red warning icons (`⚠`).
@@ -71,7 +73,8 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 
 ## 7. WorkerW & Windows Desktop Composition Rules
 
-- **WorkerW Candidate Filtering**: Top-level `WorkerW` fallback checks must filter candidates by client dimensions (`cw >= 300 && ch >= 300`). Windows 11 shell components (such as XAML Islands or Taskbar utility windows) reuse the `WorkerW` class for small internal windows (`120x0`); selecting these breaks desktop window placement.
+- **WorkerW Candidate Filtering & Z-Order Placement**: Top-level `WorkerW` fallback checks must filter candidates by client dimensions (`cw >= 300 && ch >= 300`). Desktop window reparenting places host HWNDs relative to `SHELLDLL_DefView` Z-order and immediately presents the initial frame on startup or wallpaper assignment.
+- **Explorer Restart Recovery**: When Explorer restarts (`ExplorerRestarted`), `wallpaperd` recreates host HWNDs and Vulkan swapchain surfaces immediately, keeping desktop presentation intact.
 - **Never Mutate Shell Geometry**: Never call `SetWindowPos` to force-resize Explorer's `WorkerW` window across process boundaries. Explorer automatically sizes desktop-hosting `WorkerW` windows. Forcibly resizing `WorkerW` causes taskbar stalls, desktop UI corruption, and white screen artifacts upon daemon exit.
 - **Reject Raw Desktop Window (`#32769`)**: `GetDesktopWindow()` (`#32769`) must never be accepted as a valid `WorkerW` attach target. DWM does not composite `WS_CHILD` windows reparented into `#32769`, causing host windows to silently render nothing.
 - **Process-Wide DPI Awareness & Mixed-DPI Hosting**: Always call `SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)` at the very top of `main()` before monitor enumeration or window creation. Additionally, wrap `SetParent` calls in `attach_to_workerw` with `SetThreadDpiHostingBehavior(DPI_HOSTING_BEHAVIOR_MIXED)` to enable cross-context reparenting into Explorer's `WorkerW` without triggering `ERROR_INVALID_PARAMETER` (`0x80070057`).
@@ -80,7 +83,7 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 
 ## 8. Monitor Topology & Reconciliation Rules
 
-- **HMONITOR Handle Invalidation**: Per Microsoft Win32 API specifications, `HMONITOR` handles are transient and become invalid upon `WM_DISPLAYCHANGE`. Monitor identity and active context mapping must rely strictly on stable `MonitorId` values (derived from device paths), never raw `HMONITOR` handles.
+- **HMONITOR Handle Invalidation & Hardware-Stable MonitorId**: Per Microsoft Win32 API specifications, `HMONITOR` handles are transient and become invalid upon `WM_DISPLAYCHANGE`. Monitor identity relies on hardware-stable `MonitorId` values derived via Win32 `QueryDisplayConfig` / PnP display device query hashing, preserving monitor assignments across resolution or display mode updates.
 - **Dynamic Monitor Reconciliation**: When `HostEvent::DisplayChanged` (`WM_DISPLAYCHANGE`) is received, re-enumerate displays fresh using `MonitorEnumerator::enumerate()`, diff against active `MonitorId`s in `RenderCoordinator`, gracefully shut down removed monitor render threads, spawn new render threads for added displays, and update IPC `Orchestrator` summaries.
 
 ---
@@ -95,7 +98,8 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 
 ## 10. Performance Engine & Memory Optimization Rules
 
-- **Dirty-Flag Presentation Skipping**: Static image presentation loop tracks `is_dirty`. A frame is rendered once on load/resize/fit mode change, after which `renderer.frame(...)` calls are paused to achieve 0% CPU and 0% GPU load during desktop idle.
+- **Dirty-Flag Presentation Skipping & Instant Swapchain Re-render**: Static image presentation loop tracks `is_dirty`. A frame is rendered once on load/resize/fit mode change or swapchain recreation, after which `renderer.frame(...)` calls are paused to achieve 0% CPU and 0% GPU load during desktop idle.
+- **Border Sampler for Fit/Center Modes**: Vulkan pipeline uses `border_sampler` with clear border colors for `Fit` and `Center` fitting modes to prevent edge bleeding artifacts.
 - **Idle Metric Logging**: `PerfMonitor` logs 0-frame intervals with `status = "Idle (Static - 0% CPU/GPU)"` and `fps = "0.0"` to explicitly distinguish dirty-flag power saving from renderer freezes.
 - **Max 4K Static Image Downsampling**: `ImageDecoder::open` MUST automatically downsample static images larger than 4K (3840px) to max 3840px (`img.thumbnail(3840, 3840)`), preventing 6K/8K uncompressed image RAM bloat.
 - **Immediate High-Res Image Memory Release**: `ThumbnailStore::get_or_create` MUST explicitly invoke `drop(img)` immediately after `img.thumbnail(...)` generation to release full-resolution 4K/8K uncompressed image RAM before JPEG encoding and file I/O.
@@ -105,10 +109,10 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 
 ## 11. Media Architecture, Filesystem Watcher & Power Notification Rules
 
-- **Strict Media Crate Platform Independence**: `aura-media` must remain 100% platform-agnostic containing only decoder traits and pure decoders (Image, GIF, WebP). All platform-specific decoders (e.g. Media Foundation `MfVideoDecoder`) MUST reside in `crates/platform-windows/src/mf_video.rs`.
-- **Non-Blocking Tokio IPC Operations**: Synchronous file I/O or image decoding inside Tokio IPC handlers MUST be wrapped in `tokio::task::block_in_place(|| ...)` to prevent worker thread starvation.
-- **Debounced Filesystem Watcher & Cache Exclusion**: Filesystem watchers MUST use `notify-debouncer-full` with a quiet-period buffer (500ms) to coalesce file event bursts. Events originating within `ThumbnailStore::thumbs_dir()` (`%APPDATA%/aura/thumbs`) MUST be filtered out to prevent self-triggering auto-refresh feedback loops.
-- **Win32 Session & Power Notification Lifecycles**: `PowerManager` MUST store its `power_notify_handle: HPOWERNOTIFY` and call `UnregisterPowerSettingNotification` and `WTSUnRegisterSessionNotification` when event pump message windows exit.
+- **Strict Media Crate Platform Independence**: `aura-media` must remain 100% platform-agnostic containing only decoder traits and pure decoders (Image, GIF, WebP). All platform-specific decoders (e.g. Media Foundation `MfVideoDecoder`) MUST reside in `crates/platform-windows/src/mf_video_decoder.rs`.
+- **Non-Blocking Tokio IPC Operations & Server Pipe Resilience**: Synchronous file I/O or image decoding inside Tokio IPC handlers MUST be wrapped in `tokio::task::block_in_place(|| ...)`. IPC pipe server accept loops handle transient pipe connection races and client disconnects cleanly without dropping server loops.
+- **Debounced Filesystem Watcher & Live Scan Path Sync**: Filesystem watchers MUST use `notify-debouncer-full` with a quiet-period buffer (500ms) to coalesce file event bursts and automatically sync active watch targets when `AddScanPath` or `RemoveScanPath` mutations occur. Events originating within `ThumbnailStore::thumbs_dir()` (`%APPDATA%/aura/thumbs`) MUST be filtered out to prevent self-triggering auto-refresh feedback loops.
+- **Win32 Session & Power Notification Lifecycles**: `PowerManager` and `PowerMonitor` MUST store power notify handles (`HPOWERNOTIFY`), maintaining stateful power/session tracking (`SessionLocked`, `DisplayOff`, `OnBattery`) and unregistering notifications on event pump exit.
 
 ---
 

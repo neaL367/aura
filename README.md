@@ -8,15 +8,15 @@
 
 ## Key Features
 
-- **Native Windows 11 Integration**: Reparents host windows directly into the undocumented `WorkerW` desktop composition layer behind icons using Win32 desktop composition messages (`0x052C`).
-- **Explorer Restart Recovery**: Idempotent re-attachment protocol (`ensure_attached()`) with non-fatal state transitions (`Attached` ⇌ `Detached`) automatically recovers host windows upon Explorer crashes (`TaskbarCreated` broadcast) or display topology changes (`WM_DISPLAYCHANGE`).
-- **Vulkan Rendering Pipeline**: Uses `ash` Vulkan bindings with per-monitor Vulkan surface/swapchain isolation, bounded in-flight command resources, persistent mapped memory `StagingAllocator` for texture uploads, and RAII `Drop` resource safety.
-- **Low-Overhead Decoders**:
-  - **Static Images**: High-performance single-pass RGBA decoding.
+- **Native Windows 11 Integration**: Reparents host windows directly into the undocumented `WorkerW` desktop composition layer relative to `SHELLDLL_DefView` Z-order behind icons using Win32 desktop composition messages (`0x052C`). Monitor identification uses hardware-stable `MonitorId` hashing via PnP display device queries (`QueryDisplayConfig`).
+- **Explorer Restart & Topology Recovery**: Idempotent re-attachment protocol (`ensure_attached()`) with non-fatal state transitions (`Attached` ⇌ `Detached`) automatically recreates host windows and Vulkan surfaces upon Explorer crashes (`TaskbarCreated` broadcast) or display topology changes (`WM_DISPLAYCHANGE`).
+- **Vulkan Rendering Pipeline**: Uses `ash` Vulkan bindings with per-monitor Vulkan surface/swapchain isolation, clear-border `border_sampler` for `Fit` and `Center` fitting modes, dirty-flag idle power saving (0% CPU/GPU at rest), bounded in-flight command resources, persistent mapped memory `StagingAllocator` for texture uploads, and RAII `Drop` resource safety.
+- **Low-Overhead Decoders & Media Architecture**:
+  - **Static Images**: High-performance single-pass RGBA decoding with max 4K automatic downsampling and immediate uncompressed RAM release.
   - **Animated GIFs**: Streaming step-by-step frame decoding with full GIF disposal method compositing (`RestoreToPrevious` snapshot canvas).
-  - **Video**: Windows Media Foundation (`IMFSourceReader`) decoding path.
-- **Wallpaper Library & Gallery UI**: Persistent library of discovered wallpapers stored in a JSON cache (`library.json`). The `wallpaper-ui` Control Panel displays a scrollable gallery grid with per-card **Apply → Display N** assignment buttons. Native Windows folder and file picker dialogs (`rfd`) allow adding scan paths or individual media files (`png`, `jpg`, `gif`, `webp`, `mp4`) at runtime. The library rescans automatically on every `AddScanPath` or `Refresh` IPC command.
-- **Process Isolation & IPC**: Headless daemon (`wallpaperd`) and control panel (`wallpaper-ui`) communicate over Windows Named Pipes (`\\.\pipe\aura-wallpaperd`) using an adjacently-tagged JSON protocol (`serde tag+content`). The UI features an async reconnecting client (`UiIpcClient`), visual connection status indicators, and pause/resume controls.
+  - **Video**: Windows Media Foundation (`IMFSourceReader`) decoding path with AVCC-to-Annex-B conversion and POC reordering.
+- **Wallpaper Library, Live Watcher & Gallery UI**: Persistent library of discovered wallpapers stored in a JSON cache (`library.json`). Race-safe thumbnail generation (`ThumbnailStore`) and atomic file saves (`atomic_file.rs`) protect cache integrity. A debounced filesystem watcher (`LibraryWatcher`) automatically synchronizes live watch targets when scan paths are modified. The `wallpaper-ui` Control Panel displays a scrollable gallery grid (`library_panel/`) with per-card **Apply → Display N** assignment buttons and native folder/file pickers (`rfd`).
+- **Process Isolation & Resilient IPC**: Headless daemon (`wallpaperd`) and control panel (`wallpaper-ui`) communicate over Windows Named Pipes (`\\.\pipe\aura-wallpaperd`) using an adjacently-tagged JSON protocol (`serde tag+content`). The IPC server accept loop handles pipe connection races and client disconnects cleanly without dropping daemon loops.
 
 ---
 
@@ -29,9 +29,11 @@ wallpaper-ui (GUI Control Panel, egui/eframe)
     ▼
 wallpaperd (Headless Daemon Coordinator)
     ├── Orchestrator (State machine & IPC handlers: status, assignment, library)
+    ├── AssignmentManager (Per-monitor wallpaper assignment state)
     ├── RenderCoordinator (Per-monitor Vulkan render loops: placement, loop_runner)
-    ├── PerfMonitor (FPS counters & frame latency metrics)
-    ├── platform-windows (WorkerW management: discovery, attachment, manager, Win32 pump)
+    ├── PerfMonitor (FPS counters, frame latency & process RAM metrics)
+    ├── platform-windows (WorkerW management, monitor_enumerator, mf_video_decoder, Win32 pump)
+    ├── storage (ConfigStore, LibraryStore, atomic_file, LibraryScanner, LibraryWatcher)
     ├── media (Static Image, GIF streaming compositing, Media Foundation video)
     └── renderer-vulkan (Vulkan context, MonitorRenderer: frame_pass, resources, RAII Drop)
 ```
@@ -55,11 +57,11 @@ The project is structured as a modular Cargo workspace across 8 crates and 1 too
 | :--- | :--- |
 | [`aura-core`](crates/core) | Platform-independent domain model (monitors, wallpaper lifecycle, configs) |
 | [`aura-ipc`](crates/ipc) | Length-prefixed JSON serialization protocol over Windows Named Pipes |
-| [`aura-storage`](crates/storage) | Persistence layer for TOML app configs and library JSON database |
-| [`aura-media`](crates/media) | Frame-bounded image/GIF decoders and Media Foundation stubs |
-| [`aura-platform-windows`](crates/platform-windows) | Win32 HWND wrappers, WorkerW attachments (`discovery`, `attachment`, `manager`), process singleton |
+| [`aura-storage`](crates/storage) | Persistence layer (`ConfigStore`, `LibraryStore`, `atomic_file`, `LibraryScanner`, `LibraryWatcher`) |
+| [`aura-media`](crates/media) | Frame-bounded image/GIF decoders and decoder traits |
+| [`aura-platform-windows`](crates/platform-windows) | Win32 HWND wrappers, WorkerW (`discovery`, `attachment`, `manager`), `monitor_enumerator`, `mf_video_decoder`, `power` |
 | [`aura-renderer-vulkan`](crates/renderer-vulkan) | Vulkan context, monitor renderers (`frame_pass`, `resources`), swapchains, shaders, RAII Drop |
-| [`wallpaperd`](crates/wallpaperd) | Headless background daemon orchestrator (`handlers/`) & per-monitor render threads (`placement`, `loop_runner`) |
+| [`wallpaperd`](crates/wallpaperd) | Headless daemon orchestrator (`handlers/`), `assignment_manager`, `perf_monitor` & render threads (`placement`, `loop_runner`) |
 | [`wallpaper-ui`](crates/wallpaper-ui) | `egui`/`eframe` GUI Control Panel (`library_panel/`) & reconnecting IPC client |
 | [`workerw-proof`](tools/workerw-proof) | Standalone validation tool for WorkerW integration proof |
 
