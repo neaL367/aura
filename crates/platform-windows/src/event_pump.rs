@@ -107,6 +107,7 @@ impl Default for EventPump {
 thread_local! {
     static EVENT_SENDER: std::cell::Cell<Option<Sender<HostEvent>>> = const { std::cell::Cell::new(None) };
     static TASKBAR_CREATED_MSG: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    static POWER_MONITOR: std::cell::RefCell<crate::power::PowerMonitor> = std::cell::RefCell::new(crate::power::PowerMonitor::new());
 }
 
 #[cfg(target_os = "windows")]
@@ -115,6 +116,7 @@ fn run_message_loop(sender: Sender<HostEvent>, hwnd_shared: Arc<Mutex<Option<isi
 
     EVENT_SENDER.with(|s| s.set(Some(sender)));
     TASKBAR_CREATED_MSG.with(|m| m.set(taskbar_created));
+    POWER_MONITOR.with(|m| *m.borrow_mut() = crate::power::PowerMonitor::new());
 
     unsafe {
         let hinstance = GetModuleHandleW(None).unwrap_or_default();
@@ -202,28 +204,12 @@ unsafe extern "system" fn wnd_proc(
         }
         WM_POWERBROADCAST => {
             let event = wparam.0 as u32;
-            if event == PBT_APMSUSPEND {
+            let p_event = if event == PBT_APMSUSPEND {
                 tracing::info!("EventPump: System suspending");
-                EVENT_SENDER.with(|s| {
-                    if let Some(sender) = s.take() {
-                        let profile = crate::power::PowerMonitor::profile_for_event(
-                            crate::power::PowerEvent::DisplayOff,
-                        );
-                        let _ = sender.send(HostEvent::PerformanceHint(profile));
-                        s.set(Some(sender));
-                    }
-                });
+                Some(crate::power::PowerEvent::DisplayOff)
             } else if event == PBT_APMRESUMESUSPEND {
                 tracing::info!("EventPump: System resumed");
-                EVENT_SENDER.with(|s| {
-                    if let Some(sender) = s.take() {
-                        let profile = crate::power::PowerMonitor::profile_for_event(
-                            crate::power::PowerEvent::DisplayOn,
-                        );
-                        let _ = sender.send(HostEvent::PerformanceHint(profile));
-                        s.set(Some(sender));
-                    }
-                });
+                Some(crate::power::PowerEvent::DisplayOn)
             } else if event == 0x8013 {
                 // PBT_POWERSETTINGCHANGE
                 if lparam.0 != 0 {
@@ -231,20 +217,27 @@ unsafe extern "system" fn wnd_proc(
                         &*(lparam.0 as *const windows::Win32::System::Power::POWERBROADCAST_SETTING)
                     };
                     let is_on = setting.Data[0] != 0;
-                    let p_event = if is_on {
-                        crate::power::PowerEvent::DisplayOn
-                    } else {
-                        crate::power::PowerEvent::DisplayOff
-                    };
                     tracing::info!("EventPump: Display state changed (is_on: {})", is_on);
-                    EVENT_SENDER.with(|s| {
-                        if let Some(sender) = s.take() {
-                            let profile = crate::power::PowerMonitor::profile_for_event(p_event);
-                            let _ = sender.send(HostEvent::PerformanceHint(profile));
-                            s.set(Some(sender));
-                        }
-                    });
+                    if is_on {
+                        Some(crate::power::PowerEvent::DisplayOn)
+                    } else {
+                        Some(crate::power::PowerEvent::DisplayOff)
+                    }
+                } else {
+                    None
                 }
+            } else {
+                None
+            };
+
+            if let Some(p_event) = p_event {
+                EVENT_SENDER.with(|s| {
+                    if let Some(sender) = s.take() {
+                        let profile = POWER_MONITOR.with(|m| m.borrow_mut().handle_event(p_event));
+                        let _ = sender.send(HostEvent::PerformanceHint(profile));
+                        s.set(Some(sender));
+                    }
+                });
             }
             LRESULT(1)
         }
@@ -260,7 +253,7 @@ unsafe extern "system" fn wnd_proc(
                 tracing::info!("EventPump: Session state changed ({:?})", p_event);
                 EVENT_SENDER.with(|s| {
                     if let Some(sender) = s.take() {
-                        let profile = crate::power::PowerMonitor::profile_for_event(p_event);
+                        let profile = POWER_MONITOR.with(|m| m.borrow_mut().handle_event(p_event));
                         let _ = sender.send(HostEvent::PerformanceHint(profile));
                         s.set(Some(sender));
                     }

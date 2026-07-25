@@ -27,11 +27,16 @@ impl PowerManager {
 
     pub fn register(&mut self, hwnd: HWND) {
         unsafe {
-            if WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION).is_ok() {
-                self.session_registered = true;
-                tracing::info!(
-                    "Registered for Win32 session notifications (WTSRegisterSessionNotification)"
-                );
+            match WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION) {
+                Ok(_) => {
+                    self.session_registered = true;
+                    tracing::info!(
+                        "Registered for Win32 session notifications (WTSRegisterSessionNotification)"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to register session notification: {}", e);
+                }
             }
             match RegisterPowerSettingNotification(
                 HANDLE(hwnd.0),
@@ -71,25 +76,51 @@ impl Default for PowerManager {
     }
 }
 
-/// Power and session monitor.
-pub struct PowerMonitor;
+/// Stateful power and session monitor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PowerMonitor {
+    is_locked: bool,
+    is_display_off: bool,
+    on_battery: bool,
+}
 
 impl PowerMonitor {
     pub fn new() -> Self {
-        Self
+        Self {
+            is_locked: false,
+            is_display_off: false,
+            on_battery: false,
+        }
     }
 
-    /// Map a raw power event to a `PerformanceProfile`.
-    ///
-    /// Called by the event pump when it receives power notifications.
-    pub fn profile_for_event(event: PowerEvent) -> PerformanceProfile {
+    /// Process an incoming power or session event, update internal state, and return the current performance profile.
+    pub fn handle_event(&mut self, event: PowerEvent) -> PerformanceProfile {
         match event {
-            PowerEvent::SessionLocked | PowerEvent::DisplayOff => PerformanceProfile::Paused,
-            PowerEvent::OnBattery => PerformanceProfile::Balanced,
-            PowerEvent::PluggedIn | PowerEvent::SessionUnlocked | PowerEvent::DisplayOn => {
-                PerformanceProfile::Maximum
-            }
+            PowerEvent::SessionLocked => self.is_locked = true,
+            PowerEvent::SessionUnlocked => self.is_locked = false,
+            PowerEvent::DisplayOff => self.is_display_off = true,
+            PowerEvent::DisplayOn => self.is_display_off = false,
+            PowerEvent::OnBattery => self.on_battery = true,
+            PowerEvent::PluggedIn => self.on_battery = false,
         }
+        self.current_profile()
+    }
+
+    /// Compute the current performance profile based on state hierarchy.
+    pub fn current_profile(&self) -> PerformanceProfile {
+        if self.is_locked || self.is_display_off {
+            PerformanceProfile::Paused
+        } else if self.on_battery {
+            PerformanceProfile::Balanced
+        } else {
+            PerformanceProfile::Maximum
+        }
+    }
+
+    /// Map a raw power event statelessly (starting from default state).
+    pub fn profile_for_event(event: PowerEvent) -> PerformanceProfile {
+        let mut monitor = Self::new();
+        monitor.handle_event(event)
     }
 }
 
