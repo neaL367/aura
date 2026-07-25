@@ -207,6 +207,20 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
         // Apply paused state to render threads if changed via IPC.
         coordinator.set_paused(orchestrator.is_paused());
 
+        #[cfg(target_os = "windows")]
+        {
+            use windows::Win32::UI::WindowsAndMessaging::{
+                DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage,
+            };
+            let mut msg = MSG::default();
+            unsafe {
+                while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                    let _ = TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
+        }
+
         let event = receiver.recv_timeout(Duration::from_millis(500));
 
         match event {
