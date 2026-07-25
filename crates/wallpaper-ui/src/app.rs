@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
 use crate::{
-    ipc_client::UiIpcClient, library_panel::LibraryPanel, monitor_panel::MonitorPanel,
-    settings_panel::SettingsPanel, status_bar::StatusBar,
+    dashboard_panel::DashboardPanel, ipc_client::UiIpcClient, settings_panel::SettingsPanel,
+    status_bar::StatusBar,
 };
 
 #[cfg(target_os = "windows")]
@@ -17,8 +17,7 @@ fn trim_ui_working_set() {
 fn trim_ui_working_set() {}
 
 pub struct AuraApp {
-    library: LibraryPanel,
-    monitor: MonitorPanel,
+    dashboard: DashboardPanel,
     settings: SettingsPanel,
     status: StatusBar,
     ipc_client: UiIpcClient,
@@ -28,21 +27,20 @@ pub struct AuraApp {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Tab {
-    Library,
-    Monitors,
+    Dashboard,
     Settings,
 }
 
 impl AuraApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        crate::theme::setup_theme(&cc.egui_ctx);
         egui_extras::install_image_loaders(&cc.egui_ctx);
         Self {
-            library: LibraryPanel::new(),
-            monitor: MonitorPanel::new(),
+            dashboard: DashboardPanel::new(),
             settings: SettingsPanel::new(),
             status: StatusBar::new(),
             ipc_client: UiIpcClient::new(cc.egui_ctx.clone()),
-            active_tab: Tab::Library,
+            active_tab: Tab::Dashboard,
             last_interaction: Instant::now(),
         }
     }
@@ -62,18 +60,34 @@ impl eframe::App for AuraApp {
             self.last_interaction = Instant::now();
         }
 
-        egui::Panel::top("tab_bar").show(ui, |ui| {
+        crate::theme::header_frame().show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("✨ Aura Control Panel");
+                ui.add_space(crate::theme::SPACING_SM);
+                ui.label(
+                    egui::RichText::new("✨ Aura Wallpaper")
+                        .strong()
+                        .size(17.0)
+                        .color(crate::theme::TEXT_PRIMARY),
+                );
+                ui.add_space(crate::theme::SPACING_MD);
                 ui.separator();
-                ui.selectable_value(&mut self.active_tab, Tab::Library, "📁 Library");
-                ui.selectable_value(&mut self.active_tab, Tab::Monitors, "🖥 Monitors");
-                ui.selectable_value(&mut self.active_tab, Tab::Settings, "⚙ Settings");
+                ui.add_space(crate::theme::SPACING_MD);
+
+                if crate::theme::pill_button(ui, self.active_tab == Tab::Dashboard, "⚡ Dashboard")
+                {
+                    self.active_tab = Tab::Dashboard;
+                }
+                ui.add_space(crate::theme::SPACING_XS);
+                if crate::theme::pill_button(ui, self.active_tab == Tab::Settings, "⚙ Settings") {
+                    self.active_tab = Tab::Settings;
+                }
+
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("⏸ Pause").clicked() {
+                    if ui.button("⏸ Pause All").clicked() {
                         self.ipc_client.send(aura_ipc::Request::PauseAll);
                     }
-                    if ui.button("▶ Resume").clicked() {
+                    ui.add_space(crate::theme::SPACING_XS);
+                    if ui.button("▶ Resume All").clicked() {
                         self.ipc_client.send(aura_ipc::Request::ResumeAll);
                     }
                 });
@@ -81,9 +95,6 @@ impl eframe::App for AuraApp {
         });
 
         if prev_tab != self.active_tab {
-            if prev_tab == Tab::Library {
-                ctx.forget_all_images();
-            }
             trim_ui_working_set();
         }
 
@@ -96,11 +107,8 @@ impl eframe::App for AuraApp {
         });
 
         match self.active_tab {
-            Tab::Library => {
-                self.library.show(ui, &self.ipc_client);
-            }
-            Tab::Monitors => {
-                self.monitor.show(ui, &self.ipc_client);
+            Tab::Dashboard => {
+                self.dashboard.show(ui, &self.ipc_client);
             }
             Tab::Settings => {
                 self.settings.show(ui, &self.ipc_client);

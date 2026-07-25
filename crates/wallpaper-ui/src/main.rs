@@ -6,12 +6,16 @@
 //! `aura-media`, `aura-platform-windows`, or `aura-renderer-vulkan`.
 //! All daemon communication goes through `aura-ipc`.
 
+#![allow(dead_code)]
+
 mod app;
+mod dashboard_panel;
 mod ipc_client;
 mod library_panel;
 mod monitor_panel;
 mod settings_panel;
 mod status_bar;
+mod theme;
 
 fn main() {
     tracing_subscriber::fmt()
