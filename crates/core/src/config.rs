@@ -127,23 +127,24 @@ fn default_thumb_cache() -> usize {
 /// Creates the directory if it doesn't exist, so import always works without
 /// falling back to a system-owned path like `C:\Windows\Web\Wallpaper`.
 pub fn default_library_path() -> std::path::PathBuf {
-    let fallback = std::path::PathBuf::from(r"C:\Windows\Web\Wallpaper");
-
-    let user_profile = match std::env::var("USERPROFILE") {
-        Ok(p) => p,
-        Err(_) => return fallback,
+    let fallback = match std::env::var("APPDATA") {
+        Ok(appdata) => std::path::PathBuf::from(appdata)
+            .join("aura")
+            .join("wallpapers"),
+        Err(_) => std::path::PathBuf::from(r"C:\Users\Public\Pictures\Aura Wallpapers"),
     };
-    let candidate = std::path::PathBuf::from(user_profile)
-        .join("Pictures")
-        .join("Aura Wallpapers");
 
-    if candidate.is_dir() {
-        return candidate;
+    if let Ok(p) = std::env::var("USERPROFILE") {
+        let candidate = std::path::PathBuf::from(p)
+            .join("Pictures")
+            .join("Aura Wallpapers");
+
+        if candidate.is_dir() || std::fs::create_dir_all(&candidate).is_ok() {
+            return candidate;
+        }
     }
-    // Attempt to create it silently; if that fails, fall back.
-    if std::fs::create_dir_all(&candidate).is_ok() {
-        return candidate;
-    }
+
+    let _ = std::fs::create_dir_all(&fallback);
     fallback
 }
 

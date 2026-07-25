@@ -86,7 +86,7 @@ pub(super) fn handle_import_files(
     state_lock: &Arc<Mutex<OrchestratorState>>,
     paths: Vec<PathBuf>,
 ) -> Response {
-    let library_path = {
+    let mut library_path = {
         let state = match state_lock.lock() {
             Ok(s) => s,
             Err(e) => {
@@ -99,12 +99,9 @@ pub(super) fn handle_import_files(
         config.library.library_path
     };
 
-    if !library_path.is_dir()
-        && let Err(e) = std::fs::create_dir_all(&library_path)
-    {
-        return Response::Error {
-            reason: format!("Failed to create library directory: {}", e),
-        };
+    if !library_path.is_dir() && std::fs::create_dir_all(&library_path).is_err() {
+        library_path = aura_core::config::default_library_path();
+        let _ = std::fs::create_dir_all(&library_path);
     }
 
     let mut copied = 0;
