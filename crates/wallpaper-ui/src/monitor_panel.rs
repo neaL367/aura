@@ -48,166 +48,167 @@ impl MonitorPanel {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing =
+                            egui::vec2(crate::theme::SPACING_MD, crate::theme::SPACING_MD);
                         for (idx, mon) in monitors.iter().enumerate() {
-                            egui::Frame::group(ui.style())
-                                .inner_margin(12.0)
-                                .show(ui, |ui| {
-                                    ui.set_width(320.0);
-                                    ui.vertical(|ui| {
-                                        ui.heading(format!("🖥 Display {}", idx + 1));
+                            crate::theme::group_frame().show(ui, |ui| {
+                                ui.set_width(340.0);
+                                ui.vertical(|ui| {
+                                    ui.horizontal(|ui| {
                                         ui.label(
-                                            egui::RichText::new(&mon.name)
+                                            egui::RichText::new(format!("🖥 Display {}", idx + 1))
                                                 .strong()
-                                                .color(egui::Color32::LIGHT_BLUE),
+                                                .size(16.0)
+                                                .color(crate::theme::TEXT_PRIMARY),
                                         );
-                                        ui.label(
-                                            egui::RichText::new(format!("ID: {:?}", mon.id))
-                                                .small()
-                                                .color(egui::Color32::GRAY),
-                                        );
-
-                                        ui.separator();
-
-                                        ui.label("Select Wallpaper:");
-
-                                        if wallpapers.is_empty() {
-                                            ui.label(
-                                                egui::RichText::new("No wallpapers in library")
-                                                    .small()
-                                                    .italics(),
-                                            );
-                                        } else {
-                                            let current_selected =
-                                                self.selected_wallpapers.get(&mon.id).copied();
-                                            let current_label = current_selected
-                                                .and_then(|id| {
-                                                    wallpapers.iter().find(|w| w.id == id)
-                                                })
-                                                .and_then(|w| w.path.file_name()?.to_str())
-                                                .unwrap_or("-- Select Wallpaper --");
-
-                                            egui::ComboBox::from_id_salt(format!(
-                                                "combo_{:?}",
-                                                mon.id
-                                            ))
-                                            .selected_text(current_label)
-                                            .width(280.0)
-                                            .show_ui(
-                                                ui,
-                                                |ui| {
-                                                    for entry in &wallpapers {
-                                                        let name = entry
-                                                            .path
-                                                            .file_name()
-                                                            .and_then(|n| n.to_str())
-                                                            .unwrap_or("Wallpaper");
-                                                        let is_selected =
-                                                            current_selected == Some(entry.id);
-                                                        if ui
-                                                            .selectable_label(is_selected, name)
-                                                            .clicked()
-                                                        {
-                                                            self.selected_wallpapers
-                                                                .insert(mon.id, entry.id);
-                                                        }
-                                                    }
-                                                },
-                                            );
-
-                                            ui.add_space(8.0);
-                                            ui.label("Fit Mode:");
-                                            let fit_mode = self
-                                                .selected_fit_modes
-                                                .get(&mon.id)
-                                                .copied()
-                                                .unwrap_or_default();
-                                            egui::ComboBox::from_id_salt(format!(
-                                                "fit_{:?}",
-                                                mon.id
-                                            ))
-                                            .selected_text(format!("{}", fit_mode))
-                                            .width(280.0)
-                                            .show_ui(
-                                                ui,
-                                                |ui| {
-                                                    for mode in [
-                                                        FitMode::Fill,
-                                                        FitMode::Fit,
-                                                        FitMode::Stretch,
-                                                        FitMode::Center,
-                                                        FitMode::Tile,
-                                                        FitMode::Span,
-                                                    ] {
-                                                        if ui
-                                                            .selectable_label(
-                                                                fit_mode == mode,
-                                                                format!("{}", mode),
-                                                            )
-                                                            .clicked()
-                                                        {
-                                                            self.selected_fit_modes
-                                                                .insert(mon.id, mode);
-                                                            ipc_client.send(Request::SetFitMode {
-                                                                monitor_id: mon.id,
-                                                                fit_mode: mode,
-                                                            });
-                                                        }
-                                                    }
-                                                },
-                                            );
-
-                                            ui.add_space(8.0);
-
-                                            ui.horizontal(|ui| {
-                                                if let Some(&wallpaper_id) =
-                                                    self.selected_wallpapers.get(&mon.id)
-                                                {
-                                                    if ui.button("▶ Apply to Display").clicked() {
-                                                        ipc_client.send(Request::AssignWallpaper {
-                                                            monitor_id: mon.id,
-                                                            wallpaper_id,
-                                                            fit_mode: Some(fit_mode),
-                                                        });
-                                                    }
-                                                } else {
-                                                    ui.add_enabled(
-                                                        false,
-                                                        egui::Button::new("▶ Select a Wallpaper"),
-                                                    );
-                                                }
-
-                                                if ui.button("❌ Unassign").clicked() {
-                                                    ipc_client.send(Request::RemoveAssignment {
-                                                        monitor_id: mon.id,
-                                                    });
-                                                    self.selected_wallpapers.remove(&mon.id);
-                                                }
-                                            });
-
-                                            ui.add_space(4.0);
-                                            ui.horizontal(|ui| {
-                                                if ui.button("⏸ Pause").clicked() {
-                                                    ipc_client.send(Request::SetPlayback {
-                                                        monitor_id: mon.id,
-                                                        command: PlaybackCommand::Pause,
-                                                    });
-                                                }
-                                                if ui.button("▶ Play").clicked() {
-                                                    ipc_client.send(Request::SetPlayback {
-                                                        monitor_id: mon.id,
-                                                        command: PlaybackCommand::Play,
-                                                    });
-                                                }
-                                                if ui.button("🔄 Restart").clicked() {
-                                                    ipc_client.send(Request::SetPlayback {
-                                                        monitor_id: mon.id,
-                                                        command: PlaybackCommand::Loop,
-                                                    });
-                                                }
-                                            });
-                                        }
                                     });
+
+                                    ui.label(
+                                        egui::RichText::new(&mon.name)
+                                            .size(13.0)
+                                            .color(crate::theme::ACCENT_PRIMARY),
+                                    );
+                                    ui.label(
+                                        egui::RichText::new(format!("ID: {:?}", mon.id))
+                                            .small()
+                                            .color(crate::theme::TEXT_MUTED),
+                                    );
+
+                                    ui.add_space(crate::theme::SPACING_SM);
+                                    ui.separator();
+                                    ui.add_space(crate::theme::SPACING_SM);
+
+                                    ui.label(
+                                        egui::RichText::new("Select Wallpaper:").strong().small(),
+                                    );
+
+                                    if wallpapers.is_empty() {
+                                        ui.label(
+                                            egui::RichText::new("No wallpapers in library")
+                                                .small()
+                                                .italics()
+                                                .color(crate::theme::TEXT_MUTED),
+                                        );
+                                    } else {
+                                        let current_selected =
+                                            self.selected_wallpapers.get(&mon.id).copied();
+                                        let current_label = current_selected
+                                            .and_then(|id| wallpapers.iter().find(|w| w.id == id))
+                                            .and_then(|w| w.path.file_name()?.to_str())
+                                            .unwrap_or("-- Select Wallpaper --");
+
+                                        egui::ComboBox::from_id_salt(format!("combo_{:?}", mon.id))
+                                            .selected_text(current_label)
+                                            .width(300.0)
+                                            .show_ui(ui, |ui| {
+                                                for entry in &wallpapers {
+                                                    let name = entry
+                                                        .path
+                                                        .file_name()
+                                                        .and_then(|n| n.to_str())
+                                                        .unwrap_or("Wallpaper");
+                                                    let is_selected =
+                                                        current_selected == Some(entry.id);
+                                                    if ui
+                                                        .selectable_label(is_selected, name)
+                                                        .clicked()
+                                                    {
+                                                        self.selected_wallpapers
+                                                            .insert(mon.id, entry.id);
+                                                    }
+                                                }
+                                            });
+
+                                        ui.add_space(crate::theme::SPACING_SM);
+                                        ui.label(egui::RichText::new("Fit Mode:").strong().small());
+
+                                        let fit_mode = self
+                                            .selected_fit_modes
+                                            .get(&mon.id)
+                                            .copied()
+                                            .unwrap_or_default();
+
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.spacing_mut().item_spacing = egui::vec2(
+                                                crate::theme::SPACING_XS,
+                                                crate::theme::SPACING_XS,
+                                            );
+                                            for mode in [
+                                                FitMode::Fill,
+                                                FitMode::Fit,
+                                                FitMode::Stretch,
+                                                FitMode::Center,
+                                                FitMode::Tile,
+                                                FitMode::Span,
+                                            ] {
+                                                if ui
+                                                    .selectable_label(
+                                                        fit_mode == mode,
+                                                        format!("{}", mode),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    self.selected_fit_modes.insert(mon.id, mode);
+                                                    ipc_client.send(Request::SetFitMode {
+                                                        monitor_id: mon.id,
+                                                        fit_mode: mode,
+                                                    });
+                                                }
+                                            }
+                                        });
+
+                                        ui.add_space(crate::theme::SPACING_MD);
+
+                                        ui.horizontal(|ui| {
+                                            if let Some(&wallpaper_id) =
+                                                self.selected_wallpapers.get(&mon.id)
+                                            {
+                                                if ui.button("▶ Apply to Display").clicked() {
+                                                    ipc_client.send(Request::AssignWallpaper {
+                                                        monitor_id: mon.id,
+                                                        wallpaper_id,
+                                                        fit_mode: Some(fit_mode),
+                                                    });
+                                                }
+                                            } else {
+                                                ui.add_enabled(
+                                                    false,
+                                                    egui::Button::new("▶ Select a Wallpaper"),
+                                                );
+                                            }
+
+                                            if ui.button("❌ Unassign").clicked() {
+                                                ipc_client.send(Request::RemoveAssignment {
+                                                    monitor_id: mon.id,
+                                                });
+                                                self.selected_wallpapers.remove(&mon.id);
+                                            }
+                                        });
+
+                                        ui.add_space(4.0);
+                                        ui.horizontal(|ui| {
+                                            if ui.button("⏸ Pause").clicked() {
+                                                ipc_client.send(Request::SetPlayback {
+                                                    monitor_id: mon.id,
+                                                    command: PlaybackCommand::Pause,
+                                                });
+                                            }
+                                            if ui.button("▶ Play").clicked() {
+                                                ipc_client.send(Request::SetPlayback {
+                                                    monitor_id: mon.id,
+                                                    command: PlaybackCommand::Play,
+                                                });
+                                            }
+                                            if ui.button("🔄 Restart").clicked() {
+                                                ipc_client.send(Request::SetPlayback {
+                                                    monitor_id: mon.id,
+                                                    command: PlaybackCommand::Loop,
+                                                });
+                                            }
+                                        });
+                                    }
                                 });
+                            });
                         }
                     });
                 });

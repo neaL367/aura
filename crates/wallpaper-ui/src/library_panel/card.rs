@@ -2,44 +2,66 @@ use aura_core::wallpaper::MediaKind;
 use aura_ipc::protocol::{Request, WallpaperEntry};
 
 use crate::ipc_client::UiIpcClient;
+use crate::theme;
 
 pub fn render_card(ui: &mut egui::Ui, entry: &WallpaperEntry, ipc_client: &UiIpcClient) {
-    egui::Frame::group(ui.style())
-        .inner_margin(8.0)
-        .show(ui, |ui| {
-            ui.set_width(220.0);
+    let id = ui.make_persistent_id(format!("card_{:?}", entry.id));
+    let response = ui.interact(egui::Rect::NOTHING, id, egui::Sense::hover());
+    let is_hovered = response.hovered();
 
-            ui.vertical(|ui| {
-                let filename = entry
-                    .path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("Wallpaper");
+    theme::card_frame(is_hovered, false).show(ui, |ui| {
+        ui.set_width(220.0);
 
-                ui.label(egui::RichText::new(filename).strong().heading());
+        ui.vertical(|ui| {
+            let filename = entry
+                .path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Wallpaper");
 
-                let badge = match entry.kind {
-                    MediaKind::Image => "🖼 Image",
-                    MediaKind::Gif => "🎞 GIF",
-                    MediaKind::Video => "🎬 Video",
-                };
-                ui.label(badge);
-
-                render_card_preview(ui, entry);
-
-                ui.add(
-                    egui::Label::new(
-                        egui::RichText::new(entry.path.to_string_lossy())
-                            .small()
-                            .color(egui::Color32::GRAY),
-                    )
-                    .truncate(),
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new(filename)
+                        .strong()
+                        .size(14.0)
+                        .color(theme::TEXT_PRIMARY),
                 );
-
-                ui.add_space(6.0);
-                render_assign_buttons(ui, entry, ipc_client);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    render_kind_badge(ui, entry.kind);
+                });
             });
+
+            ui.add_space(theme::SPACING_XS);
+
+            render_card_preview(ui, entry);
+
+            ui.add_space(theme::SPACING_XS);
+
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(entry.path.to_string_lossy())
+                        .small()
+                        .color(theme::TEXT_MUTED),
+                )
+                .truncate(),
+            );
+
+            ui.add_space(theme::SPACING_SM);
+            render_assign_buttons(ui, entry, ipc_client);
         });
+    });
+}
+
+fn render_kind_badge(ui: &mut egui::Ui, kind: MediaKind) {
+    let (bg, fg, label) = match kind {
+        MediaKind::Image => (theme::BADGE_IMAGE_BG, theme::BADGE_IMAGE_TEXT, "Image"),
+        MediaKind::Gif => (theme::BADGE_GIF_BG, theme::BADGE_GIF_TEXT, "GIF"),
+        MediaKind::Video => (theme::BADGE_VIDEO_BG, theme::BADGE_VIDEO_TEXT, "Video"),
+    };
+
+    theme::badge_frame(bg).show(ui, |ui| {
+        ui.label(egui::RichText::new(label).small().strong().color(fg));
+    });
 }
 
 fn render_card_preview(ui: &mut egui::Ui, entry: &WallpaperEntry) {
@@ -53,12 +75,12 @@ fn render_card_preview(ui: &mut egui::Ui, entry: &WallpaperEntry) {
         ui.add(
             egui::Image::new(uri)
                 .max_size([200.0, 112.5].into())
-                .corner_radius(4.0),
+                .corner_radius(theme::RADIUS_SM),
         );
     } else {
         egui::Frame::canvas(ui.style())
-            .fill(egui::Color32::from_rgb(35, 35, 42))
-            .corner_radius(4.0)
+            .fill(theme::BG_APP)
+            .corner_radius(theme::RADIUS_SM)
             .show(ui, |ui| {
                 ui.set_min_size([200.0, 112.5].into());
                 ui.set_max_size([200.0, 112.5].into());
@@ -66,7 +88,7 @@ fn render_card_preview(ui: &mut egui::Ui, entry: &WallpaperEntry) {
                     ui.label(
                         egui::RichText::new("🖼 Generating thumbnail...")
                             .small()
-                            .color(egui::Color32::GRAY),
+                            .color(theme::TEXT_MUTED),
                     );
                 });
             });
@@ -78,6 +100,7 @@ fn render_assign_buttons(ui: &mut egui::Ui, entry: &WallpaperEntry, ipc_client: 
     match status {
         crate::ipc_client::ConnectionStatus::Connected(ref s) if !s.monitors.is_empty() => {
             ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(theme::SPACING_XS, theme::SPACING_XS);
                 for (idx, mon) in s.monitors.iter().enumerate() {
                     let btn_label = format!("Apply → Display {}", idx + 1);
                     if ui.button(btn_label).clicked() {
@@ -94,7 +117,7 @@ fn render_assign_buttons(ui: &mut egui::Ui, entry: &WallpaperEntry, ipc_client: 
             ui.label(
                 egui::RichText::new("No monitors reported by daemon")
                     .small()
-                    .color(egui::Color32::GRAY),
+                    .color(theme::TEXT_MUTED),
             );
         }
         _ => {
