@@ -62,8 +62,12 @@ impl VideoDecodePipeline {
     }
 
     /// Reset decode session reference frame state upon video loop or seek boundary.
+    ///
+    /// Note: Currently a stub pending Tier 2 hardware video decode pipeline activation.
     pub fn reset_session_state(&mut self, _session: &VulkanVideoSession) {
-        tracing::info!("VideoDecodePipeline: Flushed reference frame history on stream loop/seek");
+        tracing::debug!(
+            "VideoDecodePipeline: Session reset requested (stub — reference frame flush pending Vulkan Video session reset submission)"
+        );
     }
 
     /// Clean up decode command pool and timeline semaphore.
