@@ -1,41 +1,60 @@
-use egui::{Color32, FontData, FontDefinitions, FontFamily, Frame, Margin, Stroke, Visuals};
+use egui::{
+    Color32, FontData, FontDefinitions, FontFamily, Frame, Margin, Stroke, Visuals, epaint::Shadow,
+};
 use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
-// Design Tokens: Vercel / Next.js Light Theme Color Palette
+// Color Palette — Light Theme (Zinc / Vercel)
 // ---------------------------------------------------------------------------
 
-pub const BG_APP: Color32 = Color32::from_rgb(250, 250, 250); // #fafafa
-pub const BG_CARD: Color32 = Color32::from_rgb(255, 255, 255); // #ffffff
-pub const BG_CARD_HOVER: Color32 = Color32::from_rgb(244, 244, 245); // #f4f4f5
+pub const BG_APP: Color32 = Color32::from_rgb(250, 250, 250);
+pub const BG_CARD: Color32 = Color32::from_rgb(255, 255, 255);
+pub const BG_CARD_HOVER: Color32 = Color32::from_rgb(244, 244, 245);
 pub const BG_CARD_SELECTED: Color32 = Color32::from_rgb(244, 244, 245);
 
-pub const BORDER_SUBTLE: Color32 = Color32::from_rgb(228, 228, 231); // #e4e4e7
-pub const BORDER_STRONG: Color32 = Color32::from_rgb(161, 161, 170); // #a1a1aa
+pub const BORDER_SUBTLE: Color32 = Color32::from_rgb(228, 228, 231);
+pub const BORDER_STRONG: Color32 = Color32::from_rgb(161, 161, 170);
 pub const BORDER_ACCENT: Color32 = Color32::from_rgb(24, 24, 27);
 
-pub const ACCENT_PRIMARY: Color32 = Color32::from_rgb(24, 24, 27); // #18181b (Zinc 900)
+pub const ACCENT_PRIMARY: Color32 = Color32::from_rgb(24, 24, 27);
 pub const ACCENT_HOVER: Color32 = Color32::from_rgb(39, 39, 42);
 
-pub const TEXT_PRIMARY: Color32 = Color32::from_rgb(9, 9, 11); // #09090b (Zinc 950)
-pub const TEXT_MUTED: Color32 = Color32::from_rgb(113, 113, 122); // #71717a (Zinc 500)
-pub const TEXT_ON_DARK: Color32 = Color32::from_rgb(255, 255, 255); // #ffffff
+pub const TEXT_PRIMARY: Color32 = Color32::from_rgb(9, 9, 11);
+pub const TEXT_MUTED: Color32 = Color32::from_rgb(113, 113, 122);
+pub const TEXT_ON_DARK: Color32 = Color32::from_rgb(255, 255, 255);
+
+pub const STATUS_CONNECTED: Color32 = Color32::from_rgb(22, 163, 74);
+pub const STATUS_CONNECTING: Color32 = Color32::from_rgb(217, 119, 6);
+pub const STATUS_DISCONNECTED: Color32 = Color32::from_rgb(220, 38, 38);
+
+pub const STATUS_BADGE_CONNECTED: Color32 = Color32::from_rgb(240, 253, 244);
+pub const STATUS_BADGE_CONNECTING: Color32 = Color32::from_rgb(255, 251, 235);
+pub const STATUS_BADGE_DISCONNECTED: Color32 = Color32::from_rgb(254, 242, 242);
+
+// ---------------------------------------------------------------------------
+// Differentiated badge colors per media kind
+// ---------------------------------------------------------------------------
+
+pub const BG_SIDEBAR: Color32 = Color32::from_rgb(255, 255, 255);
+pub const BG_SIDEBAR_HOVER: Color32 = Color32::from_rgb(244, 244, 245);
+pub const BG_SIDEBAR_ACTIVE: Color32 = Color32::from_rgb(244, 244, 245);
+pub const SIDEBAR_INDICATOR: Color32 = Color32::from_rgb(24, 24, 27);
+pub const CONTENT_CARD: Color32 = Color32::from_rgb(255, 255, 255);
+
+pub const BG_INSPECTOR: Color32 = Color32::from_rgb(255, 255, 255);
+pub const INSPECTOR_DIVIDER: Color32 = Color32::from_rgb(228, 228, 231);
 
 pub const BADGE_IMAGE_BG: Color32 = Color32::from_rgb(244, 244, 245);
 pub const BADGE_IMAGE_TEXT: Color32 = Color32::from_rgb(39, 39, 42);
 
-pub const BADGE_GIF_BG: Color32 = Color32::from_rgb(244, 244, 245);
-pub const BADGE_GIF_TEXT: Color32 = Color32::from_rgb(39, 39, 42);
+pub const BADGE_GIF_BG: Color32 = Color32::from_rgb(254, 243, 199);
+pub const BADGE_GIF_TEXT: Color32 = Color32::from_rgb(146, 64, 14);
 
-pub const BADGE_VIDEO_BG: Color32 = Color32::from_rgb(244, 244, 245);
-pub const BADGE_VIDEO_TEXT: Color32 = Color32::from_rgb(39, 39, 42);
-
-pub const STATUS_CONNECTED: Color32 = Color32::from_rgb(22, 163, 74); // green-600
-pub const STATUS_CONNECTING: Color32 = Color32::from_rgb(217, 119, 6); // amber-600
-pub const STATUS_DISCONNECTED: Color32 = Color32::from_rgb(220, 38, 38); // red-600
+pub const BADGE_VIDEO_BG: Color32 = Color32::from_rgb(219, 234, 254);
+pub const BADGE_VIDEO_TEXT: Color32 = Color32::from_rgb(30, 64, 175);
 
 // ---------------------------------------------------------------------------
-// Design Tokens: Typography Scale
+// Typography Scale
 // ---------------------------------------------------------------------------
 
 pub const FONT_WINDOW_TITLE: f32 = 18.0;
@@ -47,7 +66,7 @@ pub const FONT_LABEL: f32 = 11.0;
 pub const FONT_CAPTION: f32 = 10.0;
 
 // ---------------------------------------------------------------------------
-// Design Tokens: Spacing & Radius Tokens (8px/4px Grid)
+// Spacing & Radius (8px/4px Grid)
 // ---------------------------------------------------------------------------
 
 pub const SPACING_XS: f32 = 4.0;
@@ -60,7 +79,242 @@ pub const RADIUS_SM: f32 = 4.0;
 pub const RADIUS_MD: f32 = 6.0;
 
 // ---------------------------------------------------------------------------
-// Setup Geist Font & Visuals
+// Component Sizing
+// ---------------------------------------------------------------------------
+
+pub const CARD_WIDTH: f32 = 240.0;
+pub const MONITOR_CARD_WIDTH: f32 = 360.0;
+pub const THUMBNAIL_SIZE: egui::Vec2 = egui::vec2(240.0, 135.0);
+pub const SIDEBAR_WIDTH: f32 = 48.0;
+
+// ---------------------------------------------------------------------------
+// Elevation helpers
+// ---------------------------------------------------------------------------
+
+fn elevation_rest() -> Shadow {
+    Shadow {
+        offset: [0, 0],
+        blur: 4,
+        spread: 0,
+        color: Color32::from_rgba_premultiplied(0, 0, 0, 15),
+    }
+}
+
+fn elevation_raised() -> Shadow {
+    Shadow {
+        offset: [0, 0],
+        blur: 8,
+        spread: 0,
+        color: Color32::from_rgba_premultiplied(0, 0, 0, 26),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Motion
+// ---------------------------------------------------------------------------
+
+pub const MOTION_DURATION_MS: f32 = 150.0;
+
+// ---------------------------------------------------------------------------
+// Button
+// ---------------------------------------------------------------------------
+
+pub enum ButtonVariant {
+    Primary,
+    Secondary,
+    Ghost,
+}
+
+pub fn button(ui: &mut egui::Ui, label: &str, variant: ButtonVariant) -> egui::Response {
+    let (bg, fg, stroke) = match variant {
+        ButtonVariant::Primary => (ACCENT_PRIMARY, TEXT_ON_DARK, Stroke::NONE),
+        ButtonVariant::Secondary => (BG_CARD, TEXT_PRIMARY, Stroke::new(1.0, BORDER_SUBTLE)),
+        ButtonVariant::Ghost => (Color32::TRANSPARENT, TEXT_PRIMARY, Stroke::NONE),
+    };
+
+    let text = egui::RichText::new(label)
+        .size(FONT_SECONDARY)
+        .strong()
+        .color(fg);
+
+    let btn = egui::Button::new(text)
+        .fill(bg)
+        .corner_radius(RADIUS_SM)
+        .stroke(stroke);
+
+    ui.add(btn)
+}
+
+// ---------------------------------------------------------------------------
+// Badge
+// ---------------------------------------------------------------------------
+
+pub enum BadgeVariant {
+    Image,
+    Gif,
+    Video,
+}
+
+pub fn badge(ui: &mut egui::Ui, label: &str, variant: BadgeVariant) {
+    let (bg, fg) = match variant {
+        BadgeVariant::Image => (BADGE_IMAGE_BG, BADGE_IMAGE_TEXT),
+        BadgeVariant::Gif => (BADGE_GIF_BG, BADGE_GIF_TEXT),
+        BadgeVariant::Video => (BADGE_VIDEO_BG, BADGE_VIDEO_TEXT),
+    };
+
+    let frame = Frame::new()
+        .fill(bg)
+        .corner_radius(RADIUS_SM)
+        .inner_margin(Margin::symmetric(SPACING_SM as i8, SPACING_XS as i8));
+
+    frame.show(ui, |ui| {
+        ui.label(
+            egui::RichText::new(label)
+                .size(FONT_LABEL)
+                .strong()
+                .color(fg),
+        );
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Card Frame — hover-aware card container
+// ---------------------------------------------------------------------------
+
+pub enum Elevation {
+    Rest,
+    Raised,
+}
+
+pub fn card_frame<Id: Into<egui::Id>>(
+    ui: &mut egui::Ui,
+    id: Id,
+    is_selected: bool,
+    elevation: Elevation,
+    add_contents: impl FnOnce(&mut egui::Ui),
+) -> egui::Response {
+    let id = id.into();
+
+    let was_hovered = ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
+
+    let bg = if is_selected {
+        BG_CARD_SELECTED
+    } else if was_hovered {
+        BG_CARD_HOVER
+    } else {
+        BG_CARD
+    };
+
+    let border_stroke = if is_selected {
+        Stroke::new(1.5, BORDER_ACCENT)
+    } else if was_hovered {
+        Stroke::new(1.0, BORDER_STRONG)
+    } else {
+        Stroke::new(1.0, BORDER_SUBTLE)
+    };
+
+    let shadow = match elevation {
+        Elevation::Rest => elevation_rest(),
+        Elevation::Raised => elevation_raised(),
+    };
+
+    let frame = Frame::new()
+        .fill(bg)
+        .stroke(border_stroke)
+        .corner_radius(RADIUS_MD)
+        .shadow(shadow)
+        .inner_margin(Margin::same(SPACING_MD as i8));
+
+    let inner = frame.show(ui, add_contents);
+    let rect = inner.response.rect;
+    let response = ui.interact(rect, id, egui::Sense::click());
+
+    ui.ctx().data_mut(|d| d.insert_temp(id, response.hovered()));
+
+    response
+}
+
+// ---------------------------------------------------------------------------
+// Section label — uppercase overline
+// ---------------------------------------------------------------------------
+
+pub fn section_label(ui: &mut egui::Ui, text: &str) {
+    ui.label(
+        egui::RichText::new(text)
+            .size(FONT_LABEL)
+            .strong()
+            .color(TEXT_MUTED),
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Empty State
+// ---------------------------------------------------------------------------
+
+pub fn empty_state(
+    ui: &mut egui::Ui,
+    title: &str,
+    description: &str,
+    add_extra: impl FnOnce(&mut egui::Ui),
+) {
+    group_frame().show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.vertical_centered(|ui| {
+            ui.add_space(SPACING_XL);
+            ui.label(
+                egui::RichText::new(title)
+                    .size(FONT_SECTION_HEADER)
+                    .strong()
+                    .color(TEXT_MUTED),
+            );
+            ui.add_space(SPACING_SM);
+            ui.label(
+                egui::RichText::new(description)
+                    .size(FONT_SECONDARY)
+                    .color(TEXT_MUTED),
+            );
+            add_extra(ui);
+            ui.add_space(SPACING_XL);
+        });
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Connection status glyph
+// ---------------------------------------------------------------------------
+
+pub fn connection_dot(ui: &mut egui::Ui, color: Color32) {
+    ui.colored_label(color, "\u{25CF}");
+}
+
+// ---------------------------------------------------------------------------
+// Frame Builders
+// ---------------------------------------------------------------------------
+
+pub fn header_frame() -> Frame {
+    Frame::new()
+        .fill(BG_CARD)
+        .stroke(Stroke::new(1.0, BORDER_SUBTLE))
+        .inner_margin(Margin::symmetric(SPACING_LG as i8, SPACING_MD as i8))
+}
+
+pub fn group_frame() -> Frame {
+    Frame::new()
+        .fill(BG_CARD)
+        .stroke(Stroke::new(1.0, BORDER_SUBTLE))
+        .corner_radius(RADIUS_MD)
+        .inner_margin(Margin::same(SPACING_LG as i8))
+}
+
+pub fn badge_frame(bg: Color32) -> Frame {
+    Frame::new()
+        .fill(bg)
+        .corner_radius(RADIUS_SM)
+        .inner_margin(Margin::symmetric(SPACING_SM as i8, SPACING_XS as i8))
+}
+
+// ---------------------------------------------------------------------------
+// Setup — Geist fonts + light mode Visuals
 // ---------------------------------------------------------------------------
 
 pub fn setup_theme(ctx: &egui::Context) {
@@ -96,7 +350,6 @@ pub fn setup_theme(ctx: &egui::Context) {
     visuals.window_fill = BG_CARD;
     visuals.override_text_color = Some(TEXT_PRIMARY);
 
-    // Inactive Widgets
     visuals.widgets.noninteractive.bg_fill = BG_CARD;
     visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, BORDER_SUBTLE);
     visuals.widgets.noninteractive.corner_radius = RADIUS_MD.into();
@@ -107,13 +360,11 @@ pub fn setup_theme(ctx: &egui::Context) {
     visuals.widgets.inactive.corner_radius = RADIUS_SM.into();
     visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, TEXT_PRIMARY);
 
-    // Hovered Widgets
     visuals.widgets.hovered.bg_fill = BG_CARD_HOVER;
     visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, BORDER_STRONG);
     visuals.widgets.hovered.corner_radius = RADIUS_SM.into();
     visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, TEXT_PRIMARY);
 
-    // Active & Selected Widgets -> White Text on Dark Zinc
     visuals.widgets.active.bg_fill = ACCENT_PRIMARY;
     visuals.widgets.active.bg_stroke = Stroke::NONE;
     visuals.widgets.active.corner_radius = RADIUS_SM.into();
@@ -128,82 +379,4 @@ pub fn setup_theme(ctx: &egui::Context) {
     visuals.selection.stroke = Stroke::new(1.0, TEXT_ON_DARK);
 
     ctx.set_visuals(visuals);
-}
-
-// ---------------------------------------------------------------------------
-// Custom Pill Widget with Explicit High Contrast
-// ---------------------------------------------------------------------------
-
-pub fn pill_button(ui: &mut egui::Ui, selected: bool, label: &str) -> bool {
-    let (bg, fg) = if selected {
-        (ACCENT_PRIMARY, TEXT_ON_DARK)
-    } else {
-        (BG_CARD, TEXT_PRIMARY)
-    };
-
-    let text = egui::RichText::new(label)
-        .size(FONT_SECONDARY)
-        .strong()
-        .color(fg);
-
-    let btn = egui::Button::new(text)
-        .fill(bg)
-        .corner_radius(RADIUS_SM)
-        .stroke(if selected {
-            Stroke::NONE
-        } else {
-            Stroke::new(1.0, BORDER_SUBTLE)
-        });
-
-    ui.add(btn).clicked()
-}
-
-// ---------------------------------------------------------------------------
-// Reusable Frame Builders
-// ---------------------------------------------------------------------------
-
-pub fn card_frame(is_hovered: bool, is_selected: bool) -> Frame {
-    let bg = if is_selected {
-        BG_CARD_SELECTED
-    } else if is_hovered {
-        BG_CARD_HOVER
-    } else {
-        BG_CARD
-    };
-
-    let stroke = if is_selected {
-        Stroke::new(1.5, BORDER_ACCENT)
-    } else if is_hovered {
-        Stroke::new(1.0, BORDER_STRONG)
-    } else {
-        Stroke::new(1.0, BORDER_SUBTLE)
-    };
-
-    Frame::new()
-        .fill(bg)
-        .stroke(stroke)
-        .corner_radius(RADIUS_MD)
-        .inner_margin(Margin::same(SPACING_MD as i8))
-}
-
-pub fn header_frame() -> Frame {
-    Frame::new()
-        .fill(BG_CARD)
-        .stroke(Stroke::new(1.0, BORDER_SUBTLE))
-        .inner_margin(Margin::symmetric(SPACING_LG as i8, SPACING_MD as i8))
-}
-
-pub fn badge_frame(bg: Color32) -> Frame {
-    Frame::new()
-        .fill(bg)
-        .corner_radius(RADIUS_SM)
-        .inner_margin(Margin::symmetric(SPACING_SM as i8, SPACING_XS as i8))
-}
-
-pub fn group_frame() -> Frame {
-    Frame::new()
-        .fill(BG_CARD)
-        .stroke(Stroke::new(1.0, BORDER_SUBTLE))
-        .corner_radius(RADIUS_MD)
-        .inner_margin(Margin::same(SPACING_LG as i8))
 }

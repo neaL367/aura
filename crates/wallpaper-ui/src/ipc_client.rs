@@ -86,7 +86,7 @@ impl UiIpcClient {
                                 }
                                 ctx.request_repaint();
 
-                                // Initial wallpaper list fetch
+                                // Initial wallpaper + config fetch
                                 if let Ok(Response::WallpaperList(list)) =
                                     client.send(Request::ListWallpapers).await
                                 {
@@ -97,6 +97,14 @@ impl UiIpcClient {
                                     *wallpapers_clone
                                         .lock()
                                         .unwrap_or_else(|err| err.into_inner()) = list;
+                                    ctx.request_repaint();
+                                }
+                                if let Ok(Response::Config(cfg)) =
+                                    client.send(Request::GetConfig).await
+                                {
+                                    *config_clone
+                                        .lock()
+                                        .unwrap_or_else(|err| err.into_inner()) = Some(cfg);
                                     ctx.request_repaint();
                                 }
 
@@ -128,6 +136,7 @@ impl UiIpcClient {
                                                         Ok(Response::Error { reason }) => {
                                                             tracing::warn!("Daemon returned error: {}", reason);
                                                             *last_error_clone.lock().unwrap_or_else(|err| err.into_inner()) = Some(reason.clone());
+                                                            ctx.request_repaint();
                                                         }
                                                         Ok(_) => {
                                                             *last_error_clone.lock().unwrap_or_else(|err| err.into_inner()) = None;
@@ -213,6 +222,67 @@ impl UiIpcClient {
     #[expect(dead_code, reason = "convenience wrapper for manual refresh")]
     pub fn fetch_wallpapers(&self) {
         self.send(Request::ListWallpapers);
+    }
+
+    pub fn library_path(&self) -> Option<std::path::PathBuf> {
+        self.config().map(|c| c.library.library_path)
+    }
+
+    /// Import files into the managed library: copies them to `library_path` on
+    /// the UI side (so the current user's permissions apply), then sends a
+    /// `RefreshLibrary` IPC request so the daemon rescans.
+    pub fn import_files(&self, paths: Vec<std::path::PathBuf>) {
+        let library_path = match self.library_path() {
+            Some(p) => p,
+            None => {
+                *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) =
+                    Some("Library path not configured. Set a library folder first.".into());
+                return;
+            }
+        };
+        if !library_path.is_dir() && std::fs::create_dir_all(&library_path).is_err() {
+            *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!(
+                "Failed to create library directory: {}",
+                library_path.display()
+            ));
+            return;
+        }
+        let mut copied = 0u32;
+        let mut errors: Vec<String> = Vec::new();
+        for src in &paths {
+            let name = match src.file_name() {
+                Some(n) => n,
+                None => continue,
+            };
+            let dest = library_path.join(name);
+            if dest.exists() {
+                continue;
+            }
+            match std::fs::copy(src, &dest) {
+                Ok(_) => copied += 1,
+                Err(e) => {
+                    errors.push(format!("{}: {}", src.display(), e));
+                }
+            }
+        }
+        if copied == 0 {
+            let msg = if errors.is_empty() {
+                "All selected files already exist in the library.".into()
+            } else {
+                format!("Could not copy files: {}", errors.join("; "))
+            };
+            *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(msg);
+            return;
+        }
+        if !errors.is_empty() {
+            tracing::warn!(
+                "import_files: copied {copied} file(s), {} error(s): {:?}",
+                errors.len(),
+                errors
+            );
+        }
+        *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        self.send(Request::RefreshLibrary);
     }
 
     pub fn send(&self, req: Request) {

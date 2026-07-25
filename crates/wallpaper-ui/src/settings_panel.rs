@@ -2,6 +2,7 @@ use aura_core::playback::PerformanceProfile;
 use aura_ipc::protocol::Request;
 
 use crate::ipc_client::UiIpcClient;
+use crate::theme;
 
 pub struct SettingsPanel;
 
@@ -16,196 +17,143 @@ impl SettingsPanel {
             ipc_client.send(Request::GetConfig);
         }
 
-        egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(crate::theme::BG_APP))
-            .show(ui, |ui| {
-                ui.add_space(crate::theme::SPACING_SM);
-                ui.label(
-                    egui::RichText::new("⚙ Settings & Configuration")
-                        .strong()
-                        .size(20.0)
-                        .color(crate::theme::TEXT_PRIMARY),
-                );
-                ui.add_space(crate::theme::SPACING_MD);
-                ui.separator();
-                ui.add_space(crate::theme::SPACING_MD);
+        ui.label(
+            egui::RichText::new("Settings")
+                .strong()
+                .size(theme::FONT_WINDOW_TITLE)
+                .color(theme::TEXT_PRIMARY),
+        );
+        ui.add_space(theme::SPACING_MD);
+        ui.separator();
+        ui.add_space(theme::SPACING_MD);
 
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    crate::theme::group_frame().show(ui, |ui| {
-                        ui.set_width(ui.available_width());
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            theme::group_frame().show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                theme::section_label(ui, "WALLPAPER LIBRARY");
+                ui.add_space(theme::SPACING_SM);
+
+                if let Some(ref config) = config_opt {
+                    ui.horizontal(|ui| {
                         ui.label(
-                            egui::RichText::new("📁 Library Scan Paths")
-                                .strong()
-                                .size(16.0)
-                                .color(crate::theme::TEXT_PRIMARY),
+                            egui::RichText::new(config.library.library_path.to_string_lossy())
+                                .color(theme::TEXT_PRIMARY),
                         );
-                        ui.add_space(crate::theme::SPACING_SM);
-
-                        if let Some(ref config) = config_opt {
-                            if config.library.scan_paths.is_empty() {
-                                ui.label(
-                                    egui::RichText::new("No scan paths configured.")
-                                        .small()
-                                        .color(crate::theme::TEXT_MUTED),
-                                );
-                            } else {
-                                for path in &config.library.scan_paths {
-                                    ui.horizontal(|ui| {
-                                        ui.label("📁");
-                                        ui.label(
-                                            egui::RichText::new(path.to_string_lossy())
-                                                .color(crate::theme::TEXT_PRIMARY),
-                                        );
-                                        ui.with_layout(
-                                            egui::Layout::right_to_left(egui::Align::Center),
-                                            |ui| {
-                                                if ui.button("🗑 Remove").clicked() {
-                                                    ipc_client.send(Request::RemoveScanPath {
-                                                        path: path.clone(),
-                                                    });
-                                                }
-                                            },
-                                        );
-                                    });
-                                    ui.add_space(crate::theme::SPACING_XS);
-                                }
-                            }
-                        } else {
-                            ui.label(
-                                egui::RichText::new("Loading configuration...")
-                                    .small()
-                                    .color(crate::theme::TEXT_MUTED),
-                            );
-                        }
-
-                        ui.add_space(crate::theme::SPACING_MD);
-                        ui.horizontal(|ui| {
-                            if ui.button("➕ Add Scan Folder").clicked()
-                                && let Some(folder) = rfd::FileDialog::new().pick_folder()
-                            {
-                                ipc_client.send(Request::AddScanPath { path: folder });
-                            }
-                            ui.add_space(crate::theme::SPACING_XS);
-                            if ui.button("📄 Add File(s)").clicked()
-                                && let Some(files) = rfd::FileDialog::new()
-                                    .add_filter(
-                                        "Media Files",
-                                        &[
-                                            "png", "jpg", "jpeg", "bmp", "webp", "gif", "mp4",
-                                            "webm",
-                                        ],
-                                    )
-                                    .pick_files()
-                            {
-                                for file in files {
-                                    ipc_client.send(Request::AddScanPath { path: file });
-                                }
-                            }
-                            ui.add_space(crate::theme::SPACING_XS);
-                            if ui.button("🔄 Refresh Library").clicked() {
-                                ipc_client.send(Request::RefreshLibrary);
-                            }
-                        });
-                    });
-
-                    ui.add_space(crate::theme::SPACING_LG);
-
-                    crate::theme::group_frame().show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        ui.label(
-                            egui::RichText::new("⚡ Performance & Power")
-                                .strong()
-                                .size(16.0)
-                                .color(crate::theme::TEXT_PRIMARY),
-                        );
-                        ui.add_space(crate::theme::SPACING_SM);
-
-                        if let Some(ref config) = config_opt {
-                            let mut updated_config = config.clone();
-                            let mut changed = false;
-
-                            ui.horizontal(|ui| {
-                                ui.label("Target Frame Rate:");
-                                let mut fps = updated_config.performance.target_fps;
-                                if ui.selectable_value(&mut fps, 30, "30 FPS").clicked()
-                                    || ui.selectable_value(&mut fps, 60, "60 FPS").clicked()
-                                    || ui.selectable_value(&mut fps, 120, "120 FPS").clicked()
-                                {
-                                    updated_config.performance.target_fps = fps;
-                                    changed = true;
-                                }
-                            });
-
-                            ui.add_space(crate::theme::SPACING_SM);
-                            ui.horizontal(|ui| {
-                                ui.label("Default Power Profile:");
-                                let mut profile = updated_config.performance.default_profile;
-                                if ui
-                                    .selectable_value(
-                                        &mut profile,
-                                        PerformanceProfile::Balanced,
-                                        "🔋 Balanced",
-                                    )
-                                    .clicked()
-                                    || ui
-                                        .selectable_value(
-                                            &mut profile,
-                                            PerformanceProfile::Maximum,
-                                            "🚀 Maximum",
-                                        )
-                                        .clicked()
-                                    || ui
-                                        .selectable_value(
-                                            &mut profile,
-                                            PerformanceProfile::Paused,
-                                            "⏸ Paused",
-                                        )
-                                        .clicked()
-                                {
-                                    updated_config.performance.default_profile = profile;
-                                    changed = true;
-                                }
-                            });
-
-                            if changed {
-                                ipc_client.send(Request::UpdateConfig {
-                                    config: updated_config,
-                                });
-                            }
-                        } else {
-                            ui.label(
-                                egui::RichText::new("Loading performance settings...")
-                                    .small()
-                                    .color(crate::theme::TEXT_MUTED),
-                            );
+                        if theme::button(ui, "Change", theme::ButtonVariant::Ghost).clicked()
+                            && let Some(folder) = rfd::FileDialog::new().pick_folder()
+                        {
+                            ipc_client.send(Request::SetWallpaperLibrary { path: folder });
                         }
                     });
+                } else {
+                    ui.label(
+                        egui::RichText::new("Loading configuration...")
+                            .size(theme::FONT_SECONDARY)
+                            .color(theme::TEXT_MUTED),
+                    );
+                }
 
-                    ui.add_space(crate::theme::SPACING_LG);
-
-                    crate::theme::group_frame().show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        ui.label(
-                            egui::RichText::new("🖥 Daemon & Platform Info")
-                                .strong()
-                                .size(16.0)
-                                .color(crate::theme::TEXT_PRIMARY),
-                        );
-                        ui.add_space(crate::theme::SPACING_SM);
-                        ui.label(
-                            egui::RichText::new("IPC Pipe: \\\\.\\pipe\\aura-wallpaperd")
-                                .small()
-                                .color(crate::theme::TEXT_MUTED),
-                        );
-                        ui.label(
-                            egui::RichText::new(
-                                "Platform Target: Windows 11 (WorkerW + Vulkan 1.4)",
+                ui.add_space(theme::SPACING_MD);
+                ui.horizontal(|ui| {
+                    if theme::button(ui, "Import File(s)", theme::ButtonVariant::Secondary)
+                        .clicked()
+                        && let Some(files) = rfd::FileDialog::new()
+                            .add_filter(
+                                "Media Files",
+                                &["png", "jpg", "jpeg", "bmp", "webp", "gif", "mp4", "webm"],
                             )
-                            .small()
-                            .color(crate::theme::TEXT_MUTED),
-                        );
-                    });
+                            .pick_files()
+                    {
+                        ipc_client.send(Request::ImportFiles { paths: files });
+                    }
+                    ui.add_space(theme::SPACING_XS);
+                    if theme::button(ui, "Refresh Library", theme::ButtonVariant::Secondary)
+                        .clicked()
+                    {
+                        ipc_client.send(Request::RefreshLibrary);
+                    }
                 });
             });
+
+            ui.add_space(theme::SPACING_LG);
+
+            theme::group_frame().show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                theme::section_label(ui, "PERFORMANCE & POWER");
+                ui.add_space(theme::SPACING_SM);
+
+                if let Some(ref config) = config_opt {
+                    let mut updated_config = config.clone();
+                    let mut changed = false;
+
+                    ui.horizontal(|ui| {
+                        ui.label("Target Frame Rate:");
+                        let current_fps = updated_config.performance.target_fps;
+                        for fps in [30, 60, 120] {
+                            let variant = if current_fps == fps {
+                                theme::ButtonVariant::Primary
+                            } else {
+                                theme::ButtonVariant::Secondary
+                            };
+                            if theme::button(ui, &format!("{} FPS", fps), variant).clicked() {
+                                updated_config.performance.target_fps = fps;
+                                changed = true;
+                            }
+                        }
+                    });
+
+                    ui.add_space(theme::SPACING_SM);
+                    ui.horizontal(|ui| {
+                        ui.label("Default Power Profile:");
+                        let current_profile = updated_config.performance.default_profile;
+                        for (name, profile) in [
+                            ("Balanced", PerformanceProfile::Balanced),
+                            ("Maximum", PerformanceProfile::Maximum),
+                            ("Paused", PerformanceProfile::Paused),
+                        ] {
+                            let variant = if current_profile == profile {
+                                theme::ButtonVariant::Primary
+                            } else {
+                                theme::ButtonVariant::Secondary
+                            };
+                            if theme::button(ui, name, variant).clicked() {
+                                updated_config.performance.default_profile = profile;
+                                changed = true;
+                            }
+                        }
+                    });
+
+                    if changed {
+                        ipc_client.send(Request::UpdateConfig {
+                            config: updated_config,
+                        });
+                    }
+                } else {
+                    ui.label(
+                        egui::RichText::new("Loading performance settings...")
+                            .size(theme::FONT_SECONDARY)
+                            .color(theme::TEXT_MUTED),
+                    );
+                }
+            });
+
+            ui.add_space(theme::SPACING_LG);
+
+            theme::group_frame().show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                theme::section_label(ui, "DAEMON & PLATFORM INFO");
+                ui.add_space(theme::SPACING_SM);
+                ui.label(
+                    egui::RichText::new("IPC Pipe: \\\\.\\pipe\\aura-wallpaperd")
+                        .size(theme::FONT_SECONDARY)
+                        .color(theme::TEXT_MUTED),
+                );
+                ui.label(
+                    egui::RichText::new("Platform Target: Windows 11 (WorkerW + Vulkan 1.4)")
+                        .size(theme::FONT_SECONDARY)
+                        .color(theme::TEXT_MUTED),
+                );
+            });
+        });
     }
 }

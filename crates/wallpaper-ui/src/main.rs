@@ -1,19 +1,11 @@
-//! `wallpaper-ui` — Aura control panel UI.
-//!
-//! Built with `egui`/`eframe` (immediate mode, GPU-accelerated via wgpu).
-//!
-//! **Dependency boundary**: This crate must NOT depend on
-//! `aura-media`, `aura-platform-windows`, or `aura-renderer-vulkan`.
-//! All daemon communication goes through `aura-ipc`.
-
 #![allow(dead_code)]
 
 mod app;
-mod dashboard_panel;
+mod gallery;
+mod inspector;
 mod ipc_client;
-mod library_panel;
-mod monitor_panel;
 mod settings_panel;
+mod sidebar;
 mod status_bar;
 mod theme;
 
