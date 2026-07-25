@@ -13,194 +13,233 @@ pub struct GraphicsPipeline {
 impl GraphicsPipeline {
     /// Create a graphics pipeline for rendering a textured 2D quad onto `color_format`.
     pub fn create(context: &VulkanContext, color_format: vk::Format) -> Result<Self, VulkanError> {
-        // 1. Create descriptor set layout (binding 0: combined image sampler)
-        let layout_binding = vk::DescriptorSetLayoutBinding::default()
-            .binding(0)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .descriptor_count(1)
-            .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+        let mut descriptor_set_layout = vk::DescriptorSetLayout::null();
+        let mut pipeline_layout = vk::PipelineLayout::null();
+        let mut render_pass = vk::RenderPass::null();
+        let mut vert_module = vk::ShaderModule::null();
+        let mut frag_module = vk::ShaderModule::null();
 
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default()
-            .bindings(std::slice::from_ref(&layout_binding));
+        let mut build_pipeline = || -> Result<Self, VulkanError> {
+            // 1. Create descriptor set layout (binding 0: combined image sampler)
+            let layout_binding = vk::DescriptorSetLayoutBinding::default()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT);
 
-        let descriptor_set_layout = unsafe {
-            context
-                .device
-                .create_descriptor_set_layout(&layout_info, None)
-                .map_err(|e| VulkanError::Pipeline(e.to_string()))?
-        };
+            let layout_info = vk::DescriptorSetLayoutCreateInfo::default()
+                .bindings(std::slice::from_ref(&layout_binding));
 
-        // 2. Create pipeline layout
-        let push_constant_range = vk::PushConstantRange::default()
-            .stage_flags(vk::ShaderStageFlags::VERTEX)
-            .offset(0)
-            .size(16); // 2 x vec2 (uvScale: [f32; 2], uvOffset: [f32; 2])
+            descriptor_set_layout = unsafe {
+                context
+                    .device
+                    .create_descriptor_set_layout(&layout_info, None)
+                    .map_err(|e| VulkanError::Pipeline(e.to_string()))?
+            };
 
-        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
-            .set_layouts(std::slice::from_ref(&descriptor_set_layout))
-            .push_constant_ranges(std::slice::from_ref(&push_constant_range));
+            // 2. Create pipeline layout
+            let push_constant_range = vk::PushConstantRange::default()
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .offset(0)
+                .size(16); // 2 x vec2 (uvScale: [f32; 2], uvOffset: [f32; 2])
 
-        let pipeline_layout = unsafe {
-            context
-                .device
-                .create_pipeline_layout(&pipeline_layout_info, None)
-                .map_err(|e| VulkanError::Pipeline(e.to_string()))?
-        };
+            let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
+                .set_layouts(std::slice::from_ref(&descriptor_set_layout))
+                .push_constant_ranges(std::slice::from_ref(&push_constant_range));
 
-        // 3. Create render pass
-        let color_attachment = vk::AttachmentDescription::default()
-            .format(color_format)
-            .samples(vk::SampleCountFlags::TYPE_1)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .store_op(vk::AttachmentStoreOp::STORE)
-            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
-            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .initial_layout(vk::ImageLayout::UNDEFINED)
-            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
+            pipeline_layout = unsafe {
+                context
+                    .device
+                    .create_pipeline_layout(&pipeline_layout_info, None)
+                    .map_err(|e| VulkanError::Pipeline(e.to_string()))?
+            };
 
-        let color_attachment_ref = vk::AttachmentReference::default()
-            .attachment(0)
-            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+            // 3. Create render pass
+            let color_attachment = vk::AttachmentDescription::default()
+                .format(color_format)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .load_op(vk::AttachmentLoadOp::CLEAR)
+                .store_op(vk::AttachmentStoreOp::STORE)
+                .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+                .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .initial_layout(vk::ImageLayout::UNDEFINED)
+                .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
 
-        let subpass = vk::SubpassDescription::default()
-            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-            .color_attachments(std::slice::from_ref(&color_attachment_ref));
+            let color_attachment_ref = vk::AttachmentReference::default()
+                .attachment(0)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
 
-        let subpass_dependency = vk::SubpassDependency::default()
-            .src_subpass(vk::SUBPASS_EXTERNAL)
-            .dst_subpass(0)
-            .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-            .src_access_mask(vk::AccessFlags::empty())
-            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-            .dst_access_mask(
-                vk::AccessFlags::COLOR_ATTACHMENT_READ | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-            );
+            let subpass = vk::SubpassDescription::default()
+                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+                .color_attachments(std::slice::from_ref(&color_attachment_ref));
 
-        let render_pass_info = vk::RenderPassCreateInfo::default()
-            .attachments(std::slice::from_ref(&color_attachment))
-            .subpasses(std::slice::from_ref(&subpass))
-            .dependencies(std::slice::from_ref(&subpass_dependency));
+            let subpass_dependency = vk::SubpassDependency::default()
+                .src_subpass(vk::SUBPASS_EXTERNAL)
+                .dst_subpass(0)
+                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+                .src_access_mask(vk::AccessFlags::empty())
+                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+                .dst_access_mask(
+                    vk::AccessFlags::COLOR_ATTACHMENT_READ
+                        | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                );
 
-        let render_pass = unsafe {
-            context
-                .device
-                .create_render_pass(&render_pass_info, None)
-                .map_err(|e| VulkanError::Pipeline(e.to_string()))?
-        };
+            let render_pass_info = vk::RenderPassCreateInfo::default()
+                .attachments(std::slice::from_ref(&color_attachment))
+                .subpasses(std::slice::from_ref(&subpass))
+                .dependencies(std::slice::from_ref(&subpass_dependency));
 
-        // 4. Create shader modules from embedded SPIR-V bytecode
-        let vert_code = crate::shader::vertex_shader_spv();
-        let frag_code = crate::shader::fragment_shader_spv();
+            render_pass = unsafe {
+                context
+                    .device
+                    .create_render_pass(&render_pass_info, None)
+                    .map_err(|e| VulkanError::Pipeline(e.to_string()))?
+            };
 
-        let vert_words = ash::util::read_spv(&mut std::io::Cursor::new(vert_code))
-            .map_err(|e| VulkanError::ShaderCompilation(e.to_string()))?;
-        let frag_words = ash::util::read_spv(&mut std::io::Cursor::new(frag_code))
-            .map_err(|e| VulkanError::ShaderCompilation(e.to_string()))?;
+            // 4. Create shader modules from embedded SPIR-V bytecode
+            let vert_code = crate::shader::vertex_shader_spv();
+            let frag_code = crate::shader::fragment_shader_spv();
 
-        let vert_module_info = vk::ShaderModuleCreateInfo::default().code(&vert_words);
-        let frag_module_info = vk::ShaderModuleCreateInfo::default().code(&frag_words);
+            let vert_words = ash::util::read_spv(&mut std::io::Cursor::new(vert_code))
+                .map_err(|e| VulkanError::ShaderCompilation(e.to_string()))?;
+            let frag_words = ash::util::read_spv(&mut std::io::Cursor::new(frag_code))
+                .map_err(|e| VulkanError::ShaderCompilation(e.to_string()))?;
 
-        let vert_module = unsafe {
-            context
-                .device
-                .create_shader_module(&vert_module_info, None)
-                .map_err(|e| VulkanError::ShaderCompilation(e.to_string()))?
-        };
+            let vert_module_info = vk::ShaderModuleCreateInfo::default().code(&vert_words);
+            let frag_module_info = vk::ShaderModuleCreateInfo::default().code(&frag_words);
 
-        let frag_module = unsafe {
-            context
-                .device
-                .create_shader_module(&frag_module_info, None)
-                .map_err(|e| VulkanError::ShaderCompilation(e.to_string()))?
-        };
+            vert_module = unsafe {
+                context
+                    .device
+                    .create_shader_module(&vert_module_info, None)
+                    .map_err(|e| VulkanError::ShaderCompilation(e.to_string()))?
+            };
 
-        let main_name = c"main";
-        let shader_stages = [
-            vk::PipelineShaderStageCreateInfo::default()
-                .stage(vk::ShaderStageFlags::VERTEX)
-                .module(vert_module)
-                .name(main_name),
-            vk::PipelineShaderStageCreateInfo::default()
-                .stage(vk::ShaderStageFlags::FRAGMENT)
-                .module(frag_module)
-                .name(main_name),
-        ];
+            frag_module = unsafe {
+                context
+                    .device
+                    .create_shader_module(&frag_module_info, None)
+                    .map_err(|e| VulkanError::ShaderCompilation(e.to_string()))?
+            };
 
-        // 5. Create Graphics Pipeline state
-        let viewport_state = vk::PipelineViewportStateCreateInfo::default()
-            .viewport_count(1)
-            .scissor_count(1);
+            let main_name = c"main";
+            let shader_stages = [
+                vk::PipelineShaderStageCreateInfo::default()
+                    .stage(vk::ShaderStageFlags::VERTEX)
+                    .module(vert_module)
+                    .name(main_name),
+                vk::PipelineShaderStageCreateInfo::default()
+                    .stage(vk::ShaderStageFlags::FRAGMENT)
+                    .module(frag_module)
+                    .name(main_name),
+            ];
 
-        let rasterizer = vk::PipelineRasterizationStateCreateInfo::default()
-            .depth_clamp_enable(false)
-            .rasterizer_discard_enable(false)
-            .polygon_mode(vk::PolygonMode::FILL)
-            .line_width(1.0)
-            .cull_mode(vk::CullModeFlags::NONE)
-            .front_face(vk::FrontFace::COUNTER_CLOCKWISE);
+            // 5. Create Graphics Pipeline state
+            let viewport_state = vk::PipelineViewportStateCreateInfo::default()
+                .viewport_count(1)
+                .scissor_count(1);
 
-        let multisampling = vk::PipelineMultisampleStateCreateInfo::default()
-            .sample_shading_enable(false)
-            .rasterization_samples(vk::SampleCountFlags::TYPE_1);
+            let rasterizer = vk::PipelineRasterizationStateCreateInfo::default()
+                .depth_clamp_enable(false)
+                .rasterizer_discard_enable(false)
+                .polygon_mode(vk::PolygonMode::FILL)
+                .line_width(1.0)
+                .cull_mode(vk::CullModeFlags::NONE)
+                .front_face(vk::FrontFace::COUNTER_CLOCKWISE);
 
-        let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
-            .color_write_mask(
-                vk::ColorComponentFlags::R
-                    | vk::ColorComponentFlags::G
-                    | vk::ColorComponentFlags::B
-                    | vk::ColorComponentFlags::A,
-            )
-            .blend_enable(false);
+            let multisampling = vk::PipelineMultisampleStateCreateInfo::default()
+                .sample_shading_enable(false)
+                .rasterization_samples(vk::SampleCountFlags::TYPE_1);
 
-        let color_blending = vk::PipelineColorBlendStateCreateInfo::default()
-            .logic_op_enable(false)
-            .attachments(std::slice::from_ref(&color_blend_attachment));
-
-        let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-        let dynamic_state =
-            vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
-
-        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default();
-        let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
-            .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
-            .primitive_restart_enable(false);
-
-        let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
-            .stages(&shader_stages)
-            .vertex_input_state(&vertex_input_info)
-            .input_assembly_state(&input_assembly)
-            .viewport_state(&viewport_state)
-            .rasterization_state(&rasterizer)
-            .multisample_state(&multisampling)
-            .color_blend_state(&color_blending)
-            .dynamic_state(&dynamic_state)
-            .layout(pipeline_layout)
-            .render_pass(render_pass)
-            .subpass(0);
-
-        let pipeline = unsafe {
-            context
-                .device
-                .create_graphics_pipelines(
-                    vk::PipelineCache::null(),
-                    std::slice::from_ref(&pipeline_info),
-                    None,
+            let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
+                .color_write_mask(
+                    vk::ColorComponentFlags::R
+                        | vk::ColorComponentFlags::G
+                        | vk::ColorComponentFlags::B
+                        | vk::ColorComponentFlags::A,
                 )
-                .map_err(|(_, e)| VulkanError::Pipeline(e.to_string()))?[0]
+                .blend_enable(false);
+
+            let color_blending = vk::PipelineColorBlendStateCreateInfo::default()
+                .logic_op_enable(false)
+                .attachments(std::slice::from_ref(&color_blend_attachment));
+
+            let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+            let dynamic_state =
+                vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
+
+            let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default();
+            let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
+                .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
+                .primitive_restart_enable(false);
+
+            let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
+                .stages(&shader_stages)
+                .vertex_input_state(&vertex_input_info)
+                .input_assembly_state(&input_assembly)
+                .viewport_state(&viewport_state)
+                .rasterization_state(&rasterizer)
+                .multisample_state(&multisampling)
+                .color_blend_state(&color_blending)
+                .dynamic_state(&dynamic_state)
+                .layout(pipeline_layout)
+                .render_pass(render_pass)
+                .subpass(0);
+
+            let pipeline = unsafe {
+                context
+                    .device
+                    .create_graphics_pipelines(
+                        vk::PipelineCache::null(),
+                        std::slice::from_ref(&pipeline_info),
+                        None,
+                    )
+                    .map_err(|(_, e)| VulkanError::Pipeline(e.to_string()))?[0]
+            };
+
+            // Clean up temporary shader module handles
+            unsafe {
+                context.device.destroy_shader_module(vert_module, None);
+                context.device.destroy_shader_module(frag_module, None);
+                vert_module = vk::ShaderModule::null();
+                frag_module = vk::ShaderModule::null();
+            }
+
+            Ok(Self {
+                descriptor_set_layout,
+                pipeline_layout,
+                render_pass,
+                pipeline,
+            })
         };
 
-        // Clean up temporary shader module handles
-        unsafe {
-            context.device.destroy_shader_module(vert_module, None);
-            context.device.destroy_shader_module(frag_module, None);
+        let res = build_pipeline();
+
+        if res.is_err() {
+            unsafe {
+                if frag_module != vk::ShaderModule::null() {
+                    context.device.destroy_shader_module(frag_module, None);
+                }
+                if vert_module != vk::ShaderModule::null() {
+                    context.device.destroy_shader_module(vert_module, None);
+                }
+                if render_pass != vk::RenderPass::null() {
+                    context.device.destroy_render_pass(render_pass, None);
+                }
+                if pipeline_layout != vk::PipelineLayout::null() {
+                    context
+                        .device
+                        .destroy_pipeline_layout(pipeline_layout, None);
+                }
+                if descriptor_set_layout != vk::DescriptorSetLayout::null() {
+                    context
+                        .device
+                        .destroy_descriptor_set_layout(descriptor_set_layout, None);
+                }
+            }
         }
 
-        Ok(Self {
-            descriptor_set_layout,
-            pipeline_layout,
-            render_pass,
-            pipeline,
-        })
+        res
     }
 
     /// Destroy pipeline handles and layout objects.
