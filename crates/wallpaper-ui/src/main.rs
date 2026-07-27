@@ -8,6 +8,7 @@ mod settings_panel;
 mod sidebar;
 mod status_bar;
 mod theme;
+mod toast;
 
 fn main() {
     tracing_subscriber::fmt()

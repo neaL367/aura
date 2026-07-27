@@ -15,7 +15,7 @@
   - **Static Images**: High-performance single-pass RGBA decoding with max 4K automatic downsampling and immediate uncompressed RAM release.
   - **Animated GIFs**: Streaming step-by-step frame decoding with full GIF disposal method compositing (`RestoreToPrevious` snapshot canvas).
   - **Video**: Windows Media Foundation (`IMFSourceReader`) decoding path with AVCC-to-Annex-B conversion and POC reordering.
-- **Wallpaper Library, Live Watcher & Gallery UI**: Persistent library of discovered wallpapers stored in a JSON cache (`library.json`). Race-safe thumbnail generation (`ThumbnailStore`) and atomic file saves (`atomic_file.rs`) protect cache integrity. A debounced filesystem watcher (`LibraryWatcher`) automatically synchronizes live watch targets when scan paths are modified. The `wallpaper-ui` Control Panel displays a scrollable gallery grid (`library_panel/`) with per-card **Apply → Display N** assignment buttons and native folder/file pickers (`rfd`).
+- **Wallpaper Library, Live Watcher & Gallery UI**: Persistent library of discovered wallpapers stored in a JSON cache (`library.json`). Race-safe thumbnail generation (`ThumbnailStore`) and atomic file saves (`atomic_file.rs`) protect cache integrity. A debounced filesystem watcher (`LibraryWatcher`) automatically synchronizes live watch targets when scan paths are modified. The `wallpaper-ui` Control Panel displays a scrollable gallery grid (`library_panel/`) with per-card **Apply → Display N** assignment buttons and native folder/file pickers (`rfd`). A built-in toast overlay system (`ToastManager`) provides non-intrusive notifications for connection status, import results, and daemon errors.
 - **Process Isolation & Resilient IPC**: Headless daemon (`wallpaperd`) and control panel (`wallpaper-ui`) communicate over Windows Named Pipes (`\\.\pipe\aura-wallpaperd`) using an adjacently-tagged JSON protocol (`serde tag+content`). The IPC server accept loop handles pipe connection races and client disconnects cleanly without dropping daemon loops.
 
 ---
@@ -62,7 +62,7 @@ The project is structured as a modular Cargo workspace across 8 crates and 1 too
 | [`aura-platform-windows`](crates/platform-windows) | Win32 HWND wrappers, WorkerW (`discovery`, `attachment`, `manager`), `monitor_enumerator`, `mf_video_decoder`, `power` |
 | [`aura-renderer-vulkan`](crates/renderer-vulkan) | Vulkan context, monitor renderers (`frame_pass`, `resources`), swapchains, shaders, RAII Drop |
 | [`wallpaperd`](crates/wallpaperd) | Headless daemon orchestrator (`handlers/`), `assignment_manager`, `perf_monitor` & render threads (`placement`, `loop_runner`) |
-| [`wallpaper-ui`](crates/wallpaper-ui) | `egui`/`eframe` GUI Control Panel (`library_panel/`) & reconnecting IPC client |
+| [`wallpaper-ui`](crates/wallpaper-ui) | `egui`/`eframe` GUI Control Panel (`library_panel/`, `toast.rs`) & reconnecting IPC client with toast notifications |
 | [`workerw-proof`](tools/workerw-proof) | Standalone validation tool for WorkerW integration proof |
 
 ---

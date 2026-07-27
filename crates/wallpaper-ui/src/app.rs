@@ -8,6 +8,7 @@ use crate::{
     settings_panel::SettingsPanel,
     sidebar::{Sidebar, Tab},
     status_bar::StatusBar,
+    toast::{ToastEvent, ToastManager},
 };
 
 #[cfg(target_os = "windows")]
@@ -31,22 +32,28 @@ pub struct AuraApp {
     selected_wallpaper: Option<WallpaperEntry>,
     last_interaction: Instant,
     trimmed_since_idle: bool,
+    toasts: ToastManager,
+    toast_rx: std::sync::mpsc::Receiver<ToastEvent>,
 }
 
 impl AuraApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         crate::theme::setup_theme(&cc.egui_ctx);
         egui_extras::install_image_loaders(&cc.egui_ctx);
+        let (toast_tx, toast_rx) = std::sync::mpsc::channel();
+
         Self {
             gallery: GalleryPanel::new(),
             inspector: InspectorPanel::new(),
             settings: SettingsPanel::new(),
             status: StatusBar::new(),
-            ipc_client: UiIpcClient::new(cc.egui_ctx.clone()),
+            ipc_client: UiIpcClient::new(cc.egui_ctx.clone(), toast_tx),
             active_tab: Tab::Gallery,
             selected_wallpaper: None,
             last_interaction: Instant::now(),
             trimmed_since_idle: false,
+            toasts: ToastManager::new(),
+            toast_rx,
         }
     }
 }
@@ -188,5 +195,8 @@ impl eframe::App for AuraApp {
             trim_ui_working_set();
             self.trimmed_since_idle = true;
         }
+
+        self.toasts.drain_events(&self.toast_rx);
+        self.toasts.show(ui.ctx());
     }
 }

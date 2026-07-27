@@ -3,6 +3,8 @@ use aura_ipc::protocol::{DaemonStatus, Request, Response, WallpaperEntry};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use crate::toast::{ToastEvent, ToastKind};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectionStatus {
     Disconnected,
@@ -17,10 +19,11 @@ pub struct UiIpcClient {
     config: Arc<Mutex<Option<aura_core::config::AppConfig>>>,
     last_error: Arc<Mutex<Option<String>>>,
     cmd_tx: tokio::sync::mpsc::UnboundedSender<Request>,
+    toast_tx: std::sync::mpsc::Sender<ToastEvent>,
 }
 
 impl UiIpcClient {
-    pub fn new(ctx: egui::Context) -> Self {
+    pub fn new(ctx: egui::Context, toast_tx: std::sync::mpsc::Sender<ToastEvent>) -> Self {
         let status = Arc::new(Mutex::new(ConnectionStatus::Connecting));
         let wallpapers = Arc::new(Mutex::new(Vec::new()));
         let config = Arc::new(Mutex::new(None));
@@ -31,6 +34,8 @@ impl UiIpcClient {
         let last_error_clone = last_error.clone();
 
         let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<Request>();
+
+        let toast_tx_clone = toast_tx.clone();
 
         std::thread::Builder::new()
             .name("ipc-ui-worker".into())
@@ -55,35 +60,41 @@ impl UiIpcClient {
                         ctx.request_repaint();
                         match IpcClient::connect().await {
                             Ok(mut client) => {
-                                match client.send(Request::GetStatus).await {
-                                    Ok(Response::Status(s)) => {
-                                        *status_clone
-                                            .lock()
-                                            .unwrap_or_else(|err| err.into_inner()) =
-                                            ConnectionStatus::Connected(s);
-                                    }
-                                    Ok(_) => {
-                                        *status_clone
-                                            .lock()
-                                            .unwrap_or_else(|err| err.into_inner()) =
-                                            ConnectionStatus::Connected(DaemonStatus {
-                                                protocol_version: 1,
-                                                active_monitors: 0,
-                                                assigned_wallpapers: 0,
-                                                is_paused: false,
-                                                monitors: vec![],
-                                            });
-                                    }
-                                    Err(e) => {
-                                        *status_clone
-                                            .lock()
-                                            .unwrap_or_else(|err| err.into_inner()) =
-                                            ConnectionStatus::Error(e.to_string());
-                                        ctx.request_repaint();
-                                        tokio::time::sleep(Duration::from_secs(2)).await;
-                                        continue;
-                                    }
-                                }
+                        let connected = match client.send(Request::GetStatus).await {
+                            Ok(Response::Status(s)) => {
+                                *status_clone
+                                    .lock()
+                                    .unwrap_or_else(|err| err.into_inner()) =
+                                    ConnectionStatus::Connected(s.clone());
+                                true
+                            }
+                            Ok(_) => {
+                                *status_clone
+                                    .lock()
+                                    .unwrap_or_else(|err| err.into_inner()) =
+                                    ConnectionStatus::Connected(DaemonStatus {
+                                        protocol_version: 1,
+                                        active_monitors: 0,
+                                        assigned_wallpapers: 0,
+                                        is_paused: false,
+                                        monitors: vec![],
+                                    });
+                                true
+                            }
+                            Err(e) => {
+                                *status_clone
+                                    .lock()
+                                    .unwrap_or_else(|err| err.into_inner()) =
+                                    ConnectionStatus::Error(e.to_string());
+                                ctx.request_repaint();
+                                tokio::time::sleep(Duration::from_secs(2)).await;
+                                continue;
+                            }
+                        };
+                        if connected {
+                            let _ = toast_tx_clone
+                                .send(("Connected to Aura daemon".into(), ToastKind::Success));
+                        }
                                 ctx.request_repaint();
 
                                 // Initial wallpaper + config fetch
@@ -136,6 +147,8 @@ impl UiIpcClient {
                                                         Ok(Response::Error { reason }) => {
                                                             tracing::warn!("Daemon returned error: {}", reason);
                                                             *last_error_clone.lock().unwrap_or_else(|err| err.into_inner()) = Some(reason.clone());
+                                                            let _ = toast_tx_clone
+                                                                .send((reason.clone(), ToastKind::Error));
                                                             ctx.request_repaint();
                                                         }
                                                         Ok(_) => {
@@ -158,6 +171,8 @@ impl UiIpcClient {
                                                 }
                                                 Err(_e) => {
                                                     *status_clone.lock().unwrap_or_else(|err| err.into_inner()) = ConnectionStatus::Disconnected;
+                                                    let _ = toast_tx_clone
+                                                        .send(("Lost connection to Aura daemon".into(), ToastKind::Error));
                                                     ctx.request_repaint();
                                                     break;
                                                 }
@@ -186,6 +201,7 @@ impl UiIpcClient {
             config,
             last_error,
             cmd_tx,
+            toast_tx,
         }
     }
 
@@ -232,19 +248,23 @@ impl UiIpcClient {
     /// the UI side (so the current user's permissions apply), then sends a
     /// `RefreshLibrary` IPC request so the daemon rescans.
     pub fn import_files(&self, paths: Vec<std::path::PathBuf>) {
+        let toast_tx = self.toast_tx.clone();
         let library_path = match self.library_path() {
             Some(p) => p,
             None => {
-                *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) =
-                    Some("Library path not configured. Set a library folder first.".into());
+                let msg = "Library path not configured. Set a library folder first.";
+                let _ = toast_tx.send((msg.into(), ToastKind::Error));
+                *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(msg.into());
                 return;
             }
         };
         if !library_path.is_dir() && std::fs::create_dir_all(&library_path).is_err() {
-            *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!(
+            let msg = format!(
                 "Failed to create library directory: {}",
                 library_path.display()
-            ));
+            );
+            let _ = toast_tx.send((msg.clone(), ToastKind::Error));
+            *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(msg);
             return;
         }
         let mut copied = 0u32;
@@ -271,7 +291,8 @@ impl UiIpcClient {
             } else {
                 format!("Could not copy files: {}", errors.join("; "))
             };
-            *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(msg);
+            *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(msg.clone());
+            let _ = toast_tx.send((msg, ToastKind::Warning));
             return;
         }
         if !errors.is_empty() {
@@ -280,6 +301,12 @@ impl UiIpcClient {
                 errors.len(),
                 errors
             );
+            let _ = toast_tx.send((
+                format!("Imported {copied} file(s), {} error(s)", errors.len()),
+                ToastKind::Warning,
+            ));
+        } else {
+            let _ = toast_tx.send((format!("Imported {copied} file(s)"), ToastKind::Success));
         }
         *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = None;
         self.send(Request::RefreshLibrary);
