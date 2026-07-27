@@ -63,12 +63,12 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
 
         let _dpi_guard = ScopedDpiHostingBehavior::allow_mixed();
 
-        // Set WorkerW class background brush to BLACK_BRUSH so empty/unpainted
-        // WorkerW surfaces erase to black instead of DWM default white if wallpaperd is killed.
-        use windows::Win32::Graphics::Gdi::{BLACK_BRUSH, GetStockObject};
-        use windows::Win32::UI::WindowsAndMessaging::{GCLP_HBRBACKGROUND, SetClassLongPtrW};
-        let black_brush = GetStockObject(BLACK_BRUSH);
-        let _ = SetClassLongPtrW(workerw, GCLP_HBRBACKGROUND, black_brush.0 as isize);
+        // Do NOT call SetClassLongPtrW(workerw, GCLP_HBRBACKGROUND, ...) here.
+        // That would mutate the background brush of Explorer's WorkerW window
+        // class — a global side effect that persists after Aura exits and
+        // affects all WorkerW instances of the same class, not just this one.
+        // The Aura host window's background is controlled by the Vulkan
+        // renderer clearing to black on each present.
         SetParent(host_hwnd, Some(workerw))?;
 
         let style = GetWindowLongPtrW(host_hwnd, GWL_STYLE);

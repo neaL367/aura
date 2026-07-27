@@ -7,6 +7,12 @@ use crossbeam_channel::{Receiver, Sender};
 /// Handle to a background decode worker thread.
 pub struct DecodeWorkerHandle {
     pub command_sender: Sender<PlaybackCommand>,
+    /// JoinHandle for the worker thread.
+    ///
+    /// Stored so `Drop` can join the thread after signalling stop, making
+    /// shutdown deterministic. Without joining, the thread may outlive the
+    /// resources it holds (e.g. the frame channel receiver).
+    join_handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl DecodeWorkerHandle {
@@ -41,13 +47,16 @@ impl DecodeWorkerHandle {
 /// scope, even if the caller forgets to call `.stop()` explicitly (e.g. on a
 /// panic-unwind path, or when a handle is simply replaced/overwritten).
 ///
-/// This is defense-in-depth: it does not by itself fix a paused worker
-/// swallowing `Stop` (see `handle_command`), but combined with that fix it
-/// guarantees a dropped handle always results in thread termination rather
-/// than an orphaned, silently-resumed decode loop.
+/// Sends `Stop` and then joins the thread so shutdown is deterministic:
+/// after `Drop` returns, the worker is guaranteed to have finished executing.
 impl Drop for DecodeWorkerHandle {
     fn drop(&mut self) {
         let _ = self.command_sender.send(PlaybackCommand::Stop);
+        if let Some(handle) = self.join_handle.take()
+            && let Err(e) = handle.join()
+        {
+            tracing::error!("Decode worker thread panicked on shutdown: {:?}", e);
+        }
     }
 }
 
@@ -92,7 +101,7 @@ pub fn handle_command(cmd: PlaybackCommand, cmd_rx: &Receiver<PlaybackCommand>) 
 pub fn spawn_gif_worker(path: PathBuf, frame_sender: FrameSender) -> DecodeWorkerHandle {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
 
-    std::thread::Builder::new()
+    let handle = std::thread::Builder::new()
         .name("aura-decode-worker".into())
         .spawn(move || {
             let mut decoder = match GifDecoder::open(&path) {
@@ -114,8 +123,27 @@ pub fn spawn_gif_worker(path: PathBuf, frame_sender: FrameSender) -> DecodeWorke
 
                 match decoder.next_frame() {
                     Ok(Some(frame)) => {
-                        if !frame_sender.send_blocking(frame) {
-                            break 'outer;
+                        // Use an interruptible send loop instead of send_blocking.
+                        // send_blocking would block forever when the render loop is
+                        // paused and the bounded frame queue is full, causing the
+                        // worker to ignore Stop commands until the renderer resumes.
+                        loop {
+                            match frame_sender.try_send_checked(frame.clone()) {
+                                Ok(()) => break, // frame delivered
+                                Err(crossbeam_channel::TrySendError::Disconnected(_)) => {
+                                    // Renderer gone — exit worker.
+                                    break 'outer;
+                                }
+                                Err(crossbeam_channel::TrySendError::Full(_)) => {
+                                    // Queue full — check for stop before retrying.
+                                    if let Ok(cmd) = cmd_rx.try_recv()
+                                        && handle_command(cmd, &cmd_rx) == ControlFlow::Stopped
+                                    {
+                                        break 'outer;
+                                    }
+                                    std::thread::sleep(std::time::Duration::from_millis(5));
+                                }
+                            }
                         }
                     }
                     Ok(None) => {
@@ -137,6 +165,7 @@ pub fn spawn_gif_worker(path: PathBuf, frame_sender: FrameSender) -> DecodeWorke
 
     DecodeWorkerHandle {
         command_sender: cmd_tx,
+        join_handle: Some(handle),
     }
 }
 
@@ -144,7 +173,7 @@ pub fn spawn_gif_worker(path: PathBuf, frame_sender: FrameSender) -> DecodeWorke
 pub fn spawn_video_worker(path: PathBuf, frame_sender: FrameSender) -> DecodeWorkerHandle {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
 
-    std::thread::Builder::new()
+    let handle = std::thread::Builder::new()
         .name("aura-video-worker".into())
         .spawn(move || {
             let mut decoder = match aura_platform_windows::MfVideoDecoder::open(&path) {
@@ -208,6 +237,7 @@ pub fn spawn_video_worker(path: PathBuf, frame_sender: FrameSender) -> DecodeWor
 
     DecodeWorkerHandle {
         command_sender: cmd_tx,
+        join_handle: Some(handle),
     }
 }
 

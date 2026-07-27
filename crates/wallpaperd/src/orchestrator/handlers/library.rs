@@ -139,14 +139,6 @@ pub(super) fn handle_import_files(
             Ok(()) => {
                 imported += 1;
             }
-            Err(copy_err) if LibraryScanner::inspect_file(src).is_some() => {
-                imported += 1;
-                info!(
-                    "ImportFiles: file {} included directly (copy failed: {})",
-                    aura_security::redact_path(src),
-                    copy_err
-                );
-            }
             Err(copy_err) => {
                 errors.push(format!("{}: {}", aura_security::redact_path(src), copy_err));
             }

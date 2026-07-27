@@ -192,8 +192,11 @@ impl RenderCoordinator {
         }
     }
 
-    /// Signal all render threads and wait for them with a timeout.
-    /// Threads that don't finish within the timeout are detached.
+    /// Signal all render threads and wait for them to finish.
+    ///
+    /// A warning is logged for each thread that takes longer than `timeout`
+    /// to respond, but the join is **never** skipped. Detaching resource-owning
+    /// render threads risks use-after-destroy of HWND and Vulkan objects.
     pub fn shutdown_with_timeout(&mut self, timeout: Duration) {
         let deadline = std::time::Instant::now() + timeout;
         for ctx in &self.monitors {
@@ -201,19 +204,29 @@ impl RenderCoordinator {
         }
         for ctx in &mut self.monitors {
             if let Some(handle) = ctx.render_thread.take() {
-                while std::time::Instant::now() < deadline {
-                    if handle.is_finished() {
-                        break;
+                // Warn if the thread has not finished by the expected deadline,
+                // but always join — never detach a thread that holds native
+                // resources (HWND, Vulkan swapchain, etc.).
+                if !handle.is_finished() && std::time::Instant::now() < deadline {
+                    // Poll in small increments up to the deadline for a clean exit.
+                    while std::time::Instant::now() < deadline {
+                        if handle.is_finished() {
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(50));
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(50));
                 }
-                if handle.is_finished() {
-                    let _ = handle.join();
-                } else {
+                if !handle.is_finished() {
                     tracing::warn!(
-                        "Shutdown timeout exceeded for {:?}, detaching render thread",
+                        "Render thread {:?} did not finish within timeout — joining anyway \
+                         to prevent use-after-destroy of native resources",
                         ctx.monitor_id
                     );
+                }
+                // Always join. A blocked join here means the render thread has
+                // a bug (e.g. not checking shutdown_flag); fix the thread, not this.
+                if let Err(e) = handle.join() {
+                    tracing::error!("Render thread {:?} panicked: {:?}", ctx.monitor_id, e);
                 }
             }
         }

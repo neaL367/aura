@@ -194,6 +194,23 @@ fn find_defview_child(parent: HWND) -> Option<HWND> {
     if found.0.is_null() { None } else { Some(found) }
 }
 
+/// Returns `true` if `hwnd` has client dimensions of at least 300×300.
+///
+/// Used to filter out tiny internal WorkerW windows that Explorer creates
+/// as implementation details and that are unsuitable as wallpaper hosts.
+fn is_valid_workerw_candidate(hwnd: HWND) -> bool {
+    let mut client_rect = windows::Win32::Foundation::RECT::default();
+    let ok = unsafe {
+        windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut client_rect).is_ok()
+    };
+    if !ok {
+        return false;
+    }
+    let cw = client_rect.right - client_rect.left;
+    let ch = client_rect.bottom - client_rect.top;
+    cw >= 300 && ch >= 300
+}
+
 /// EnumWindows callback: locates the empty WorkerW below the icon layer.
 ///
 /// # Safety
@@ -262,6 +279,16 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
             let c_len = unsafe { GetClassNameW(next_hwnd, &mut c_buf) };
             let c_name = String::from_utf16_lossy(&c_buf[..c_len as usize]);
             if c_name == "WorkerW" {
+                // Apply the same size validation as Check 1 to avoid
+                // selecting a tiny internal WorkerW as the attach target.
+                if !is_valid_workerw_candidate(next_hwnd) {
+                    tracing::debug!(
+                        "Skipping small sibling WorkerW HWND({:?}) — below 300×300 threshold",
+                        next_hwnd.0
+                    );
+                    next = unsafe { GetWindow(next_hwnd, GW_HWNDNEXT) };
+                    continue;
+                }
                 ctx.target = Some(next_hwnd);
                 tracing::info!(
                     "Found target WorkerW sibling directly behind SHELLDLL_DefView parent: HWND({:?})",

@@ -28,6 +28,20 @@ fn ensure_mf_initialized() {
 }
 
 /// Hardware-accelerated video decoder using Windows Media Foundation (IMFSourceReader).
+///
+/// # Thread Safety
+///
+/// `MfVideoDecoder` implements `Send` because `MediaDecoder` requires it and the
+/// decoder is always spawned directly onto the decode worker thread. The safety
+/// contract is:
+/// - `MFStartup(MFSTARTUP_FULL)` initializes Media Foundation in MTA mode,
+///   allowing cross-thread use of `IMFSourceReader` when the COM apartment is MTA.
+/// - `MfVideoDecoder` is constructed once inside `spawn_video_worker` and never
+///   moved to a different thread after construction.
+/// - No `MfVideoDecoder` instance is shared between threads.
+///
+/// If the above invariants are violated (e.g. by storing the decoder in a shared
+/// state or calling it from a STA thread), the safety guarantee is void.
 pub struct MfVideoDecoder {
     #[cfg(target_os = "windows")]
     reader: IMFSourceReader,
@@ -37,7 +51,10 @@ pub struct MfVideoDecoder {
     last_pts_100ns: i64,
 }
 
-// SAFETY: IMFSourceReader operations are internally synchronized in Media Foundation.
+// SAFETY: MFStartup(MFSTARTUP_FULL) initializes COM in MTA mode, which permits
+// IMFSourceReader to be used from worker threads. MfVideoDecoder is always
+// constructed and consumed on the same decode worker thread; it is never shared
+// between threads or moved after construction. See struct-level doc for invariants.
 unsafe impl Send for MfVideoDecoder {}
 
 impl MfVideoDecoder {

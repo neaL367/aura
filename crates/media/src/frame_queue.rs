@@ -9,9 +9,11 @@ pub const FRAME_CHANNEL_CAPACITY: usize = 2;
 
 /// Sending end of a bounded frame channel.
 ///
-/// Owned by the decoder worker thread.  `send_frame` applies back-pressure:
-/// if the channel is full it drops the oldest frame (for video) or blocks
-/// (for GIF, where timing matters).
+/// Owned by the decoder worker thread.  `try_send` applies non-blocking
+/// back-pressure: if the channel is full the newest frame is dropped
+/// (the send returns `false`) and the caller decides how to retry.
+/// Use the interruptible send pattern rather than `send_blocking` to
+/// avoid deadlocking when the renderer is paused and the queue is full.
 pub struct FrameSender(Sender<DecodedFrame>);
 
 /// Receiving end of a bounded frame channel.
@@ -27,13 +29,23 @@ pub fn frame_channel() -> (FrameSender, FrameReceiver) {
 }
 
 impl FrameSender {
-    /// Try to send a frame.  Returns `true` if sent, `false` if channel was full.
+    /// Try to send a frame without blocking.  Returns `true` if sent,
+    /// `false` if the channel was full (frame dropped) or disconnected.
+    ///
+    /// Note: `false` is returned for both `Full` (retry appropriate) and
+    /// `Disconnected` (receiver gone — caller should exit). Use
+    /// `try_send_checked` when you need to distinguish the two cases.
     pub fn try_send(&self, frame: DecodedFrame) -> bool {
         match self.0.try_send(frame) {
             Ok(()) => true,
             Err(TrySendError::Full(_)) => false,
             Err(TrySendError::Disconnected(_)) => false,
         }
+    }
+
+    /// Try to send a frame without blocking, returning the specific outcome.
+    pub fn try_send_checked(&self, frame: DecodedFrame) -> Result<(), TrySendError<DecodedFrame>> {
+        self.0.try_send(frame)
     }
 
     /// Block until the frame is sent or the channel is disconnected.

@@ -99,7 +99,14 @@ impl MediaDecoder for GifDecoder {
 
         let delay_ms = (frame.delay as u64) * 10;
 
-        // Apply disposal method to prepare canvas for next frame.
+        // Capture the composed canvas as the output frame BEFORE applying
+        // disposal. Disposal prepares the canvas for the *next* frame, not
+        // the current one. Previously, disposal was applied before cloning,
+        // which caused Background/Previous frames to arrive at the renderer
+        // already cleared or restored — an incorrect pre-mutation.
+        let output_data = self.canvas.clone();
+
+        // Apply disposal method to prepare canvas for the *next* frame.
         match frame.dispose {
             DisposalMethod::Keep | DisposalMethod::Any => {}
             DisposalMethod::Background => {
@@ -121,7 +128,7 @@ impl MediaDecoder for GifDecoder {
         Ok(Some(DecodedFrame {
             width: self.width,
             height: self.height,
-            data: self.canvas.clone(),
+            data: output_data,
             timestamp_ms: 0,
             duration_ms: delay_ms.max(20),
         }))
@@ -179,5 +186,169 @@ fn clear_region(canvas: &mut [u8], x: u32, y: u32, w: u32, h: u32, cw: u32, colo
                 canvas[idx..idx + 4].copy_from_slice(&color);
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::decoder::MediaDecoder;
+
+    /// Build a minimal single-frame in-memory GIF (2×2, one opaque color).
+    /// Returns the raw bytes of the GIF file.
+    fn make_gif(
+        width: u16,
+        height: u16,
+        color: [u8; 3],
+        dispose: gif::DisposalMethod,
+    ) -> Vec<u8> {
+        let mut buf = Vec::new();
+        {
+            let mut encoder =
+                gif::Encoder::new(&mut buf, width, height, &[]).expect("encoder");
+            encoder.set_repeat(gif::Repeat::Infinite).expect("repeat");
+            let palette = color.to_vec();
+            let pixel_count = (width as usize) * (height as usize);
+            // Frame 1: all pixels map to palette index 0 (our color).
+            let mut frame = gif::Frame {
+                width,
+                height,
+                palette: Some(palette.clone()),
+                buffer: std::borrow::Cow::Owned(vec![0u8; pixel_count]),
+                dispose,
+                transparent: None,
+                delay: 10, // 100 ms
+                ..Default::default()
+            };
+            encoder.write_frame(&frame).expect("frame 1");
+            // Frame 2: all pixels map to palette index 0 (same color).
+            frame.dispose = gif::DisposalMethod::Keep;
+            encoder.write_frame(&frame).expect("frame 2");
+        }
+        buf
+    }
+
+    /// Open a GIF from in-memory bytes by writing to a temp file.
+    fn open_gif_bytes(bytes: &[u8]) -> GifDecoder {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!(
+            "aura_test_{}.gif",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .subsec_nanos()
+        ));
+        std::fs::write(&path, bytes).expect("write temp gif");
+        let decoder = GifDecoder::open(&path).expect("open gif");
+        let _ = std::fs::remove_file(&path);
+        decoder
+    }
+
+    /// Helper: extract RGBA pixel at (x, y) from a flat RGBA buffer.
+    fn pixel(data: &[u8], x: u32, y: u32, width: u32) -> [u8; 4] {
+        let idx = ((y * width + x) * 4) as usize;
+        [data[idx], data[idx + 1], data[idx + 2], data[idx + 3]]
+    }
+
+    #[test]
+    fn keep_disposal_accumulates_frames() {
+        // DisposalMethod::Keep — canvas is NOT cleared between frames;
+        // each frame builds on top of the previous.
+        let color = [0xFF_u8, 0x00, 0x00]; // red
+        let bytes = make_gif(2, 2, color, gif::DisposalMethod::Keep);
+        let mut dec = open_gif_bytes(&bytes);
+
+        let f1 = dec.next_frame().expect("ok").expect("frame1");
+        // Frame 1 must be the red color.
+        assert_eq!(pixel(&f1.data, 0, 0, 2), [0xFF, 0x00, 0x00, 0xFF]);
+
+        let f2 = dec.next_frame().expect("ok").expect("frame2");
+        // Frame 2 is also red (Keep — canvas not cleared).
+        assert_eq!(pixel(&f2.data, 0, 0, 2), [0xFF, 0x00, 0x00, 0xFF]);
+    }
+
+    #[test]
+    fn background_disposal_output_is_not_premutated() {
+        // DisposalMethod::Background — the frame region should be cleared on
+        // the canvas AFTER the frame output is returned, not before.
+        // Regression test: the bug caused the output to be cleared (bg color)
+        // before the renderer received it.
+        let color = [0x00_u8, 0xFF, 0x00]; // green
+        let bytes = make_gif(2, 2, color, gif::DisposalMethod::Background);
+        let mut dec = open_gif_bytes(&bytes);
+
+        let f1 = dec.next_frame().expect("ok").expect("frame1");
+        // The output frame must show the GREEN pixels, not the background.
+        // Before the fix, Background disposal would clear the canvas before
+        // cloning, so f1.data would be all-zeroes (transparent bg).
+        assert_eq!(
+            pixel(&f1.data, 0, 0, 2),
+            [0x00, 0xFF, 0x00, 0xFF],
+            "Background disposal must NOT pre-clear the output frame"
+        );
+    }
+
+    #[test]
+    fn previous_disposal_output_is_not_premutated() {
+        // DisposalMethod::Previous — canvas is restored to the pre-frame
+        // snapshot AFTER the frame output is captured.
+        // Regression test: the bug caused the canvas to be restored to
+        // `before_frame` (empty at frame 1) before cloning, so the output
+        // would be the blank pre-frame state rather than the composed frame.
+        let color = [0x00_u8, 0x00, 0xFF]; // blue
+        let bytes = make_gif(2, 2, color, gif::DisposalMethod::Previous);
+        let mut dec = open_gif_bytes(&bytes);
+
+        let f1 = dec.next_frame().expect("ok").expect("frame1");
+        // Output must be blue pixels, not blank/restored pre-frame.
+        assert_eq!(
+            pixel(&f1.data, 0, 0, 2),
+            [0x00, 0x00, 0xFF, 0xFF],
+            "Previous disposal must NOT restore canvas before outputting frame"
+        );
+    }
+
+    #[test]
+    fn any_disposal_behaves_like_keep() {
+        // DisposalMethod::Any is treated identically to Keep.
+        let color = [0xFF_u8, 0xFF, 0x00]; // yellow
+        let bytes = make_gif(2, 2, color, gif::DisposalMethod::Any);
+        let mut dec = open_gif_bytes(&bytes);
+
+        let f1 = dec.next_frame().expect("ok").expect("frame1");
+        assert_eq!(pixel(&f1.data, 0, 0, 2), [0xFF, 0xFF, 0x00, 0xFF]);
+    }
+
+    #[test]
+    fn frame_duration_minimum_20ms() {
+        // Frames with delay=0 (0 ms) must be clamped to 20 ms.
+        let color = [0x80_u8, 0x80, 0x80];
+        let mut buf = Vec::new();
+        {
+            let mut encoder = gif::Encoder::new(&mut buf, 1, 1, &[]).expect("enc");
+            encoder.set_repeat(gif::Repeat::Finite(0)).expect("repeat");
+            let frame = gif::Frame {
+                width: 1,
+                height: 1,
+                palette: Some(color.to_vec()),
+                buffer: std::borrow::Cow::Owned(vec![0u8]),
+                delay: 0, // 0 ms — should be clamped
+                dispose: gif::DisposalMethod::Keep,
+                transparent: None,
+                ..Default::default()
+            };
+            encoder.write_frame(&frame).expect("frame");
+        }
+        let mut dec = open_gif_bytes(&buf);
+        let f = dec.next_frame().expect("ok").expect("frame");
+        assert!(
+            f.duration_ms >= 20,
+            "zero-delay frames must be clamped to ≥20ms, got {}",
+            f.duration_ms
+        );
     }
 }

@@ -31,17 +31,19 @@ impl VulkanContext {
         let (physical_device, graphics_queue_family) = select_physical_device(&instance)?;
         let video_qf = find_video_decode_queue_family_for_device(&instance, physical_device);
 
-        let device = create_device(&instance, physical_device, graphics_queue_family, video_qf)?;
+        let (device, video_extensions_enabled) =
+            create_device(&instance, physical_device, graphics_queue_family, video_qf)?;
 
         if let Some(vqf) = video_qf {
             tracing::info!(
-                "Vulkan Video decode queue family: {} ({}graphics)",
+                "Vulkan Video decode queue family: {} ({}graphics), extensions_enabled={}",
                 vqf,
                 if vqf == graphics_queue_family {
                     "shared with "
                 } else {
                     "separate from "
-                }
+                },
+                video_extensions_enabled
             );
         } else {
             tracing::warn!(
@@ -63,18 +65,32 @@ impl VulkanContext {
             })
             .map_err(|e| VulkanError::Allocation(e.to_string()))?;
 
-        let video_queue_loader = Some(ash::khr::video_queue::Instance::new(&entry, &instance));
-        let video_queue_device_loader =
-            Some(ash::khr::video_queue::Device::new(&instance, &device));
-        let video_decode_queue_loader = Some(ash::khr::video_decode_queue::Device::new(
-            &instance, &device,
-        ));
+        // Only create video loaders when the extensions were actually enabled in
+        // the device. Loading function pointers for extensions that were not
+        // enabled results in null/undefined function pointers that crash on call.
+        let (video_queue_loader, video_queue_device_loader, video_decode_queue_loader) =
+            if video_extensions_enabled {
+                (
+                    Some(ash::khr::video_queue::Instance::new(&entry, &instance)),
+                    Some(ash::khr::video_queue::Device::new(&instance, &device)),
+                    Some(ash::khr::video_decode_queue::Device::new(&instance, &device)),
+                )
+            } else {
+                tracing::info!("Vulkan Video extensions not enabled — video loaders disabled");
+                (None, None, None)
+            };
 
-        let dpb_coincide = check_dpb_coincide_capability_impl(
-            &instance,
-            physical_device,
-            video_queue_loader.as_ref(),
-        );
+        // Guard capability probe behind extension availability; calling the
+        // function pointer when extensions are absent is undefined behavior.
+        let dpb_coincide = if video_extensions_enabled {
+            check_dpb_coincide_capability_impl(
+                &instance,
+                physical_device,
+                video_queue_loader.as_ref(),
+            )
+        } else {
+            true // default safe value when video is unavailable
+        };
 
         let video_queue_mutex = video_qf.map(|_| Mutex::new(()));
 
@@ -285,12 +301,16 @@ fn check_dpb_coincide_capability_impl(
     }
 }
 
+/// Create the logical device and return it alongside a flag indicating whether
+/// Vulkan Video extensions (`VK_KHR_video_queue`, `VK_KHR_video_decode_queue`)
+/// were actually enabled. Callers must check this flag before loading video
+/// function pointers or probing video capabilities.
 fn create_device(
     instance: &ash::Instance,
     physical_device: vk::PhysicalDevice,
     graphics_queue_family: u32,
     video_queue_family: Option<u32>,
-) -> Result<ash::Device, VulkanError> {
+) -> Result<(ash::Device, bool), VulkanError> {
     let queue_priority = 1.0f32;
 
     let mut queue_infos = Vec::with_capacity(2);
@@ -315,6 +335,8 @@ fn create_device(
     let mut extensions = Vec::with_capacity(4);
     extensions.push(ash::khr::swapchain::NAME.as_ptr());
 
+    let mut video_extensions_enabled = false;
+
     if video_queue_family.is_some() {
         let available_extensions = unsafe {
             instance
@@ -335,6 +357,12 @@ fn create_device(
             if has_ext(ash::khr::video_decode_h264::NAME) {
                 extensions.push(ash::khr::video_decode_h264::NAME.as_ptr());
             }
+            video_extensions_enabled = true;
+        } else {
+            tracing::warn!(
+                "VK_KHR_video_queue or VK_KHR_video_decode_queue not available on this \
+                 device — Vulkan Video hardware decode disabled"
+            );
         }
     }
 
@@ -343,5 +371,5 @@ fn create_device(
         .enabled_extension_names(&extensions);
 
     let device = unsafe { instance.create_device(physical_device, &create_info, None)? };
-    Ok(device)
+    Ok((device, video_extensions_enabled))
 }
