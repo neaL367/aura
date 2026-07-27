@@ -238,6 +238,11 @@ pub mod stub {
         ShutdownRequested,
     }
 
+    pub struct PumpHandle;
+    impl PumpHandle {
+        pub fn shutdown(&self) {}
+    }
+
     pub struct EventPump {
         pub receiver: crossbeam_channel::Receiver<HostEvent>,
     }
@@ -246,8 +251,8 @@ pub mod stub {
             let (_, receiver) = crossbeam_channel::unbounded();
             Self { receiver }
         }
-        pub fn spawn(self) -> std::thread::JoinHandle<()> {
-            std::thread::spawn(|| {})
+        pub fn spawn(self) -> (PumpHandle, std::thread::JoinHandle<()>) {
+            (PumpHandle, std::thread::spawn(|| {}))
         }
     }
     impl Default for EventPump {

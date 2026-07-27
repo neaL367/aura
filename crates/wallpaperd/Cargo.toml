@@ -17,6 +17,7 @@ aura-storage          = { workspace = true }
 aura-media            = { workspace = true }
 aura-platform-windows = { workspace = true }
 aura-renderer-vulkan  = { workspace = true }
+aura-security         = { workspace = true }
 
 serde              = { workspace = true }
 thiserror          = { workspace = true }

@@ -4,6 +4,7 @@ use tracing::info;
 
 use aura_core::wallpaper::WallpaperMeta;
 use aura_ipc::protocol::{Response, WallpaperEntry};
+use aura_security::validate_path;
 use aura_storage::LibraryScanner;
 
 use super::OrchestratorState;
@@ -86,6 +87,23 @@ pub(super) fn handle_import_files(
     state_lock: &Arc<Mutex<OrchestratorState>>,
     paths: Vec<PathBuf>,
 ) -> Response {
+    let validated_paths: Vec<PathBuf> = paths
+        .iter()
+        .filter_map(|p| match validate_path(p) {
+            Ok(validated) => Some(validated),
+            Err(e) => {
+                tracing::warn!("Rejected import path {}: {}", p.display(), e);
+                None
+            }
+        })
+        .collect();
+
+    if validated_paths.is_empty() {
+        return Response::Error {
+            reason: "No valid import paths provided".to_string(),
+        };
+    }
+
     let mut library_path = {
         let state = match state_lock.lock() {
             Ok(s) => s,
@@ -106,7 +124,7 @@ pub(super) fn handle_import_files(
 
     let mut imported = 0;
     let mut errors = Vec::new();
-    for src in &paths {
+    for src in &validated_paths {
         let file_name = match src.file_name() {
             Some(n) => n,
             None => continue,
@@ -154,6 +172,15 @@ pub(super) fn handle_set_wallpaper_library(
     state_lock: &Arc<Mutex<OrchestratorState>>,
     path: PathBuf,
 ) -> Response {
+    let validated_path = match validate_path(&path) {
+        Ok(p) => p,
+        Err(e) => {
+            return Response::Error {
+                reason: format!("Invalid library path: {}", e),
+            };
+        }
+    };
+
     {
         let mut state = match state_lock.lock() {
             Ok(s) => s,
@@ -165,7 +192,7 @@ pub(super) fn handle_set_wallpaper_library(
         };
 
         if let Err(e) = state.mutate_config(|config| {
-            config.library.library_path = path.clone();
+            config.library.library_path = validated_path.clone();
         }) {
             tracing::error!("Failed to update library path: {}", e);
             return Response::Error {
@@ -174,7 +201,7 @@ pub(super) fn handle_set_wallpaper_library(
         }
 
         if let Some(watcher) = &mut state.watcher {
-            watcher.replace_paths(std::slice::from_ref(&path));
+            watcher.replace_paths(std::slice::from_ref(&validated_path));
         }
     }
 

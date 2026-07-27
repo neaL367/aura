@@ -62,9 +62,18 @@ impl FrameSync {
     /// Must be called when GPU execution using these sync objects has completed.
     pub unsafe fn destroy(&mut self, device: &ash::Device) {
         unsafe {
-            device.destroy_semaphore(self.image_available_semaphore, None);
-            device.destroy_semaphore(self.render_finished_semaphore, None);
-            device.destroy_fence(self.in_flight_fence, None);
+            if self.image_available_semaphore != vk::Semaphore::null() {
+                device.destroy_semaphore(self.image_available_semaphore, None);
+                self.image_available_semaphore = vk::Semaphore::null();
+            }
+            if self.render_finished_semaphore != vk::Semaphore::null() {
+                device.destroy_semaphore(self.render_finished_semaphore, None);
+                self.render_finished_semaphore = vk::Semaphore::null();
+            }
+            if self.in_flight_fence != vk::Fence::null() {
+                device.destroy_fence(self.in_flight_fence, None);
+                self.in_flight_fence = vk::Fence::null();
+            }
         }
     }
 }

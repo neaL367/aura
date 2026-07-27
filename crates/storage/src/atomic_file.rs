@@ -35,8 +35,6 @@ pub fn atomic_save_bytes(path: &Path, bytes: &[u8]) -> Result<(), StorageError> 
         let from_wide = to_wide(&tmp_path);
         let to_wide = to_wide(path);
 
-        // SAFETY: `from_wide` and `to_wide` are null-terminated wide string vectors derived via `to_wide`
-        // that remain allocated and valid on the stack for the entire duration of the MoveFileExW Win32 FFI call.
         let mut res = unsafe {
             MoveFileExW(
                 PCWSTR(from_wide.as_ptr()),
@@ -46,7 +44,6 @@ pub fn atomic_save_bytes(path: &Path, bytes: &[u8]) -> Result<(), StorageError> 
         };
 
         if res.is_err() {
-            // Retry MoveFileExW once after a short 10ms delay for transient file locks (e.g., antivirus scan).
             std::thread::sleep(std::time::Duration::from_millis(10));
             res = unsafe {
                 MoveFileExW(
@@ -74,4 +71,35 @@ pub fn atomic_save_bytes(path: &Path, bytes: &[u8]) -> Result<(), StorageError> 
     }
 
     Ok(())
+}
+
+/// Clean up stale temporary files older than the given duration.
+pub fn cleanup_stale_temp_files(
+    dir: &Path,
+    max_age: std::time::Duration,
+) -> Result<usize, std::io::Error> {
+    let mut cleaned = 0;
+    let now = std::time::SystemTime::now();
+
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        let is_temp = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.starts_with("tmp-"))
+            .unwrap_or(false);
+
+        if is_temp
+            && let Ok(metadata) = std::fs::metadata(&path)
+            && let Ok(modified) = metadata.modified()
+            && now.duration_since(modified).unwrap_or_default() > max_age
+        {
+            let _ = std::fs::remove_file(&path);
+            cleaned += 1;
+        }
+    }
+
+    Ok(cleaned)
 }

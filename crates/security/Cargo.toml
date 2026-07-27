@@ -1,0 +1,21 @@
+[package]
+name = "aura-security"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Security utilities for Aura: pipe DACL, path validation, client authentication"
+
+[dependencies]
+thiserror = { workspace = true }
+tracing = { workspace = true }
+dirs = "6"
+
+[dependencies.windows]
+workspace = true
+features = [
+    "Win32_Security",
+    "Win32_System_Threading",
+    "Win32_System_Pipes",
+]

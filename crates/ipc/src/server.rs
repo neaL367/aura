@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tracing::{error, info, warn};
 
@@ -12,67 +13,88 @@ pub type RequestHandler = Box<dyn Fn(Request) -> Response + Send + Sync + 'stati
 
 /// Async IPC server — listens on the named pipe and dispatches requests.
 pub struct IpcServer {
-    handler: std::sync::Arc<RequestHandler>,
+    handler: Arc<RequestHandler>,
     pipe_name: String,
+    first_instance: bool,
+    client_validator: Arc<aura_security::ClientValidator>,
 }
 
 impl IpcServer {
     pub fn new(handler: RequestHandler) -> Self {
         Self {
-            handler: std::sync::Arc::new(handler),
+            handler: Arc::new(handler),
             pipe_name: PIPE_NAME.to_owned(),
+            first_instance: true,
+            client_validator: Arc::new(aura_security::ClientValidator::new()),
         }
     }
 
     /// Create a server on a custom pipe name (for testing).
     pub fn on_pipe(handler: RequestHandler, pipe_name: impl Into<String>) -> Self {
         Self {
-            handler: std::sync::Arc::new(handler),
+            handler: Arc::new(handler),
             pipe_name: pipe_name.into(),
+            first_instance: true,
+            client_validator: Arc::new(aura_security::ClientValidator::new()),
         }
+    }
+
+    /// Set the client PID validator for connection filtering.
+    pub fn with_client_validator(mut self, validator: aura_security::ClientValidator) -> Self {
+        self.client_validator = Arc::new(validator);
+        self
     }
 
     /// Accept connections and dispatch requests until `shutdown` is signalled.
     pub async fn serve(
-        self,
+        mut self,
         mut shutdown: tokio::sync::watch::Receiver<bool>,
     ) -> Result<(), IpcError> {
         info!("IPC server listening on {}", self.pipe_name);
 
+        let mut retry_delay = std::time::Duration::from_millis(100);
         loop {
-            let server = match ServerOptions::new()
-                .first_pipe_instance(false)
-                .create(&self.pipe_name)
-            {
+            let mut opts = ServerOptions::new();
+            opts.first_pipe_instance(self.first_instance);
+
+            let server = match opts.create(&self.pipe_name) {
                 Ok(s) => s,
                 Err(e) => {
                     warn!(
-                        "Failed to create named pipe instance: {}; retrying in 100ms",
-                        e
+                        "Failed to create named pipe instance: {}; retrying in {:?}",
+                        e, retry_delay
                     );
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    tokio::time::sleep(retry_delay).await;
+                    retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(2));
                     continue;
                 }
             };
+            retry_delay = std::time::Duration::from_millis(100);
+            self.first_instance = false;
 
-            // Wait for a connection or shutdown.
             tokio::select! {
                 result = server.connect() => {
                     match result {
                         Ok(()) => {
+                            let client_pid = get_server_client_pid(&server);
+                            if let Some(pid) = client_pid {
+                                if !self.client_validator.is_allowed(pid) {
+                                    warn!("IPC connection rejected: unauthorized PID {}", pid);
+                                    continue;
+                                }
+                                info!("IPC connection accepted from PID {}", pid);
+                            }
                             let handler = self.handler.clone();
                             tokio::spawn(handle_client(server, handler));
                         }
                         Err(e) => {
-                            // On Windows, if a client connects between pipe creation and connect(),
-                            // ConnectNamedPipe returns ERROR_PIPE_CONNECTED (535 / 0x217) or std::io::ErrorKind::AlreadyExists.
-                            // This indicates the client has already connected and the pipe instance is valid.
                             if e.raw_os_error() == Some(535) || e.kind() == std::io::ErrorKind::AlreadyExists {
                                 let handler = self.handler.clone();
                                 tokio::spawn(handle_client(server, handler));
                             } else {
-                                warn!("IPC pipe connect error: {}; retrying in 100ms", e);
-                                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                                warn!("IPC pipe connect error: {}; retrying in {:?}", e, retry_delay);
+                                tokio::time::sleep(retry_delay).await;
+                                retry_delay = (retry_delay * 2).min(std::time::Duration::from_secs(2));
                             }
                         }
                     }
@@ -88,7 +110,20 @@ impl IpcServer {
     }
 }
 
-async fn handle_client(mut pipe: NamedPipeServer, handler: std::sync::Arc<RequestHandler>) {
+fn get_server_client_pid(_server: &NamedPipeServer) -> Option<u32> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::io::AsRawHandle;
+        let handle = _server.as_raw_handle();
+        aura_security::pipe_security::get_named_pipe_client_pid(handle as isize).ok()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
+}
+
+async fn handle_client(mut pipe: NamedPipeServer, handler: Arc<RequestHandler>) {
     loop {
         let msg: IpcMessage<Request> = match read_message(&mut pipe).await {
             Ok(m) => m,

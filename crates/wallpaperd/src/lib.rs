@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub mod assignment_manager;
 pub mod daemon;
 pub mod decode_worker;

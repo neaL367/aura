@@ -98,11 +98,19 @@ impl VulkanContext {
     }
 
     pub fn queue_lock(&self) -> std::sync::MutexGuard<'_, ()> {
-        self.queue_mutex.lock().unwrap()
+        self.queue_mutex.lock().unwrap_or_else(|e| {
+            tracing::warn!("Queue mutex poisoned, recovering");
+            e.into_inner()
+        })
     }
 
     pub fn video_queue_lock(&self) -> Option<std::sync::MutexGuard<'_, ()>> {
-        self.video_queue_mutex.as_ref().map(|m| m.lock().unwrap())
+        self.video_queue_mutex.as_ref().map(|m| {
+            m.lock().unwrap_or_else(|e| {
+                tracing::warn!("Video queue mutex poisoned, recovering");
+                e.into_inner()
+            })
+        })
     }
 
     pub fn find_video_decode_queue_family(&self) -> Option<u32> {

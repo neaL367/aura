@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use aura_core::wallpaper::{MediaKind, WallpaperId, WallpaperMeta, detect_media_kind};
+use aura_security::{check_symlink_depth, is_symlink};
 use tracing::{info, warn};
 
 /// Scans configured directories on disk to discover wallpaper media files.
@@ -62,6 +63,12 @@ impl LibraryScanner {
         for entry in read_dir.flatten() {
             let path = entry.path();
             if path.is_dir() {
+                if is_symlink(&path)
+                    && let Err(e) = check_symlink_depth(&path, depth as usize)
+                {
+                    warn!("Skipping symlink: {}", e);
+                    continue;
+                }
                 Self::scan_directory(&path, results, visited, depth + 1);
             } else if path.is_file() {
                 let canonical_file = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());

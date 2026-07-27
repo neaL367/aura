@@ -6,6 +6,7 @@ members = [
     "crates/media",
     "crates/platform-windows",
     "crates/renderer-vulkan",
+    "crates/security",
     "crates/wallpaperd",
     "crates/wallpaper-ui",
     "tools/workerw-proof",
@@ -72,6 +73,7 @@ aura-storage          = { path = "crates/storage" }
 aura-media            = { path = "crates/media" }
 aura-platform-windows = { path = "crates/platform-windows" }
 aura-renderer-vulkan  = { path = "crates/renderer-vulkan" }
+aura-security         = { path = "crates/security" }
 
 # ---------------------------------------------------------------------------
 # Build profiles
