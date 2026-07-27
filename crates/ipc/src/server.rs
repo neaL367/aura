@@ -87,14 +87,12 @@ impl IpcServer {
                     match result {
                         Ok(()) => {
                             let client_pid = get_server_client_pid(&server);
-                            if !self.skip_client_validation {
-                                if let Some(pid) = client_pid {
-                                    if !validate_client_pid(pid) {
-                                        warn!("IPC connection rejected: unauthorized PID {}", pid);
-                                        continue;
-                                    }
-                                    info!("IPC connection accepted from PID {}", pid);
+                            if let Some(pid) = client_pid {
+                                if !self.skip_client_validation && !validate_client_pid(pid) {
+                                    warn!("IPC connection rejected: unauthorized PID {}", pid);
+                                    continue;
                                 }
+                                info!("IPC connection accepted from PID {}", pid);
                             }
                             let handler = self.handler.clone();
                             tokio::spawn(handle_client(server, handler));
@@ -139,7 +137,9 @@ fn get_server_client_pid(_server: &NamedPipeServer) -> Option<u32> {
 fn apply_pipe_dacl(server: &NamedPipeServer) {
     use std::os::windows::io::AsRawHandle;
     let access = aura_security::FILE_GENERIC_READ | aura_security::FILE_GENERIC_WRITE;
-    let Ok(sd) = aura_security::SecurityDescriptor::for_current_user_with_access(access) else { return };
+    let Ok(sd) = aura_security::SecurityDescriptor::for_current_user_with_access(access) else {
+        return;
+    };
     aura_security::pipe_security::apply_pipe_dacl(server.as_raw_handle() as isize, &sd);
 }
 

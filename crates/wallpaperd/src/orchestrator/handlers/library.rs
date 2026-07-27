@@ -92,7 +92,11 @@ pub(super) fn handle_import_files(
         .filter_map(|p| match validate_path(p) {
             Ok(validated) => Some(validated),
             Err(e) => {
-                tracing::warn!("Rejected import path {}: {}", aura_security::redact_path(p), e);
+                tracing::warn!(
+                    "Rejected import path {}: {}",
+                    aura_security::redact_path(p),
+                    e
+                );
                 None
             }
         })
@@ -144,11 +148,7 @@ pub(super) fn handle_import_files(
                 );
             }
             Err(copy_err) => {
-                errors.push(format!(
-                    "{}: {}",
-                    aura_security::redact_path(src),
-                    copy_err
-                ));
+                errors.push(format!("{}: {}", aura_security::redact_path(src), copy_err));
             }
         }
     }

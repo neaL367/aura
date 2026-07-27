@@ -40,7 +40,11 @@ impl ThumbnailStore {
             MediaKind::Image | MediaKind::Gif => match image::open(&meta.path) {
                 Ok(img) => Ok(img),
                 Err(e) => {
-                    tracing::warn!("Failed to open image for thumbnail {}: {}", aura_security::redact_path(&meta.path), e);
+                    tracing::warn!(
+                        "Failed to open image for thumbnail {}: {}",
+                        aura_security::redact_path(&meta.path),
+                        e
+                    );
                     Err(StorageError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!("Failed to open image for thumbnail: {}", e),

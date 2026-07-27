@@ -45,14 +45,12 @@ impl MfVideoDecoder {
     pub fn open(path: &Path) -> Result<Self, MediaError> {
         ensure_mf_initialized();
 
-        let path_str = path
-            .to_str()
-            .ok_or_else(|| {
-                MediaError::Decode(format!(
-                    "Invalid path unicode: {}",
-                    aura_security::redact_path(path)
-                ))
-            })?;
+        let path_str = path.to_str().ok_or_else(|| {
+            MediaError::Decode(format!(
+                "Invalid path unicode: {}",
+                aura_security::redact_path(path)
+            ))
+        })?;
         let hstring = windows::core::HSTRING::from(path_str);
 
         unsafe {
@@ -240,14 +238,12 @@ impl MfH264Demuxer {
     pub fn open(path: &Path) -> Result<Self, MediaError> {
         ensure_mf_initialized();
 
-        let path_str = path
-            .to_str()
-            .ok_or_else(|| {
-                MediaError::Decode(format!(
-                    "Invalid path unicode: {}",
-                    aura_security::redact_path(path)
-                ))
-            })?;
+        let path_str = path.to_str().ok_or_else(|| {
+            MediaError::Decode(format!(
+                "Invalid path unicode: {}",
+                aura_security::redact_path(path)
+            ))
+        })?;
         let hstring = windows::core::HSTRING::from(path_str);
 
         unsafe {
