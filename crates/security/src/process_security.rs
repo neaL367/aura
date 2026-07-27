@@ -50,3 +50,51 @@ impl Clone for ClientValidator {
         }
     }
 }
+
+/// Validate a client PID by checking its executable name against the allowlist
+/// (`wallpaper-ui.exe`, `wallpaperd.exe`).
+pub fn validate_client_pid(pid: u32) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        validate_client_pid_win32(pid)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = pid;
+        true
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn validate_client_pid_win32(pid: u32) -> bool {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT,
+        PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    use windows::core::PWSTR;
+
+    unsafe {
+        let handle = match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+            Ok(h) => h,
+            Err(_) => return false,
+        };
+
+        let mut buf = [0u16; 260];
+        let mut len = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(handle, PROCESS_NAME_FORMAT(0), PWSTR(buf.as_mut_ptr()), &mut len).is_ok();
+        let _ = CloseHandle(handle);
+
+        if !ok {
+            return false;
+        }
+
+        let name = String::from_utf16_lossy(&buf[..len as usize]);
+        let file_name = std::path::Path::new(&name)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+
+        matches!(file_name, "wallpaper-ui.exe" | "wallpaperd.exe")
+    }
+}

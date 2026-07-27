@@ -69,6 +69,7 @@ impl IpcServer {
                     continue;
                 }
             };
+            apply_pipe_dacl(&server);
             retry_delay = std::time::Duration::from_millis(100);
             self.first_instance = false;
 
@@ -78,7 +79,7 @@ impl IpcServer {
                         Ok(()) => {
                             let client_pid = get_server_client_pid(&server);
                             if let Some(pid) = client_pid {
-                                if !self.client_validator.is_allowed(pid) {
+                                if !validate_client_pid(pid) {
                                     warn!("IPC connection rejected: unauthorized PID {}", pid);
                                     continue;
                                 }
@@ -121,6 +122,21 @@ fn get_server_client_pid(_server: &NamedPipeServer) -> Option<u32> {
     {
         None
     }
+}
+
+#[cfg(target_os = "windows")]
+fn apply_pipe_dacl(server: &NamedPipeServer) {
+    use std::os::windows::io::AsRawHandle;
+    let access = aura_security::FILE_GENERIC_READ | aura_security::FILE_GENERIC_WRITE;
+    let Ok(sd) = aura_security::SecurityDescriptor::for_current_user_with_access(access) else { return };
+    aura_security::pipe_security::apply_pipe_dacl(server.as_raw_handle() as isize, &sd);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn apply_pipe_dacl(_server: &NamedPipeServer) {}
+
+fn validate_client_pid(pid: u32) -> bool {
+    aura_security::validate_client_pid(pid)
 }
 
 async fn handle_client(mut pipe: NamedPipeServer, handler: Arc<RequestHandler>) {

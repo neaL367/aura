@@ -134,6 +134,17 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
         let library_store = aura_storage::library_store::LibraryStore::new(&library_path);
         let library_items = library_store.load().unwrap_or_default();
 
+        let config_dir = config_path.parent().unwrap_or(&config_path);
+        let _ = aura_storage::cleanup_stale_temp_files(
+            config_dir,
+            std::time::Duration::from_secs(24 * 60 * 60),
+        );
+        let thumbs_dir = config_dir.join("thumbs");
+        let _ = aura_storage::cleanup_stale_temp_files(
+            &thumbs_dir,
+            std::time::Duration::from_secs(24 * 60 * 60),
+        );
+
         let workerw = workerw_manager.workerw();
         for m in &monitors {
             let assignment = config.assignments.iter().find(|a| a.monitor_id == m.id);

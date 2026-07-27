@@ -47,7 +47,12 @@ impl MfVideoDecoder {
 
         let path_str = path
             .to_str()
-            .ok_or_else(|| MediaError::Decode(format!("Invalid path unicode: {:?}", path)))?;
+            .ok_or_else(|| {
+                MediaError::Decode(format!(
+                    "Invalid path unicode: {}",
+                    aura_security::redact_path(path)
+                ))
+            })?;
         let hstring = windows::core::HSTRING::from(path_str);
 
         unsafe {
@@ -59,8 +64,9 @@ impl MfVideoDecoder {
 
             let reader = MFCreateSourceReaderFromURL(&hstring, attr.as_ref()).map_err(|e| {
                 MediaError::Decode(format!(
-                    "MFCreateSourceReaderFromURL failed for {:?}: {}",
-                    path, e
+                    "MFCreateSourceReaderFromURL failed for {}: {}",
+                    aura_security::redact_path(path),
+                    e
                 ))
             })?;
 
@@ -99,8 +105,8 @@ impl MfVideoDecoder {
             let height = (frame_size & 0xFFFFFFFF) as u32;
 
             tracing::info!(
-                "MfVideoDecoder initialized for {:?}: {}x{}",
-                path,
+                "MfVideoDecoder initialized for {}: {}x{}",
+                aura_security::redact_path(path),
                 width,
                 height
             );
@@ -115,11 +121,11 @@ impl MfVideoDecoder {
     }
 
     #[cfg(not(target_os = "windows"))]
-    pub fn open(path: &Path) -> Result<Self, MediaError> {
-        Err(MediaError::Decode(format!(
-            "Media Foundation video decoding is only supported on Windows targets (path: {:?})",
-            path
-        )))
+    pub fn open(_path: &Path) -> Result<Self, MediaError> {
+        Err(MediaError::Decode(
+            "Media Foundation video decoding is only supported on Windows targets (path suppressed)"
+                .to_string(),
+        ))
     }
 }
 
@@ -236,7 +242,12 @@ impl MfH264Demuxer {
 
         let path_str = path
             .to_str()
-            .ok_or_else(|| MediaError::Decode(format!("Invalid path unicode: {:?}", path)))?;
+            .ok_or_else(|| {
+                MediaError::Decode(format!(
+                    "Invalid path unicode: {}",
+                    aura_security::redact_path(path)
+                ))
+            })?;
         let hstring = windows::core::HSTRING::from(path_str);
 
         unsafe {
@@ -285,8 +296,8 @@ impl MfH264Demuxer {
             let height = (frame_size & 0xFFFFFFFF) as u32;
 
             tracing::info!(
-                "MfH264Demuxer initialized for {:?}: {}x{}",
-                path,
+                "MfH264Demuxer initialized for {}: {}x{}",
+                aura_security::redact_path(path),
                 width,
                 height
             );
@@ -300,11 +311,11 @@ impl MfH264Demuxer {
     }
 
     #[cfg(not(target_os = "windows"))]
-    pub fn open(path: &Path) -> Result<Self, MediaError> {
-        Err(MediaError::Decode(format!(
-            "Media Foundation demuxing is only supported on Windows targets (path: {:?})",
-            path
-        )))
+    pub fn open(_path: &Path) -> Result<Self, MediaError> {
+        Err(MediaError::Decode(
+            "Media Foundation demuxing is only supported on Windows targets (path suppressed)"
+                .to_string(),
+        ))
     }
 
     pub fn width(&self) -> u32 {

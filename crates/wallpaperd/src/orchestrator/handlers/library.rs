@@ -46,7 +46,7 @@ fn do_refresh(state_lock: &Arc<Mutex<OrchestratorState>>) -> Response {
         return Response::Error {
             reason: format!(
                 "Library path is not a directory: {}",
-                library_path.display()
+                aura_security::redact_path(&library_path)
             ),
         };
     }
@@ -92,7 +92,7 @@ pub(super) fn handle_import_files(
         .filter_map(|p| match validate_path(p) {
             Ok(validated) => Some(validated),
             Err(e) => {
-                tracing::warn!("Rejected import path {}: {}", p.display(), e);
+                tracing::warn!("Rejected import path {}: {}", aura_security::redact_path(p), e);
                 None
             }
         })
@@ -138,12 +138,17 @@ pub(super) fn handle_import_files(
             Err(copy_err) if LibraryScanner::inspect_file(src).is_some() => {
                 imported += 1;
                 info!(
-                    "ImportFiles: file {:?} included directly (copy failed: {})",
-                    src, copy_err
+                    "ImportFiles: file {} included directly (copy failed: {})",
+                    aura_security::redact_path(src),
+                    copy_err
                 );
             }
             Err(copy_err) => {
-                errors.push(format!("{}: {}", src.display(), copy_err));
+                errors.push(format!(
+                    "{}: {}",
+                    aura_security::redact_path(src),
+                    copy_err
+                ));
             }
         }
     }
