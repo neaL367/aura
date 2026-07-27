@@ -16,6 +16,7 @@ pub struct IpcServer {
     handler: Arc<RequestHandler>,
     pipe_name: String,
     first_instance: bool,
+    skip_client_validation: bool,
     client_validator: Arc<aura_security::ClientValidator>,
 }
 
@@ -25,6 +26,7 @@ impl IpcServer {
             handler: Arc::new(handler),
             pipe_name: PIPE_NAME.to_owned(),
             first_instance: true,
+            skip_client_validation: false,
             client_validator: Arc::new(aura_security::ClientValidator::new()),
         }
     }
@@ -35,6 +37,7 @@ impl IpcServer {
             handler: Arc::new(handler),
             pipe_name: pipe_name.into(),
             first_instance: true,
+            skip_client_validation: true,
             client_validator: Arc::new(aura_security::ClientValidator::new()),
         }
     }
@@ -42,6 +45,12 @@ impl IpcServer {
     /// Set the client PID validator for connection filtering.
     pub fn with_client_validator(mut self, validator: aura_security::ClientValidator) -> Self {
         self.client_validator = Arc::new(validator);
+        self
+    }
+
+    /// Enable strict client PID validation for production use.
+    pub fn with_client_validation(mut self) -> Self {
+        self.skip_client_validation = false;
         self
     }
 
@@ -78,12 +87,14 @@ impl IpcServer {
                     match result {
                         Ok(()) => {
                             let client_pid = get_server_client_pid(&server);
-                            if let Some(pid) = client_pid {
-                                if !validate_client_pid(pid) {
-                                    warn!("IPC connection rejected: unauthorized PID {}", pid);
-                                    continue;
+                            if !self.skip_client_validation {
+                                if let Some(pid) = client_pid {
+                                    if !validate_client_pid(pid) {
+                                        warn!("IPC connection rejected: unauthorized PID {}", pid);
+                                        continue;
+                                    }
+                                    info!("IPC connection accepted from PID {}", pid);
                                 }
-                                info!("IPC connection accepted from PID {}", pid);
                             }
                             let handler = self.handler.clone();
                             tokio::spawn(handle_client(server, handler));
