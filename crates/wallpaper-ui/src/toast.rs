@@ -8,6 +8,7 @@ pub type ToastEvent = (String, ToastKind);
 pub enum ToastKind {
     Success,
     Error,
+    #[allow(dead_code)]
     Info,
     Warning,
 }
@@ -89,7 +90,12 @@ impl ToastManager {
 
     pub fn drain_events(&mut self, rx: &std::sync::mpsc::Receiver<ToastEvent>) {
         while let Ok((msg, kind)) = rx.try_recv() {
-            self.add(msg, kind);
+            match kind {
+                ToastKind::Success => self.success(msg),
+                ToastKind::Error => self.error(msg),
+                ToastKind::Info => self.info(msg),
+                ToastKind::Warning => self.warning(msg),
+            }
         }
     }
 
@@ -101,6 +107,9 @@ impl ToastManager {
         if self.toasts.is_empty() {
             return;
         }
+
+        // Request continuous repaints for smooth alpha fade animation.
+        ctx.request_repaint();
 
         Area::new(Id::new("aura_toast_overlay"))
             .anchor(Align2::RIGHT_TOP, Vec2::new(-16.0, 16.0))
@@ -139,9 +148,17 @@ fn draw_toast(ui: &mut egui::Ui, toast: &Toast) {
         .inner_margin(egui::Margin::symmetric(12, 10))
         .show(ui, |ui| {
             ui.set_max_width(316.0);
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(icon).size(16.0).color(accent_faded));
-                ui.label(egui::RichText::new(&toast.message).color(text_faded));
+            ui.vertical(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(icon).size(16.0).color(accent_faded));
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(&toast.message)
+                                .color(text_faded),
+                        )
+                        .wrap(),
+                    );
+                });
             });
         });
 

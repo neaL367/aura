@@ -12,6 +12,12 @@ pub struct InspectorPanel {
     prev_entry_id: Option<WallpaperId>,
 }
 
+impl Default for InspectorPanel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InspectorPanel {
     pub fn new() -> Self {
         Self {
@@ -34,6 +40,7 @@ impl InspectorPanel {
             egui::ScrollArea::vertical()
                 .id_salt("inspector_placeholder_scroll")
                 .auto_shrink([false, false])
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
                 .show(ui, |ui| {
                     ui.vertical_centered(|ui| {
                         ui.add_space(60.0);
@@ -85,19 +92,19 @@ impl InspectorPanel {
             egui::ScrollArea::vertical()
                 .id_salt("inspector_scroll")
                 .auto_shrink([false, false])
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
                 .show(ui, |ui| {
                     ui.vertical(|ui| {
                         // Header row
-                        ui.label(
-                            egui::RichText::new("Details")
-                                .strong()
-                                .size(theme::FONT_SECTION_HEADER)
-                                .color(theme::TEXT_PRIMARY),
-                        );
-
-                        ui.add_space(theme::SPACING_MD);
-                        ui.separator();
-                        ui.add_space(theme::SPACING_MD);
+                        theme::header_frame().show(ui, |ui| {
+                            ui.set_min_width(ui.available_width());
+                            ui.label(
+                                egui::RichText::new("Details")
+                                    .strong()
+                                    .size(theme::FONT_SECTION_HEADER)
+                                    .color(theme::TEXT_PRIMARY),
+                            );
+                        });
 
                         // Thumbnail
                         if let Some(ref thumb) = entry.thumbnail_path {
@@ -108,6 +115,17 @@ impl InspectorPanel {
                                     .fit_to_exact_size(thumb_size)
                                     .corner_radius(theme::RADIUS_MD),
                             );
+                        }
+                        ui.add_space(theme::SPACING_SM);
+                        {
+                            let rect = ui.available_rect_before_wrap();
+                            let y = rect.top();
+                            ui.painter().hline(
+                                rect.x_range(),
+                                y,
+                                egui::Stroke::new(1.0, theme::INSPECTOR_DIVIDER),
+                            );
+                            ui.add_space(1.0);
                         }
                         ui.add_space(theme::SPACING_MD);
 
@@ -125,25 +143,27 @@ impl InspectorPanel {
 
                         ui.add_space(theme::SPACING_SM);
 
-                        // Metadata rows
-                        meta_row(ui, "Type", &format!("{}", entry.kind));
-                        if entry.width > 0 && entry.height > 0 {
-                            meta_row(
-                                ui,
-                                "Dimensions",
-                                &format!("{} × {} px", entry.width, entry.height),
-                            );
-                        }
-                        if entry.file_size > 0 {
-                            meta_row(ui, "File Size", &format_size(entry.file_size));
-                        }
-                        if entry.duration_ms > 0 {
-                            meta_row(ui, "Duration", &format_duration(entry.duration_ms));
-                        }
-                        if !entry.scanned_at.is_empty() {
-                            meta_row(ui, "Scanned", &entry.scanned_at);
-                        }
-                        meta_row(ui, "Path", &entry.path.to_string_lossy());
+                        // Metadata rows — use Grid for consistent label alignment
+                        egui::Grid::new("inspector_meta")
+                            .min_col_width(100.0)
+                            .max_col_width(100.0)
+                            .spacing(egui::vec2(theme::SPACING_SM, theme::SPACING_XS))
+                            .show(ui, |ui| {
+                                meta_row(ui, "Type", &format!("{}", entry.kind));
+                                if entry.width > 0 && entry.height > 0 {
+                                    meta_row(ui, "Dimensions", &format!("{} × {} px", entry.width, entry.height));
+                                }
+                                if entry.file_size > 0 {
+                                    meta_row(ui, "File Size", &format_size(entry.file_size));
+                                }
+                                if entry.duration_ms > 0 {
+                                    meta_row(ui, "Duration", &format_duration(entry.duration_ms));
+                                }
+                                if !entry.scanned_at.is_empty() {
+                                    meta_row(ui, "Scanned", &entry.scanned_at);
+                                }
+                                meta_row(ui, "Path", &entry.path.to_string_lossy());
+                            });
 
                         ui.add_space(theme::SPACING_LG);
 
@@ -196,13 +216,19 @@ impl InspectorPanel {
                                 } else {
                                     theme::ButtonVariant::Secondary
                                 };
-                                if theme::button(ui, &label, variant).clicked() {
-                                    ipc_client.send(Request::AssignWallpaper {
-                                        monitor_id: mon.id,
-                                        wallpaper_id: entry.id,
-                                        fit_mode: Some(self.selected_fit_mode),
-                                    });
-                                }
+                                ui.with_layout(
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        ui.set_min_width(theme::MONITOR_CARD_WIDTH);
+                                        if theme::button(ui, &label, variant).clicked() {
+                                            ipc_client.send(Request::AssignWallpaper {
+                                                monitor_id: mon.id,
+                                                wallpaper_id: entry.id,
+                                                fit_mode: Some(self.selected_fit_mode),
+                                            });
+                                        }
+                                    },
+                                );
                                 ui.add_space(theme::SPACING_XS);
                             }
 
@@ -246,20 +272,20 @@ impl InspectorPanel {
 }
 
 fn meta_row(ui: &mut egui::Ui, label: &str, value: &str) {
-    ui.horizontal(|ui| {
-        ui.set_min_width(100.0);
-        ui.label(
-            egui::RichText::new(label)
-                .size(theme::FONT_SECONDARY)
-                .color(theme::TEXT_MUTED),
-        );
-        ui.label(
+    ui.label(
+        egui::RichText::new(label)
+            .size(theme::FONT_SECONDARY)
+            .color(theme::TEXT_MUTED),
+    );
+    ui.add(
+        egui::Label::new(
             egui::RichText::new(value)
-                .size(theme::FONT_SECONDARY)
+                .size(theme::FONT_BODY)
                 .color(theme::TEXT_PRIMARY),
-        );
-    });
-    ui.add_space(theme::SPACING_XS);
+        )
+        .wrap(),
+    );
+    ui.end_row();
 }
 
 fn format_size(bytes: u64) -> String {

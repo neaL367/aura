@@ -7,6 +7,12 @@ pub struct GalleryPanel {
     search_query: String,
 }
 
+impl Default for GalleryPanel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GalleryPanel {
     pub fn new() -> Self {
         Self {
@@ -26,13 +32,14 @@ impl GalleryPanel {
         egui::ScrollArea::vertical()
             .id_salt("gallery_scroll")
             .auto_shrink([false, false])
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
             .show(ui, |ui| {
                 // Header row
                 ui.horizontal(|ui| {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.search_query)
                             .hint_text("Search wallpapers...")
-                            .desired_width(260.0),
+                            .desired_width(f32::INFINITY),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if theme::button(ui, "Refresh", theme::ButtonVariant::Ghost).clicked() {
@@ -129,11 +136,19 @@ impl GalleryPanel {
         let is_selected = selected.as_ref().is_some_and(|s| s.id == entry.id);
 
         let id = egui::Id::new("gallery_card").with(entry.id);
-        let response = theme::card_frame(ui, id, is_selected, theme::Elevation::Rest, |ui| {
+        let elevation = if is_selected {
+            theme::Elevation::Raised
+        } else {
+            theme::Elevation::Rest
+        };
+        let response = theme::card_frame(ui, id, is_selected, elevation, |ui| {
             ui.set_width(theme::CARD_WIDTH);
             ui.vertical(|ui| {
                 // Thumbnail
-                let thumbnail_size = egui::vec2(theme::CARD_WIDTH - 2.0 * theme::SPACING_MD, 120.0);
+                let thumbnail_size = egui::vec2(
+                    theme::CARD_WIDTH - 2.0 * theme::SPACING_MD,
+                    theme::THUMBNAIL_SIZE.y,
+                );
                 if let Some(ref thumb) = entry.thumbnail_path {
                     let uri = theme::file_uri(thumb);
                     ui.add(
@@ -153,10 +168,13 @@ impl GalleryPanel {
                     .file_name()
                     .map(|n| n.to_string_lossy())
                     .unwrap_or_else(|| std::borrow::Cow::Borrowed("unknown"));
-                ui.label(
-                    egui::RichText::new(file_name.as_ref())
-                        .size(theme::FONT_CARD_TITLE)
-                        .color(theme::TEXT_PRIMARY),
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(file_name.as_ref())
+                            .size(theme::FONT_CARD_TITLE)
+                            .color(theme::TEXT_PRIMARY),
+                    )
+                    .wrap(),
                 );
 
                 // Meta row: media badge + dimensions

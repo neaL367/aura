@@ -88,7 +88,14 @@ impl StatusBar {
                 ui.add_space(theme::SPACING_MD);
                 ui.separator();
                 ui.add_space(theme::SPACING_MD);
-                ui.colored_label(theme::STATUS_DISCONNECTED, reason);
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(reason)
+                            .color(theme::STATUS_DISCONNECTED)
+                            .size(theme::FONT_SECONDARY),
+                    )
+                    .wrap(),
+                );
             }
         });
     }

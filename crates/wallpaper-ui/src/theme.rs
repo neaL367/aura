@@ -110,12 +110,6 @@ fn elevation_raised() -> Shadow {
 }
 
 // ---------------------------------------------------------------------------
-// Motion
-// ---------------------------------------------------------------------------
-
-pub const MOTION_DURATION_MS: f32 = 150.0;
-
-// ---------------------------------------------------------------------------
 // Button
 // ---------------------------------------------------------------------------
 
@@ -126,24 +120,37 @@ pub enum ButtonVariant {
 }
 
 pub fn button(ui: &mut egui::Ui, label: &str, variant: ButtonVariant) -> egui::Response {
-    let (bg, fg, stroke) = match variant {
-        ButtonVariant::Primary => (ACCENT_PRIMARY, TEXT_ON_DARK, Stroke::NONE),
-        ButtonVariant::Secondary => (BG_CARD, TEXT_PRIMARY, Stroke::new(1.0, BORDER_SUBTLE)),
-        ButtonVariant::Ghost => (Color32::TRANSPARENT, TEXT_PRIMARY, Stroke::NONE),
+    let (bg, hover_bg, fg, stroke) = match variant {
+        ButtonVariant::Primary => (ACCENT_PRIMARY, ACCENT_HOVER, TEXT_ON_DARK, Stroke::NONE),
+        ButtonVariant::Secondary => {
+            (BG_CARD, BG_CARD_HOVER, TEXT_PRIMARY, Stroke::new(1.0, BORDER_SUBTLE))
+        }
+        ButtonVariant::Ghost => (Color32::TRANSPARENT, BG_CARD_HOVER, TEXT_PRIMARY, Stroke::NONE),
     };
 
-    let text = egui::RichText::new(label)
-        .size(FONT_SECONDARY)
-        .strong()
-        .color(fg);
+    let id = ui.next_auto_id();
+    let was_hovered = ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
+    let fill = if was_hovered { hover_bg } else { bg };
+
+    let text = egui::RichText::new(label).size(FONT_BODY).strong().color(fg);
 
     let btn = egui::Button::new(text)
-        .fill(bg)
+        .fill(fill)
         .corner_radius(RADIUS_SM)
         .stroke(stroke);
 
-    ui.add(btn)
+    let response = ui.add(btn);
+    let is_hovered = response.hovered();
+    if is_hovered != was_hovered {
+        ui.ctx().data_mut(|d| d.insert_temp(id, is_hovered));
+        ui.ctx().request_repaint();
+    }
+    if is_hovered {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    response
 }
+
 
 // ---------------------------------------------------------------------------
 // Badge
