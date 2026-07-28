@@ -28,6 +28,15 @@ pub enum PlaybackCommand {
     /// Suspend decoding; hold the current frame.
     Pause,
     /// Seek to the beginning and restart decoding (for looping).
+    ///
+    /// # Note
+    ///
+    /// This variant is **reserved for future IPC-driven loop control** and is
+    /// not currently sent from any production code path.  Render threads handle
+    /// looping internally by calling `loop_reset()` when the decoder returns
+    /// `Ok(None)` (end-of-stream), making an explicit `Loop` command redundant.
+    /// It is retained so the protocol type is forward-compatible and test
+    /// coverage of the variant remains meaningful.
     Loop,
     /// Stop decoding and release all resources.
     Stop,
