@@ -47,9 +47,43 @@ enum AttachState {
     Detached { retry_count: u32 },
 }
 
-pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
-    let _singleton = ProcessSingleton::acquire().map_err(|_| DaemonError::AlreadyRunning)?;
-    tracing::info!("Process singleton acquired successfully");
+/// Configuration passed into `run()` from the hosting binary.
+pub struct DaemonOptions {
+    pub wallpaper_path: Option<PathBuf>,
+    pub shutdown_rx: crossbeam_channel::Receiver<()>,
+    pub ready_tx: std::sync::mpsc::SyncSender<()>,
+    pub done_tx: crossbeam_channel::Sender<()>,
+    pub _singleton: ProcessSingleton,
+}
+
+impl DaemonOptions {
+    /// Create options suitable for a standalone headless daemon
+    /// (wallpaperd -- standalone binary).
+    pub fn standalone(wallpaper_path: Option<PathBuf>) -> Self {
+        let (shutdown_tx, shutdown_rx) = crossbeam_channel::bounded::<()>(1);
+        // Leak sender so receiver never closes (standalone runs until signal).
+        std::mem::forget(shutdown_tx);
+        let (ready_tx, _) = std::sync::mpsc::sync_channel(1);
+        let (done_tx, _) = crossbeam_channel::bounded(1);
+        let singleton = ProcessSingleton::acquire()
+            .expect("another wallpaperd instance is already running");
+        Self {
+            wallpaper_path,
+            shutdown_rx,
+            ready_tx,
+            done_tx,
+            _singleton: singleton,
+        }
+    }
+}
+
+pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
+    let wallpaper_path = opts.wallpaper_path;
+    let shutdown_rx = opts.shutdown_rx;
+    let ready_tx = opts.ready_tx;
+    let done_tx = opts.done_tx;
+    let _singleton = opts._singleton;
+    tracing::info!("Process singleton held by daemon thread");
 
     // Spawn async IPC server on a dedicated Tokio thread IMMEDIATELY at process startup (<2ms)
     // so UI client connections are accepted instantly without waiting for GPU or WorkerW init.
@@ -89,7 +123,10 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
             };
             rt.block_on(async move {
                 let handler = Box::new(move |req| orchestrator_ipc.handle_request(req));
-                let server = aura_ipc::server::IpcServer::new(handler);
+                let server = aura_ipc::server::IpcServer::new(handler)
+                    .on_ready(move || {
+                        let _ = ready_tx.send(());
+                    });
                 if let Err(e) = server.serve(ipc_server_shutdown_rx).await {
                     tracing::error!("IPC server error: {}", e);
                 }
@@ -207,6 +244,11 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
     loop {
         if ipc_shutdown_rx.try_recv().is_ok() {
             tracing::info!("IPC shutdown requested. Exiting daemon...");
+            break;
+        }
+
+        if shutdown_rx.try_recv().is_ok() {
+            tracing::info!("Shutdown signal from host binary. Exiting daemon...");
             break;
         }
 
@@ -328,6 +370,7 @@ pub fn run(wallpaper_path: Option<PathBuf>) -> Result<(), DaemonError> {
     aura_platform_windows::workerw::restore_desktop_wallpaper();
 
     tracing::info!("wallpaperd daemon shutdown complete");
+    let _ = done_tx.send(());
     Ok(())
 }
 

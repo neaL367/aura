@@ -11,15 +11,15 @@ fn main() {
         )
         .init();
 
-    let wallpaper_path = std::env::args().nth(1).map(std::path::PathBuf::from);
-
     #[cfg(target_os = "windows")]
     {
         if let Err(e) = aura_platform_windows::enable_dpi_awareness() {
             tracing::warn!("Failed to enable process-wide DPI awareness: {}", e);
         }
+        let wallpaper_path = std::env::args().nth(1).map(std::path::PathBuf::from);
+        let opts = wallpaperd::daemon::DaemonOptions::standalone(wallpaper_path);
         tracing::info!("wallpaperd starting");
-        if let Err(e) = wallpaperd::daemon::run(wallpaper_path) {
+        if let Err(e) = wallpaperd::daemon::run(opts) {
             tracing::error!("wallpaperd exited with error: {}", e);
             std::process::exit(1);
         }
