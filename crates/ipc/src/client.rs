@@ -19,12 +19,26 @@ impl IpcClient {
     }
 
     /// Connect to a custom named pipe (for testing).
+    ///
+    /// Retries up to `MAX_ATTEMPTS` times (every 50 ms) when the pipe is busy
+    /// (`ERROR_PIPE_BUSY` / OS error 231), then returns [`IpcError::PipeBusy`].
+    ///
+    /// # Errors
+    ///
+    /// - [`IpcError::PipeBusy`] – pipe remained busy for all retry attempts.
+    /// - [`IpcError::Io`] – any other OS-level I/O failure.
     pub async fn connect_to(pipe_name: &str) -> Result<Self, IpcError> {
+        const MAX_ATTEMPTS: u32 = 40; // ~2 s at 50 ms cadence
+        let mut attempts = 0u32;
         let pipe = loop {
             match ClientOptions::new().open(pipe_name) {
                 Ok(p) => break p,
                 Err(e) if e.raw_os_error() == Some(231) => {
-                    debug!("Pipe busy, waiting…");
+                    attempts += 1;
+                    if attempts >= MAX_ATTEMPTS {
+                        return Err(IpcError::PipeBusy { attempts });
+                    }
+                    debug!(attempt = attempts, "Pipe busy, retrying…");
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 }
                 Err(e) => return Err(IpcError::Io(e)),

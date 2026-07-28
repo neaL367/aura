@@ -18,6 +18,7 @@ pub struct IpcServer {
     first_instance: bool,
     skip_client_validation: bool,
     client_validator: Arc<aura_security::ClientValidator>,
+    ready_callback: Option<Box<dyn FnOnce() + Send>>,
 }
 
 impl IpcServer {
@@ -28,6 +29,7 @@ impl IpcServer {
             first_instance: true,
             skip_client_validation: false,
             client_validator: Arc::new(aura_security::ClientValidator::new()),
+            ready_callback: None,
         }
     }
 
@@ -39,7 +41,15 @@ impl IpcServer {
             first_instance: true,
             skip_client_validation: true,
             client_validator: Arc::new(aura_security::ClientValidator::new()),
+            ready_callback: None,
         }
+    }
+
+    /// Register a callback fired after the first named pipe instance is created
+    /// and listening, signalling that the IPC server is ready for connections.
+    pub fn on_ready(mut self, f: impl FnOnce() + Send + 'static) -> Self {
+        self.ready_callback = Some(Box::new(f));
+        self
     }
 
     /// Set the client PID validator for connection filtering.
@@ -80,6 +90,10 @@ impl IpcServer {
             };
             apply_pipe_dacl(&server);
             retry_delay = std::time::Duration::from_millis(100);
+            // Fire ready callback on first successful pipe creation.
+            if self.first_instance && let Some(f) = self.ready_callback.take() {
+                f();
+            }
             self.first_instance = false;
 
             tokio::select! {

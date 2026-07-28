@@ -17,4 +17,7 @@ pub enum IpcError {
 
     #[error("message too large: {size} bytes (max {max})")]
     MessageTooLarge { size: usize, max: usize },
+
+    #[error("pipe busy: server did not become available after {attempts} attempts")]
+    PipeBusy { attempts: u32 },
 }
