@@ -6,6 +6,7 @@ pub mod error;
 pub mod library_store;
 pub mod migration;
 pub mod scanner;
+pub mod slideshow_store;
 pub mod thumbnail;
 pub mod watcher;
 
