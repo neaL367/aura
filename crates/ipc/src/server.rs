@@ -75,6 +75,7 @@ impl IpcServer {
         loop {
             let mut opts = ServerOptions::new();
             opts.first_pipe_instance(self.first_instance);
+            opts.max_instances(32);
 
             let server = match opts.create(&self.pipe_name) {
                 Ok(s) => s,
@@ -99,7 +100,14 @@ impl IpcServer {
             self.first_instance = false;
 
             tokio::select! {
-                result = server.connect() => {
+                result = tokio::time::timeout(std::time::Duration::from_secs(30), server.connect()) => {
+                    let result = match result {
+                        Ok(r) => r,
+                        Err(_) => {
+                            warn!("IPC pipe connect timed out after 30s");
+                            continue;
+                        }
+                    };
                     match result {
                         Ok(()) => {
                             let client_pid = get_server_client_pid(&server);

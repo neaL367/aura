@@ -62,3 +62,17 @@ async fn test_codec_message_too_large_on_read() {
         "expected MessageTooLarge, got {err}"
     );
 }
+
+#[tokio::test]
+async fn test_codec_message_too_large_on_write() {
+    let (mut writer, _) = duplex(4096);
+    let large = "x".repeat(5 * 1024 * 1024);
+    let msg = IpcMessage::new(Response::Error { reason: large });
+    let result = write_message(&mut writer, &msg).await;
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(
+        matches!(err, aura_ipc::IpcError::MessageTooLarge { .. }),
+        "expected MessageTooLarge, got {err}"
+    );
+}
