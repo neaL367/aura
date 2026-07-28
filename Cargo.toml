@@ -40,6 +40,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 # Async runtime (IPC, UI reconnect)
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "io-util", "net", "macros"] }
 
+# Random number generation (slideshow rotation)
+rand = "0.9"
+
 # Identifiers
 uuid = { version = "1", features = ["v4", "v5", "serde"] }
 

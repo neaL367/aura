@@ -30,6 +30,10 @@ pub struct AppConfig {
     /// Wallpaper library settings.
     #[serde(default)]
     pub library: LibraryConfig,
+
+    /// Appearance settings.
+    #[serde(default)]
+    pub appearance: AppearanceConfig,
 }
 
 fn default_version() -> u32 {
@@ -43,6 +47,7 @@ impl Default for AppConfig {
             assignments: Vec::new(),
             performance: PerformanceConfig::default(),
             library: LibraryConfig::default(),
+            appearance: AppearanceConfig::default(),
         }
     }
 }
@@ -121,6 +126,25 @@ pub struct LibraryConfig {
 
 fn default_thumb_cache() -> usize {
     512
+}
+
+// ---------------------------------------------------------------------------
+// AppearanceConfig
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct AppearanceConfig {
+    /// Use dark theme instead of light.
+    #[serde(default)]
+    pub dark_mode: bool,
+
+    /// Register the Aura binary to launch at Windows login.
+    #[serde(default)]
+    pub auto_start: bool,
+
+    /// Slideshow interval in seconds. 0 = disabled.
+    #[serde(default)]
+    pub slideshow_interval_secs: u64,
 }
 
 /// Default library path under `%USERPROFILE%/Pictures/Aura Wallpapers`.

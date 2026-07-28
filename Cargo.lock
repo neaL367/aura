@@ -3713,6 +3713,7 @@ dependencies = [
  "aura-security",
  "aura-storage",
  "crossbeam-channel",
+ "rand 0.9.5",
  "serde",
  "thiserror 2.0.19",
  "tokio",

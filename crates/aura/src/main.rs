@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
+mod tray;
+
 #[cfg(target_os = "windows")]
 fn main() {
     // Step 0: DPI awareness — must be before thread spawn or run_native()
@@ -74,13 +76,16 @@ fn main() {
         Err(_) => tracing::warn!("IPC readiness timeout — UI reconnect handles delay"),
     }
 
-    // Step 8: run eframe (blocks until window closed)
+    // Step 8: spawn tray icon (background message loop)
+    let _tray_handle = tray::TrayManager::new().spawn();
+
+    // Step 9: run eframe (blocks until window closed)
     wallpaper_ui::run();
 
-    // Step 9: signal daemon to stop
+    // Step 10: signal daemon to stop
     let _ = shutdown_tx.send(());
 
-    // Step 10: wait for daemon shutdown with timeout
+    // Step 11: wait for daemon shutdown with timeout
     match done_rx.recv_timeout(std::time::Duration::from_secs(5)) {
         Ok(()) => tracing::info!("daemon shutdown complete"),
         Err(_) => {

@@ -1,6 +1,9 @@
 use std::sync::{Arc, Mutex};
 use tracing::info;
 
+#[cfg(target_os = "windows")]
+use aura_platform_windows::set_autostart;
+
 use aura_core::config::AppConfig;
 use aura_ipc::protocol::{DaemonStatus, PROTOCOL_VERSION, Response};
 
@@ -57,6 +60,9 @@ pub(super) fn handle_update_config(
             reason: e.to_string(),
         }
     } else {
+        #[cfg(target_os = "windows")]
+        set_autostart(config.appearance.auto_start);
+
         for tx in state.wallpaper_txs.values() {
             let _ = tx.send(RenderCommand::SetTargetFps(config.performance.target_fps));
             let _ = tx.send(RenderCommand::SetPerformanceProfile(

@@ -34,6 +34,7 @@ pub struct AuraApp {
     trimmed_since_idle: bool,
     toasts: ToastManager,
     toast_rx: std::sync::mpsc::Receiver<ToastEvent>,
+    dark_mode: bool,
 }
 
 impl AuraApp {
@@ -54,6 +55,7 @@ impl AuraApp {
             trimmed_since_idle: false,
             toasts: ToastManager::new(),
             toast_rx,
+            dark_mode: false,
         }
     }
 }
@@ -70,6 +72,17 @@ impl eframe::App for AuraApp {
         }) {
             self.last_interaction = Instant::now();
             self.trimmed_since_idle = false;
+        }
+
+        if let Some(cfg) = self.ipc_client.config()
+            && cfg.appearance.dark_mode != self.dark_mode
+        {
+            self.dark_mode = cfg.appearance.dark_mode;
+            if self.dark_mode {
+                crate::theme::setup_dark_theme(ui.ctx());
+            } else {
+                crate::theme::setup_theme(ui.ctx());
+            }
         }
 
         // --- Bottom: Status Bar ---
@@ -186,6 +199,30 @@ impl eframe::App for AuraApp {
                     }
                 });
             });
+
+        // Handle file drag-and-drop import.
+        let dropped: Vec<_> = ui.input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .filter_map(|f| f.path.clone())
+                .collect()
+        });
+        if !dropped.is_empty() {
+            let valid = ["png", "jpg", "jpeg", "bmp", "webp", "gif", "mp4", "webm"];
+            let paths: Vec<_> = dropped
+                .into_iter()
+                .filter(|p| {
+                    p.extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| valid.contains(&e.to_lowercase().as_str()))
+                        .unwrap_or(false)
+                })
+                .collect();
+            if !paths.is_empty() {
+                self.ipc_client.import_files(paths);
+            }
+        }
 
         if prev_tab != self.active_tab {
             self.selected_wallpaper = None;

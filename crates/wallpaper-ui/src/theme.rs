@@ -32,6 +32,30 @@ pub const STATUS_BADGE_CONNECTING: Color32 = Color32::from_rgb(255, 251, 235);
 pub const STATUS_BADGE_DISCONNECTED: Color32 = Color32::from_rgb(254, 242, 242);
 
 // ---------------------------------------------------------------------------
+// Color Palette — Dark Theme (Zinc / Neutral)
+// ---------------------------------------------------------------------------
+
+pub const BG_APP_DARK: Color32 = Color32::from_rgb(9, 9, 11);
+pub const BG_CARD_DARK: Color32 = Color32::from_rgb(24, 24, 27);
+pub const BG_CARD_HOVER_DARK: Color32 = Color32::from_rgb(39, 39, 42);
+pub const BG_CARD_SELECTED_DARK: Color32 = Color32::from_rgb(39, 39, 42);
+
+pub const BORDER_SUBTLE_DARK: Color32 = Color32::from_rgb(39, 39, 42);
+pub const BORDER_STRONG_DARK: Color32 = Color32::from_rgb(82, 82, 91);
+pub const BORDER_ACCENT_DARK: Color32 = Color32::from_rgb(212, 212, 216);
+
+pub const ACCENT_PRIMARY_DARK: Color32 = Color32::from_rgb(212, 212, 216);
+pub const ACCENT_HOVER_DARK: Color32 = Color32::from_rgb(161, 161, 170);
+
+pub const TEXT_PRIMARY_DARK: Color32 = Color32::from_rgb(250, 250, 250);
+pub const TEXT_MUTED_DARK: Color32 = Color32::from_rgb(161, 161, 170);
+pub const TEXT_ON_DARK_DARK: Color32 = Color32::from_rgb(9, 9, 11);
+
+pub const STATUS_BADGE_CONNECTED_DARK: Color32 = Color32::from_rgb(20, 83, 45);
+pub const STATUS_BADGE_CONNECTING_DARK: Color32 = Color32::from_rgb(113, 63, 18);
+pub const STATUS_BADGE_DISCONNECTED_DARK: Color32 = Color32::from_rgb(127, 29, 29);
+
+// ---------------------------------------------------------------------------
 // Differentiated badge colors per media kind
 // ---------------------------------------------------------------------------
 
@@ -417,6 +441,43 @@ pub fn setup_theme(ctx: &egui::Context) {
 
     visuals.selection.bg_fill = ACCENT_PRIMARY;
     visuals.selection.stroke = Stroke::new(1.0, TEXT_ON_DARK);
+
+    ctx.set_visuals(visuals);
+}
+
+pub fn setup_dark_theme(ctx: &egui::Context) {
+    let mut visuals = Visuals::dark();
+    visuals.panel_fill = BG_APP_DARK;
+    visuals.window_fill = BG_CARD_DARK;
+    visuals.override_text_color = Some(TEXT_PRIMARY_DARK);
+
+    visuals.widgets.noninteractive.bg_fill = BG_CARD_DARK;
+    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, BORDER_SUBTLE_DARK);
+    visuals.widgets.noninteractive.corner_radius = RADIUS_MD.into();
+    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, TEXT_PRIMARY_DARK);
+
+    visuals.widgets.inactive.bg_fill = BG_CARD_DARK;
+    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, BORDER_SUBTLE_DARK);
+    visuals.widgets.inactive.corner_radius = RADIUS_SM.into();
+    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, TEXT_PRIMARY_DARK);
+
+    visuals.widgets.hovered.bg_fill = BG_CARD_HOVER_DARK;
+    visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, BORDER_STRONG_DARK);
+    visuals.widgets.hovered.corner_radius = RADIUS_SM.into();
+    visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, TEXT_PRIMARY_DARK);
+
+    visuals.widgets.active.bg_fill = ACCENT_PRIMARY_DARK;
+    visuals.widgets.active.bg_stroke = Stroke::NONE;
+    visuals.widgets.active.corner_radius = RADIUS_SM.into();
+    visuals.widgets.active.fg_stroke = Stroke::new(1.0, TEXT_ON_DARK_DARK);
+
+    visuals.widgets.open.bg_fill = ACCENT_PRIMARY_DARK;
+    visuals.widgets.open.bg_stroke = Stroke::NONE;
+    visuals.widgets.open.corner_radius = RADIUS_SM.into();
+    visuals.widgets.open.fg_stroke = Stroke::new(1.0, TEXT_ON_DARK_DARK);
+
+    visuals.selection.bg_fill = ACCENT_PRIMARY_DARK;
+    visuals.selection.stroke = Stroke::new(1.0, TEXT_ON_DARK_DARK);
 
     ctx.set_visuals(visuals);
 }

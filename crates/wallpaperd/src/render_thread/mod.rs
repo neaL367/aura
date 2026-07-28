@@ -44,6 +44,7 @@ pub fn create_monitor_context(
     workerw: windows::Win32::Foundation::HWND,
     wallpaper_path: Option<&Path>,
     fit_mode: aura_core::wallpaper::FitMode,
+    virtual_bounds: (i32, i32, u32, u32),
 ) -> Result<
     (
         MonitorContext,
@@ -63,6 +64,7 @@ pub fn create_monitor_context(
     )?;
 
     renderer.set_fit_mode(fit_mode, context);
+    renderer.set_virtual_geometry(info.x, info.y, virtual_bounds.2, virtual_bounds.3);
 
     // Upload a 1x1 black fallback so the descriptor set is valid before the render thread starts.
     let black = [0u8, 0u8, 0u8, 255u8];

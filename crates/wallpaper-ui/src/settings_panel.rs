@@ -156,6 +156,46 @@ impl SettingsPanel {
 
                 theme::group_frame().show(ui, |ui| {
                     ui.set_width(ui.available_width());
+                    theme::section_label(ui, "APPEARANCE");
+                    ui.add_space(theme::SPACING_SM);
+
+                    if let Some(ref config) = config_opt {
+                        let mut updated = config.clone();
+                        let mut changed = false;
+
+                        ui.horizontal(|ui| {
+                            ui.label("Dark Mode:");
+                            ui.add_space(theme::SPACING_SM);
+                            let mut dark = updated.appearance.dark_mode;
+                            ui.toggle_value(&mut dark, "");
+                            if dark != updated.appearance.dark_mode {
+                                updated.appearance.dark_mode = dark;
+                                changed = true;
+                            }
+                        });
+
+                        ui.add_space(theme::SPACING_SM);
+                        ui.horizontal(|ui| {
+                            ui.label("Auto-start with Windows:");
+                            ui.add_space(theme::SPACING_SM);
+                            let mut auto = updated.appearance.auto_start;
+                            ui.toggle_value(&mut auto, "");
+                            if auto != updated.appearance.auto_start {
+                                updated.appearance.auto_start = auto;
+                                changed = true;
+                            }
+                        });
+
+                        if changed {
+                            ipc_client.send(Request::UpdateConfig { config: updated });
+                        }
+                    }
+                });
+
+                ui.add_space(theme::SPACING_LG);
+
+                theme::group_frame().show(ui, |ui| {
+                    ui.set_width(ui.available_width());
                     theme::section_label(ui, "DAEMON & PLATFORM INFO");
                     ui.add_space(theme::SPACING_SM);
                     ui.label(

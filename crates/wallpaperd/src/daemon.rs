@@ -13,6 +13,7 @@ use crossbeam_channel::RecvTimeoutError;
 use thiserror::Error;
 
 use aura_platform_windows::register_console_ctrl_handler;
+use aura_platform_windows::set_autostart;
 
 static CTRLC_REQUESTED: std::sync::LazyLock<Arc<AtomicBool>> =
     std::sync::LazyLock::new(|| Arc::new(AtomicBool::new(false)));
@@ -123,9 +124,11 @@ pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
             };
             rt.block_on(async move {
                 let handler = Box::new(move |req| orchestrator_ipc.handle_request(req));
-                let server = aura_ipc::server::IpcServer::new(handler).on_ready(move || {
-                    let _ = ready_tx.send(());
-                });
+                let server = aura_ipc::server::IpcServer::new(handler)
+                    .with_client_validation()
+                    .on_ready(move || {
+                        let _ = ready_tx.send(());
+                    });
                 if let Err(e) = server.serve(ipc_server_shutdown_rx).await {
                     tracing::error!("IPC server error: {}", e);
                 }
@@ -166,6 +169,8 @@ pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
         let config_path = aura_storage::config_store::ConfigStore::default_path();
         let config_store = aura_storage::config_store::ConfigStore::new(&config_path);
         let config = config_store.load().unwrap_or_default();
+        #[cfg(target_os = "windows")]
+        set_autostart(config.appearance.auto_start);
         let library_path = config_path.with_file_name("library.json");
         let library_store = aura_storage::library_store::LibraryStore::new(&library_path);
         let library_items = library_store.load().unwrap_or_default();
@@ -182,6 +187,22 @@ pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
         );
 
         let workerw = workerw_manager.workerw();
+        let vx = monitors.iter().map(|m| m.x).min().unwrap_or(0);
+        let vy = monitors.iter().map(|m| m.y).min().unwrap_or(0);
+        let vw = monitors
+            .iter()
+            .map(|m| m.x + m.width as i32)
+            .max()
+            .unwrap_or(1920)
+            .max(1) as u32
+            - vx as u32;
+        let vh = monitors
+            .iter()
+            .map(|m| m.y + m.height as i32)
+            .max()
+            .unwrap_or(1080)
+            .max(1) as u32
+            - vy as u32;
         for m in &monitors {
             let assignment = config.assignments.iter().find(|a| a.monitor_id == m.id);
             let initial_path = wallpaper_path.as_deref().or_else(|| {
@@ -197,6 +218,7 @@ pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
                 workerw,
                 initial_path,
                 fit_mode,
+                (vx, vy, vw, vh),
             ) {
                 Ok((ctx, tx, counter)) => {
                     contexts.push(ctx);
@@ -238,6 +260,12 @@ pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
     );
 
     let mut perf_mon = PerfMonitor::new(perf_counters);
+
+    let config_path = aura_storage::config_store::ConfigStore::default_path();
+    let cfg_store = aura_storage::config_store::ConfigStore::new(&config_path);
+    let library_path = config_path.with_file_name("library.json");
+    let lib_store = aura_storage::library_store::LibraryStore::new(&library_path);
+    let mut last_slideshow = std::time::Instant::now();
 
     // Main event dispatch loop (no rendering — render threads handle that).
     loop {
@@ -349,6 +377,28 @@ pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
             }
         }
 
+        // Slideshow: cycle wallpapers if interval (seconds > 0) has elapsed.
+        let interval = cfg_store
+            .load()
+            .ok()
+            .map(|c| c.appearance.slideshow_interval_secs)
+            .unwrap_or(0);
+        if interval > 0
+            && last_slideshow.elapsed() >= std::time::Duration::from_secs(interval)
+            && let Ok(items) = lib_store.load()
+            && !items.is_empty()
+        {
+            last_slideshow = std::time::Instant::now();
+            use rand::Rng;
+            let idx = rand::rng().random_range(0..items.len());
+            for tx in wallpaper_txs.values() {
+                let _ = tx.send(render_thread::RenderCommand::SetWallpaper {
+                    path: items[idx].path.clone(),
+                    fit_mode: None,
+                });
+            }
+        }
+
         perf_mon.log_if_interval();
     }
 
@@ -435,6 +485,24 @@ fn reconcile_monitors(
     let current_ids = coordinator.active_monitor_ids();
     let new_ids: std::collections::HashSet<_> = new_monitors.iter().map(|m| m.id).collect();
 
+    // Compute virtual desktop bounds from the full latest monitor set.
+    let vx = new_monitors.iter().map(|m| m.x).min().unwrap_or(0);
+    let vy = new_monitors.iter().map(|m| m.y).min().unwrap_or(0);
+    let vw = new_monitors
+        .iter()
+        .map(|m| m.x + m.width as i32)
+        .max()
+        .unwrap_or(1920)
+        .max(1) as u32
+        - vx as u32;
+    let vh = new_monitors
+        .iter()
+        .map(|m| m.y + m.height as i32)
+        .max()
+        .unwrap_or(1080)
+        .max(1) as u32
+        - vy as u32;
+
     // 1. Remove disconnected monitors
     for old_id in current_ids {
         if !new_ids.contains(&old_id) {
@@ -506,6 +574,7 @@ fn reconcile_monitors(
                 workerw,
                 initial_path,
                 fit_mode,
+                (vx, vy, vw, vh),
             ) {
                 Ok((ctx, tx, _counter)) => {
                     ctx.attach_to_workerw(workerw);

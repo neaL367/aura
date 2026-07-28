@@ -38,6 +38,8 @@ features = [
     "Win32_System_RemoteDesktop",
     # Module handle
     "Win32_System_LibraryLoader",
+    # Registry (auto-start)
+    "Win32_System_Registry",
     # COM (needed for Media Foundation initialisation)
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
