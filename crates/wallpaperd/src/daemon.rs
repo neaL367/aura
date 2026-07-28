@@ -636,7 +636,9 @@ fn run_slideshow_cycle(
     // Sanitize queue: remove IDs no longer in the library.
     s.queue.retain(|id| items.iter().any(|item| item.id == *id));
     s.queue.shrink_to_fit();
-    s.index = s.index.min(s.queue.len().saturating_sub(1));
+    if s.index > s.queue.len() {
+        s.index = s.queue.len().saturating_sub(1);
+    }
 
     // If queue is too short or empty, rebuild from all library IDs.
     if s.queue.len() < slideshow_monitors.len() {
