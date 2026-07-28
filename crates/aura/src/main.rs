@@ -113,7 +113,10 @@ fn main() {
                         return;
                     }
                 }
-                tracing::error!("quit-fallback: exhausted retries — force-exiting");
+                tracing::error!(
+                    "quit-fallback: exhausted retries — restoring wallpaper then force-exiting"
+                );
+                aura_platform_windows::workerw::restore_desktop_wallpaper();
                 std::process::exit(0);
             })
             .expect("failed to spawn quit-fallback thread")
