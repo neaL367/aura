@@ -8,6 +8,12 @@ pub struct SettingsPanel {
     config_requested: bool,
 }
 
+impl Default for SettingsPanel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SettingsPanel {
     pub fn new() -> Self {
         Self {

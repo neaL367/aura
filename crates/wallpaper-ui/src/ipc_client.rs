@@ -235,7 +235,7 @@ impl UiIpcClient {
             .clone()
     }
 
-    #[expect(dead_code, reason = "convenience wrapper for manual refresh")]
+    #[allow(dead_code)]
     pub fn fetch_wallpapers(&self) {
         self.send(Request::ListWallpapers);
     }
@@ -292,7 +292,12 @@ impl UiIpcClient {
                 format!("Could not copy files: {}", errors.join("; "))
             };
             *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(msg.clone());
-            let _ = toast_tx.send((msg, ToastKind::Warning));
+            let kind = if errors.is_empty() {
+                ToastKind::Info
+            } else {
+                ToastKind::Error
+            };
+            let _ = toast_tx.send((msg, kind));
             return;
         }
         if !errors.is_empty() {
