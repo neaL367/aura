@@ -1,7 +1,7 @@
 use windows::{
     Win32::{
         Foundation::{CloseHandle, HANDLE},
-        System::Threading::CreateMutexW,
+        System::Threading::{CreateMutexW, OpenMutexW},
     },
     core::w,
 };
@@ -40,6 +40,23 @@ unsafe extern "system" {
 }
 
 impl ProcessSingleton {
+    /// Check if another process holds the singleton without acquiring it.
+    /// Uses `OpenMutexW` — succeeds if mutex exists, fails with
+    /// `ERROR_FILE_NOT_FOUND` if not.
+    pub fn is_running() -> bool {
+        use windows::Win32::System::Threading::SYNCHRONIZATION_ACCESS_RIGHTS;
+        unsafe {
+            let mutex_access = SYNCHRONIZATION_ACCESS_RIGHTS(MUTEX_ALL_ACCESS);
+            let handle = OpenMutexW(mutex_access, false, MUTEX_NAME);
+            if let Ok(h) = handle {
+                let _ = CloseHandle(h);
+                true
+            } else {
+                false
+            }
+        }
+    }
+
     /// Attempt to acquire the singleton lock.
     ///
     /// Returns `Err(PlatformError::AlreadyRunning)` if another process holds it.
