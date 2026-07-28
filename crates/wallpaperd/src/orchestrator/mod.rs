@@ -105,6 +105,14 @@ impl Orchestrator {
         self.state.lock().unwrap().is_paused
     }
 
+    pub fn is_monitor_assigned(&self, monitor_id: &MonitorId) -> bool {
+        self.state
+            .lock()
+            .ok()
+            .map(|s| s.assignments.get(monitor_id).is_some())
+            .unwrap_or(false)
+    }
+
     pub fn set_performance_profile(&self, profile: aura_core::playback::PerformanceProfile) {
         if let Ok(state) = self.state.lock() {
             info!(profile = ?profile, "Broadcasting performance profile to render threads");
