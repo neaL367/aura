@@ -7,6 +7,7 @@ pub mod config;
 pub mod error;
 pub mod monitor;
 pub mod playback;
+pub mod slideshow_state;
 pub mod wallpaper;
 
 pub use error::CoreError;
