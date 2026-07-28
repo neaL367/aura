@@ -74,6 +74,7 @@ pub fn handle_request(
         Request::GetWallpaperLibrary => library::handle_get_wallpaper_library(state_lock),
         Request::GetConfig => status::handle_get_config(state_lock),
         Request::UpdateConfig { config } => status::handle_update_config(state_lock, config),
+        Request::DeleteWallpaper { id } => library::handle_delete_wallpaper(state_lock, id),
         Request::Shutdown => {
             let _ = shutdown_tx.send(());
             Response::Ok

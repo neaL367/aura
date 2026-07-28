@@ -60,6 +60,10 @@ pub enum Request {
     UpdateConfig {
         config: aura_core::config::AppConfig,
     },
+    /// Remove a wallpaper file from the library and delete its on-disk file.
+    DeleteWallpaper {
+        id: aura_core::wallpaper::WallpaperId,
+    },
     /// Gracefully shut down the daemon.
     Shutdown,
 }

@@ -1,4 +1,4 @@
-use aura_ipc::protocol::WallpaperEntry;
+use aura_ipc::protocol::{Request, WallpaperEntry};
 
 use crate::ipc_client::UiIpcClient;
 use crate::theme;
@@ -123,7 +123,7 @@ impl GalleryPanel {
                     .spacing(egui::vec2(theme::SPACING_MD, theme::SPACING_MD))
                     .show(ui, |ui| {
                         for (i, entry) in filtered.iter().enumerate() {
-                            Self::card(ui, entry, selected);
+                            Self::card(ui, entry, selected, ipc_client);
                             if (i + 1) % columns == 0 && i + 1 < filtered.len() {
                                 ui.end_row();
                             }
@@ -132,7 +132,12 @@ impl GalleryPanel {
             });
     }
 
-    fn card(ui: &mut egui::Ui, entry: &WallpaperEntry, selected: &mut Option<WallpaperEntry>) {
+    fn card(
+        ui: &mut egui::Ui,
+        entry: &WallpaperEntry,
+        selected: &mut Option<WallpaperEntry>,
+        ipc_client: &UiIpcClient,
+    ) {
         let is_selected = selected.as_ref().is_some_and(|s| s.id == entry.id);
 
         let id = egui::Id::new("gallery_card").with(entry.id);
@@ -162,20 +167,28 @@ impl GalleryPanel {
 
                 ui.add_space(theme::SPACING_XS);
 
-                // File name
-                let file_name = entry
-                    .path
-                    .file_name()
-                    .map(|n| n.to_string_lossy())
-                    .unwrap_or_else(|| std::borrow::Cow::Borrowed("unknown"));
-                ui.add(
-                    egui::Label::new(
-                        egui::RichText::new(file_name.as_ref())
-                            .size(theme::FONT_CARD_TITLE)
-                            .color(theme::TEXT_PRIMARY),
-                    )
-                    .wrap(),
-                );
+                // File name row with delete button
+                ui.horizontal(|ui| {
+                    let file_name = entry
+                        .path
+                        .file_name()
+                        .map(|n| n.to_string_lossy())
+                        .unwrap_or_else(|| std::borrow::Cow::Borrowed("unknown"));
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(file_name.as_ref())
+                                .size(theme::FONT_CARD_TITLE)
+                                .color(theme::TEXT_PRIMARY),
+                        )
+                        .wrap(),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if theme::button(ui, "\u{2716}", theme::ButtonVariant::Ghost).clicked() {
+                            ipc_client.send(Request::DeleteWallpaper { id: entry.id });
+                            *selected = None;
+                        }
+                    });
+                });
 
                 // Meta row: media badge + dimensions
                 ui.horizontal(|ui| {

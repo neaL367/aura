@@ -40,6 +40,9 @@ fn test_request_serialization_roundtrip() {
             config: aura_core::config::AppConfig::default(),
         },
         Request::Shutdown,
+        Request::DeleteWallpaper {
+            id: WallpaperId::new(),
+        },
         Request::SetPlayback {
             monitor_id: MonitorId::from_device_path(r"\\.\DISPLAY1"),
             command: PlaybackCommand::Pause,

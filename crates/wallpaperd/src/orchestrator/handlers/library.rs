@@ -205,6 +205,55 @@ pub(super) fn handle_set_wallpaper_library(
     do_refresh(state_lock)
 }
 
+pub(super) fn handle_delete_wallpaper(
+    state_lock: &Arc<Mutex<OrchestratorState>>,
+    id: aura_core::wallpaper::WallpaperId,
+) -> Response {
+    let mut state = match state_lock.lock() {
+        Ok(s) => s,
+        Err(e) => {
+            return Response::Error {
+                reason: e.to_string(),
+            };
+        }
+    };
+
+    let pos = match state.library_items.iter().position(|item| item.id == id) {
+        Some(p) => p,
+        None => {
+            return Response::Error {
+                reason: format!("Wallpaper {:?} not found in library", id),
+            };
+        }
+    };
+
+    let item = state.library_items.remove(pos);
+    info!("DeleteWallpaper: removing {:?} from library", item.path);
+
+    // Delete the on-disk wallpaper file.
+    let _ = std::fs::remove_file(&item.path);
+
+    // Remove any thumbnail for this wallpaper.
+    let thumb_dir = aura_storage::ThumbnailStore::thumbs_dir();
+    let thumb_path = thumb_dir.join(format!("{}.jpg", item.id));
+    let _ = std::fs::remove_file(&thumb_path);
+
+    state.library_items.shrink_to_fit();
+    if let Err(e) = state.library_store.save(&state.library_items) {
+        tracing::error!("Failed to save library after deletion: {}", e);
+        return Response::Error {
+            reason: format!("Failed to save library: {}", e),
+        };
+    }
+
+    info!(
+        "DeleteWallpaper complete — {} wallpaper(s) remaining",
+        state.library_items.len()
+    );
+
+    Response::WallpaperList(build_wallpaper_list(&state.library_items))
+}
+
 pub(super) fn handle_get_wallpaper_library(state_lock: &Arc<Mutex<OrchestratorState>>) -> Response {
     let path = {
         let state = match state_lock.lock() {

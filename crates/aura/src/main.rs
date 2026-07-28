@@ -77,7 +77,8 @@ fn main() {
     }
 
     // Step 8: spawn tray icon (background message loop)
-    let _tray_handle = tray::TrayManager::new().spawn();
+    let (tray_quit_tx, _tray_quit_rx) = crossbeam_channel::bounded::<()>(1);
+    let _tray_handle = tray::TrayManager::new().spawn(tray_quit_tx);
 
     // Step 9: run eframe (blocks until window closed)
     wallpaper_ui::run();

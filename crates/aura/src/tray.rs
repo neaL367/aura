@@ -4,20 +4,36 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 #[cfg(target_os = "windows")]
+use crossbeam_channel::Sender;
+
+const WM_TRAY_CALLBACK: u32 = 0x8000;
+const ID_TRAY_SHOW: u16 = 1000;
+const ID_TRAY_QUIT: u16 = 1001;
+
+#[cfg(target_os = "windows")]
 use windows::Win32::{
-    Foundation::{HWND, LPARAM, LRESULT, WPARAM},
+    Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM},
     System::LibraryLoader::GetModuleHandleW,
+    System::Threading::{AttachThreadInput, GetCurrentThreadId},
     UI::Shell::{
         NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW, Shell_NotifyIconW,
     },
     UI::WindowsAndMessaging::{
-        CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreateWindowExW, DefWindowProcW, DestroyWindow,
-        DispatchMessageW, GetMessageW, LoadCursorW, LoadIconW, MSG, PostQuitMessage,
-        RegisterClassW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_DESTROY, WNDCLASSW,
+        AppendMenuW, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreatePopupMenu, CreateWindowExW,
+        DefWindowProcW, DestroyMenu, DestroyWindow, DispatchMessageW, FindWindowW, GetCursorPos,
+        GetMessageW, GetWindowThreadProcessId, IsWindowVisible, LoadCursorW, LoadIconW, MF_STRING,
+        MSG, PostQuitMessage, RegisterClassW, SW_HIDE, SW_RESTORE, SetForegroundWindow, ShowWindow,
+        TPM_RIGHTBUTTON, TrackPopupMenu, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY,
+        WM_LBUTTONDOWN, WM_RBUTTONDOWN, WNDCLASSW,
     },
 };
 #[cfg(target_os = "windows")]
 use windows::core::w;
+
+#[cfg(target_os = "windows")]
+thread_local! {
+    static TRAY_SENDER: std::cell::Cell<Option<Sender<()>>> = const { std::cell::Cell::new(None) };
+}
 
 pub struct TrayManager {
     shutdown_flag: Arc<AtomicBool>,
@@ -31,20 +47,22 @@ impl TrayManager {
     }
 
     #[cfg(target_os = "windows")]
-    pub fn spawn(self) -> std::thread::JoinHandle<()> {
+    pub fn spawn(self, quit_tx: Sender<()>) -> std::thread::JoinHandle<()> {
         std::thread::Builder::new()
             .name("tray".into())
-            .spawn(move || self.run_message_loop())
+            .spawn(move || self.run_message_loop(quit_tx))
             .expect("failed to spawn tray thread")
     }
 
     #[cfg(not(target_os = "windows"))]
-    pub fn spawn(self) -> std::thread::JoinHandle<()> {
+    pub fn spawn(self, _quit_tx: Sender<()>) -> std::thread::JoinHandle<()> {
         std::thread::spawn(|| {})
     }
 
     #[cfg(target_os = "windows")]
-    fn run_message_loop(&self) {
+    fn run_message_loop(&self, quit_tx: Sender<()>) {
+        TRAY_SENDER.with(|s| s.set(Some(quit_tx)));
+
         let instance = unsafe { GetModuleHandleW(None).unwrap_or_default() };
 
         let wc = WNDCLASSW {
@@ -111,7 +129,100 @@ impl TrayManager {
                 }
                 LRESULT(0)
             }
+            WM_TRAY_CALLBACK => match lparam.0 as u32 {
+                WM_LBUTTONDOWN => {
+                    Self::toggle_eframe_window();
+                    LRESULT(0)
+                }
+                WM_RBUTTONDOWN => {
+                    Self::show_context_menu(hwnd);
+                    LRESULT(0)
+                }
+                _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+            },
+            WM_COMMAND => {
+                let cmd = wparam.0 as u16;
+                match cmd {
+                    ID_TRAY_SHOW => {
+                        Self::toggle_eframe_window();
+                        LRESULT(0)
+                    }
+                    ID_TRAY_QUIT => {
+                        // Close the eframe window so the main thread unblocks.
+                        if let Ok(hwnd) = unsafe { FindWindowW(None, w!("Aura Wallpaper")) }
+                            && !hwnd.is_invalid()
+                        {
+                            unsafe {
+                                let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                                    Some(hwnd),
+                                    windows::Win32::UI::WindowsAndMessaging::WM_CLOSE,
+                                    WPARAM(0),
+                                    LPARAM(0),
+                                );
+                            }
+                        }
+                        TRAY_SENDER.with(|s| {
+                            if let Some(tx) = s.take() {
+                                let _ = tx.send(());
+                            }
+                        });
+                        unsafe {
+                            PostQuitMessage(0);
+                        }
+                        LRESULT(0)
+                    }
+                    _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+                }
+            }
             _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    fn toggle_eframe_window() {
+        unsafe {
+            let Ok(hwnd) = FindWindowW(None, w!("Aura Wallpaper")) else {
+                return;
+            };
+            if hwnd.is_invalid() {
+                return;
+            }
+            if IsWindowVisible(hwnd).as_bool() {
+                let _ = ShowWindow(hwnd, SW_HIDE);
+            } else {
+                let fg_thread = GetWindowThreadProcessId(hwnd, None);
+                let cur_thread = GetCurrentThreadId();
+                if fg_thread != cur_thread {
+                    let _ = AttachThreadInput(cur_thread, fg_thread, true);
+                    let _ = SetForegroundWindow(hwnd);
+                    let _ = ShowWindow(hwnd, SW_RESTORE);
+                    let _ = AttachThreadInput(cur_thread, fg_thread, false);
+                } else {
+                    let _ = SetForegroundWindow(hwnd);
+                    let _ = ShowWindow(hwnd, SW_RESTORE);
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    fn show_context_menu(hwnd: HWND) {
+        unsafe {
+            let _ = SetForegroundWindow(hwnd);
+            let mut pt = POINT::default();
+            let _ = GetCursorPos(&mut pt);
+
+            let menu = CreatePopupMenu().unwrap_or_default();
+            if menu.is_invalid() {
+                return;
+            }
+
+            let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_SHOW as usize, w!("Show/Hide Aura"));
+            let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_QUIT as usize, w!("Quit"));
+
+            let _ = TrackPopupMenu(menu, TPM_RIGHTBUTTON, pt.x, pt.y, Some(0), hwnd, None);
+
+            let _ = DestroyMenu(menu);
         }
     }
 
@@ -123,7 +234,7 @@ impl TrayManager {
         nid.hWnd = hwnd;
         nid.uID = 1;
         nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
-        nid.uCallbackMessage = 0x8000;
+        nid.uCallbackMessage = WM_TRAY_CALLBACK;
         nid.hIcon = icon;
         let tip: Vec<u16> = "Aura Wallpaper\0".encode_utf16().collect();
         let len = tip.len().min(127);
