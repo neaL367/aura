@@ -17,28 +17,40 @@ impl Sidebar {
             .stroke(egui::Stroke::NONE);
 
         sidebar_frame.show(ui, |ui| {
-            ui.set_min_width(theme::SIDEBAR_WIDTH);
-            ui.set_max_width(theme::SIDEBAR_WIDTH);
+            ui.set_min_width(theme::SIDEBAR_EXPANDED_WIDTH);
+            ui.set_max_width(theme::SIDEBAR_EXPANDED_WIDTH);
             ui.set_min_height(ui.available_height());
 
             ui.vertical(|ui| {
-                ui.add_space(theme::SPACING_MD);
+                // Logo / wordmark area
+                ui.add_space(theme::SPACING_LG);
+                ui.vertical_centered(|ui| {
+                    ui.label(
+                        egui::RichText::new("Aura")
+                            .size(theme::FONT_WINDOW_TITLE)
+                            .strong()
+                            .color(theme::TEXT_PRIMARY),
+                    );
+                });
+                ui.add_space(theme::SPACING_LG);
 
+                // Nav items with icon + label
                 let mut clicked = None;
 
                 if Self::nav_item(
                     ui,
                     sidebar_id.with("gallery"),
-                    "G",
+                    theme::ICON_GALLERY,
                     "Gallery",
                     *active_tab == Tab::Gallery,
                 ) {
                     clicked = Some(Tab::Gallery);
                 }
+                ui.add_space(theme::SPACING_XS);
                 if Self::nav_item(
                     ui,
                     sidebar_id.with("settings"),
-                    "S",
+                    theme::ICON_SETTINGS,
                     "Settings",
                     *active_tab == Tab::Settings,
                 ) {
@@ -48,13 +60,25 @@ impl Sidebar {
                 if let Some(tab) = clicked {
                     *active_tab = tab;
                 }
+
+                // Spacer + version at bottom
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                    ui.add_space(theme::SPACING_SM);
+                    ui.label(
+                        egui::RichText::new("v0.1.0")
+                            .size(theme::FONT_CAPTION)
+                            .color(theme::TEXT_MUTED),
+                    );
+                    ui.add_space(theme::SPACING_SM);
+                });
             });
         });
     }
 
     fn nav_item(ui: &mut egui::Ui, id: egui::Id, icon: &str, label: &str, is_active: bool) -> bool {
         let available = ui.available_width();
-        let item_height = 48.0;
+        let item_height = theme::NAV_ITEM_HEIGHT;
+        let left_margin = theme::SPACING_MD;
 
         let (bg, fg) = if is_active {
             (theme::BG_SIDEBAR_ACTIVE, theme::TEXT_PRIMARY)
@@ -81,15 +105,43 @@ impl Sidebar {
                 .rect_filled(indicator, 0.0, theme::SIDEBAR_INDICATOR);
         }
 
-        // Background fill with rounded corners
-        ui.painter().rect_filled(rect, 0.0, hover_bg);
+        // Background fill — rounded on right side
+        let bg_rect = egui::Rect::from_min_size(
+            egui::pos2(rect.left() + left_margin, rect.top()),
+            egui::vec2(available - left_margin - theme::SPACING_SM, item_height),
+        );
+        ui.painter()
+            .rect_filled(bg_rect, theme::RADIUS_SM, hover_bg);
 
-        let icon_pos = egui::pos2(rect.center().x, rect.center().y - theme::SPACING_XS);
+        // Icon
+        let icon_rect = egui::Rect::from_min_size(
+            egui::pos2(rect.left() + left_margin + theme::SPACING_SM, rect.top()),
+            egui::vec2(20.0, item_height),
+        );
         ui.painter().text(
-            icon_pos,
+            icon_rect.center(),
             egui::Align2::CENTER_CENTER,
             icon,
-            egui::FontId::proportional(theme::FONT_CARD_TITLE),
+            egui::FontId::proportional(theme::FONT_BODY),
+            fg,
+        );
+
+        // Label
+        let label_rect = egui::Rect::from_min_size(
+            egui::pos2(
+                rect.left() + left_margin + 20.0 + theme::SPACING_SM,
+                rect.top(),
+            ),
+            egui::vec2(
+                available - left_margin - 20.0 - theme::SPACING_LG,
+                item_height,
+            ),
+        );
+        ui.painter().text(
+            label_rect.center(),
+            egui::Align2::LEFT_CENTER,
+            label,
+            theme::font_body(),
             fg,
         );
 
