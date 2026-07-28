@@ -150,18 +150,21 @@ impl TrayManager {
                     }
                     ID_TRAY_QUIT => {
                         // Close the eframe window so the main thread unblocks.
-                        if let Ok(hwnd) = unsafe { FindWindowW(None, w!("Aura Wallpaper")) }
-                            && !hwnd.is_invalid()
-                        {
-                            unsafe {
-                                let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
-                                    Some(hwnd),
-                                    windows::Win32::UI::WindowsAndMessaging::WM_CLOSE,
-                                    WPARAM(0),
-                                    LPARAM(0),
-                                );
-                            }
-                        }
+                        let title = windows::core::HSTRING::from(aura_core::WINDOW_TITLE);
+                        let _closed = unsafe { FindWindowW(None, &title) }
+                            .ok()
+                            .filter(|h| !h.is_invalid())
+                            .is_some_and(|hwnd| {
+                                unsafe {
+                                    let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                                        Some(hwnd),
+                                        windows::Win32::UI::WindowsAndMessaging::WM_CLOSE,
+                                        WPARAM(0),
+                                        LPARAM(0),
+                                    );
+                                }
+                                true
+                            });
                         TRAY_SENDER.with(|s| {
                             if let Some(tx) = s.take() {
                                 let _ = tx.send(());
@@ -182,7 +185,8 @@ impl TrayManager {
     #[cfg(target_os = "windows")]
     fn toggle_eframe_window() {
         unsafe {
-            let Ok(hwnd) = FindWindowW(None, w!("Aura Wallpaper")) else {
+            let title = windows::core::HSTRING::from(aura_core::WINDOW_TITLE);
+            let Ok(hwnd) = FindWindowW(None, &title) else {
                 return;
             };
             if hwnd.is_invalid() {
@@ -241,7 +245,9 @@ impl TrayManager {
         nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
         nid.uCallbackMessage = WM_TRAY_CALLBACK;
         nid.hIcon = icon;
-        let tip: Vec<u16> = "Aura Wallpaper\0".encode_utf16().collect();
+        let tip: Vec<u16> = format!("{}\0", aura_core::WINDOW_TITLE)
+            .encode_utf16()
+            .collect();
         let len = tip.len().min(127);
         nid.szTip[..len].copy_from_slice(&tip[..len]);
 

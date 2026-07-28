@@ -11,3 +11,12 @@ pub mod slideshow_state;
 pub mod wallpaper;
 
 pub use error::CoreError;
+
+// ---------------------------------------------------------------------------
+// Shared constants
+// ---------------------------------------------------------------------------
+
+/// The window title used by both the eframe UI window and the tray icon /
+/// foreground-bringing `FindWindowW` calls. Defining it here ensures that
+/// all consumers always agree on the string.
+pub const WINDOW_TITLE: &str = "Aura Wallpaper";

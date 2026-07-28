@@ -11,6 +11,7 @@ name = "aura"
 path = "src/main.rs"
 
 [dependencies]
+aura-core     = { workspace = true }
 wallpaperd     = { path = "../wallpaperd" }
 wallpaper-ui   = { path = "../wallpaper-ui" }
 aura-platform-windows = { path = "../platform-windows" }

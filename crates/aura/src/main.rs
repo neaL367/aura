@@ -77,8 +77,47 @@ fn main() {
     }
 
     // Step 8: spawn tray icon (background message loop)
-    let (tray_quit_tx, _tray_quit_rx) = crossbeam_channel::bounded::<()>(1);
+    let (tray_quit_tx, tray_quit_rx) = crossbeam_channel::bounded::<()>(1);
     let _tray_handle = tray::TrayManager::new().spawn(tray_quit_tx);
+
+    // Step 8b: quit-fallback listener — if FindWindowW fails inside the tray
+    // thread (e.g. startup race), this retries with backoff and falls back
+    // to process::exit as a last resort.
+    let _quit_fallback = {
+        use std::time::Duration;
+        std::thread::Builder::new()
+            .name("quit-fallback".into())
+            .spawn(move || {
+                if tray_quit_rx.recv().is_err() {
+                    return;
+                }
+                let title = windows::core::HSTRING::from(aura_core::WINDOW_TITLE);
+                for retry in 0u32..10 {
+                    let hwnd = unsafe {
+                        windows::Win32::UI::WindowsAndMessaging::FindWindowW(None, &title)
+                    };
+                    let Ok(hwnd) = hwnd else {
+                        std::thread::sleep(Duration::from_millis(100));
+                        tracing::warn!("quit-fallback: retry {} FindWindowW failed", retry + 1);
+                        continue;
+                    };
+                    if !hwnd.is_invalid() {
+                        unsafe {
+                            let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                                Some(hwnd),
+                                windows::Win32::UI::WindowsAndMessaging::WM_CLOSE,
+                                windows::Win32::Foundation::WPARAM(0),
+                                windows::Win32::Foundation::LPARAM(0),
+                            );
+                        }
+                        return;
+                    }
+                }
+                tracing::error!("quit-fallback: exhausted retries — force-exiting");
+                std::process::exit(0);
+            })
+            .expect("failed to spawn quit-fallback thread")
+    };
 
     // Step 9: run eframe (blocks until window closed)
     wallpaper_ui::run();
@@ -103,10 +142,9 @@ fn bring_existing_window_to_front() {
     use windows::Win32::UI::WindowsAndMessaging::{
         FindWindowW, GetWindowThreadProcessId, SW_RESTORE, SetForegroundWindow, ShowWindow,
     };
-    use windows::core::w;
-
     unsafe {
-        let Ok(hwnd) = FindWindowW(None, w!("Aura Wallpaper")) else {
+        let title = windows::core::HSTRING::from(aura_core::WINDOW_TITLE);
+        let Ok(hwnd) = FindWindowW(None, &title) else {
             return;
         };
         if hwnd == HWND(std::ptr::null_mut()) {
