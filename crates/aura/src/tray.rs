@@ -21,10 +21,11 @@ use windows::Win32::{
     UI::WindowsAndMessaging::{
         AppendMenuW, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreatePopupMenu, CreateWindowExW,
         DefWindowProcW, DestroyMenu, DestroyWindow, DispatchMessageW, FindWindowW, GetCursorPos,
-        GetMessageW, GetWindowThreadProcessId, IsWindowVisible, LoadCursorW, LoadIconW, MF_STRING,
-        MSG, PostQuitMessage, RegisterClassW, SW_HIDE, SW_RESTORE, SetForegroundWindow, ShowWindow,
-        TPM_RIGHTBUTTON, TrackPopupMenu, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY,
-        WM_LBUTTONDOWN, WM_RBUTTONDOWN, WNDCLASSW,
+        GetMessageW, GetWindowThreadProcessId, IDI_APPLICATION, IsWindowVisible, LoadCursorW,
+        LoadIconW, MF_STRING, MSG, PostMessageW, PostQuitMessage, RegisterClassW, SW_HIDE,
+        SW_RESTORE, SetForegroundWindow, ShowWindow, TPM_RIGHTBUTTON, TrackPopupMenu,
+        WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDOWN, WM_NULL,
+        WM_RBUTTONDOWN, WNDCLASSW,
     },
 };
 #[cfg(target_os = "windows")]
@@ -222,13 +223,17 @@ impl TrayManager {
 
             let _ = TrackPopupMenu(menu, TPM_RIGHTBUTTON, pt.x, pt.y, Some(0), hwnd, None);
 
+            // Workaround for MSDN Q135788: send WM_NULL to dismiss the menu
+            // when the user clicks outside of it.
+            let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
+
             let _ = DestroyMenu(menu);
         }
     }
 
     #[cfg(target_os = "windows")]
     fn add_icon(hwnd: HWND) {
-        let icon = unsafe { LoadIconW(None, w!("IDI_APPLICATION")).unwrap_or_default() };
+        let icon = unsafe { LoadIconW(None, IDI_APPLICATION).unwrap_or_default() };
         let mut nid: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
         nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
         nid.hWnd = hwnd;
