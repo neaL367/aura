@@ -51,8 +51,9 @@ impl Clone for ClientValidator {
     }
 }
 
-/// Validate a client PID by checking its executable name against the allowlist
-/// (`wallpaper-ui.exe`, `wallpaperd.exe`).
+/// Validate a client PID by checking if its executable's parent directory
+/// matches the daemon's own parent directory. This naturally covers any
+/// binary rename without requiring a hard-coded name list.
 pub fn validate_client_pid(pid: u32) -> bool {
     #[cfg(target_os = "windows")]
     {
@@ -95,12 +96,23 @@ fn validate_client_pid_win32(pid: u32) -> bool {
             return false;
         }
 
-        let name = String::from_utf16_lossy(&buf[..len as usize]);
-        let file_name = std::path::Path::new(&name)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let connecting_path = String::from_utf16_lossy(&buf[..len as usize]);
+        let own_path = match std::env::current_exe() {
+            Ok(p) => p.to_string_lossy().to_string(),
+            Err(_) => return false,
+        };
 
-        matches!(file_name, "wallpaper-ui.exe" | "wallpaperd.exe")
+        // Compare parent directories case-insensitively (Windows paths).
+        let connecting_parent = std::path::Path::new(&connecting_path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_lowercase());
+        let own_parent = std::path::Path::new(&own_path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_lowercase());
+
+        match (connecting_parent, own_parent) {
+            (Some(cp), Some(op)) => cp == op,
+            _ => false,
+        }
     }
 }
