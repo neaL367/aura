@@ -266,10 +266,7 @@ pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
     let library_path = config_path.with_file_name("library.json");
     let lib_store = aura_storage::library_store::LibraryStore::new(&library_path);
     let slideshow_store = aura_storage::slideshow_store::SlideshowStore::new(
-        config_path
-            .parent()
-            .unwrap_or(&config_path)
-            .join("slideshow_state.json"),
+        aura_storage::slideshow_store::SlideshowStore::default_path(),
     );
     let mut slideshow_state: Option<aura_core::slideshow_state::SlideshowState> =
         slideshow_store.load().ok().flatten();
