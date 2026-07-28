@@ -91,7 +91,9 @@ impl IpcServer {
             apply_pipe_dacl(&server);
             retry_delay = std::time::Duration::from_millis(100);
             // Fire ready callback on first successful pipe creation.
-            if self.first_instance && let Some(f) = self.ready_callback.take() {
+            if self.first_instance
+                && let Some(f) = self.ready_callback.take()
+            {
                 f();
             }
             self.first_instance = false;

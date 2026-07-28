@@ -151,7 +151,11 @@ impl InspectorPanel {
                             .show(ui, |ui| {
                                 meta_row(ui, "Type", &format!("{}", entry.kind));
                                 if entry.width > 0 && entry.height > 0 {
-                                    meta_row(ui, "Dimensions", &format!("{} × {} px", entry.width, entry.height));
+                                    meta_row(
+                                        ui,
+                                        "Dimensions",
+                                        &format!("{} × {} px", entry.width, entry.height),
+                                    );
                                 }
                                 if entry.file_size > 0 {
                                     meta_row(ui, "File Size", &format_size(entry.file_size));

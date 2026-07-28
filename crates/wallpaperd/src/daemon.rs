@@ -65,8 +65,8 @@ impl DaemonOptions {
         std::mem::forget(shutdown_tx);
         let (ready_tx, _) = std::sync::mpsc::sync_channel(1);
         let (done_tx, _) = crossbeam_channel::bounded(1);
-        let singleton = ProcessSingleton::acquire()
-            .expect("another wallpaperd instance is already running");
+        let singleton =
+            ProcessSingleton::acquire().expect("another wallpaperd instance is already running");
         Self {
             wallpaper_path,
             shutdown_rx,
@@ -123,10 +123,9 @@ pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
             };
             rt.block_on(async move {
                 let handler = Box::new(move |req| orchestrator_ipc.handle_request(req));
-                let server = aura_ipc::server::IpcServer::new(handler)
-                    .on_ready(move || {
-                        let _ = ready_tx.send(());
-                    });
+                let server = aura_ipc::server::IpcServer::new(handler).on_ready(move || {
+                    let _ = ready_tx.send(());
+                });
                 if let Err(e) = server.serve(ipc_server_shutdown_rx).await {
                     tracing::error!("IPC server error: {}", e);
                 }

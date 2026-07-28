@@ -122,17 +122,28 @@ pub enum ButtonVariant {
 pub fn button(ui: &mut egui::Ui, label: &str, variant: ButtonVariant) -> egui::Response {
     let (bg, hover_bg, fg, stroke) = match variant {
         ButtonVariant::Primary => (ACCENT_PRIMARY, ACCENT_HOVER, TEXT_ON_DARK, Stroke::NONE),
-        ButtonVariant::Secondary => {
-            (BG_CARD, BG_CARD_HOVER, TEXT_PRIMARY, Stroke::new(1.0, BORDER_SUBTLE))
-        }
-        ButtonVariant::Ghost => (Color32::TRANSPARENT, BG_CARD_HOVER, TEXT_PRIMARY, Stroke::NONE),
+        ButtonVariant::Secondary => (
+            BG_CARD,
+            BG_CARD_HOVER,
+            TEXT_PRIMARY,
+            Stroke::new(1.0, BORDER_SUBTLE),
+        ),
+        ButtonVariant::Ghost => (
+            Color32::TRANSPARENT,
+            BG_CARD_HOVER,
+            TEXT_PRIMARY,
+            Stroke::NONE,
+        ),
     };
 
     let id = ui.next_auto_id();
     let was_hovered = ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
     let fill = if was_hovered { hover_bg } else { bg };
 
-    let text = egui::RichText::new(label).size(FONT_BODY).strong().color(fg);
+    let text = egui::RichText::new(label)
+        .size(FONT_BODY)
+        .strong()
+        .color(fg);
 
     let btn = egui::Button::new(text)
         .fill(fill)
@@ -150,7 +161,6 @@ pub fn button(ui: &mut egui::Ui, label: &str, variant: ButtonVariant) -> egui::R
     }
     response
 }
-
 
 // ---------------------------------------------------------------------------
 // Badge

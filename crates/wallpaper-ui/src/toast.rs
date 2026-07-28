@@ -152,11 +152,8 @@ fn draw_toast(ui: &mut egui::Ui, toast: &Toast) {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new(icon).size(16.0).color(accent_faded));
                     ui.add(
-                        egui::Label::new(
-                            egui::RichText::new(&toast.message)
-                                .color(text_faded),
-                        )
-                        .wrap(),
+                        egui::Label::new(egui::RichText::new(&toast.message).color(text_faded))
+                            .wrap(),
                     );
                 });
             });

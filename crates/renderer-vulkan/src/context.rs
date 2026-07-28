@@ -73,7 +73,9 @@ impl VulkanContext {
                 (
                     Some(ash::khr::video_queue::Instance::new(&entry, &instance)),
                     Some(ash::khr::video_queue::Device::new(&instance, &device)),
-                    Some(ash::khr::video_decode_queue::Device::new(&instance, &device)),
+                    Some(ash::khr::video_decode_queue::Device::new(
+                        &instance, &device,
+                    )),
                 )
             } else {
                 tracing::info!("Vulkan Video extensions not enabled — video loaders disabled");

@@ -200,16 +200,10 @@ mod tests {
 
     /// Build a minimal single-frame in-memory GIF (2×2, one opaque color).
     /// Returns the raw bytes of the GIF file.
-    fn make_gif(
-        width: u16,
-        height: u16,
-        color: [u8; 3],
-        dispose: gif::DisposalMethod,
-    ) -> Vec<u8> {
+    fn make_gif(width: u16, height: u16, color: [u8; 3], dispose: gif::DisposalMethod) -> Vec<u8> {
         let mut buf = Vec::new();
         {
-            let mut encoder =
-                gif::Encoder::new(&mut buf, width, height, &[]).expect("encoder");
+            let mut encoder = gif::Encoder::new(&mut buf, width, height, &[]).expect("encoder");
             encoder.set_repeat(gif::Repeat::Infinite).expect("repeat");
             let palette = color.to_vec();
             let pixel_count = (width as usize) * (height as usize);
