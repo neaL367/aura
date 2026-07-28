@@ -1,0 +1,30 @@
+[package]
+name        = "aura"
+description = "Aura wallpaper platform — unified daemon + UI binary"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+
+[[bin]]
+name = "aura"
+path = "src/main.rs"
+
+[dependencies]
+wallpaperd     = { path = "../wallpaperd" }
+wallpaper-ui   = { path = "../wallpaper-ui" }
+aura-platform-windows = { path = "../platform-windows" }
+
+eframe      = { workspace = true }
+egui        = { workspace = true }
+crossbeam-channel = { workspace = true }
+tracing           = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies.windows]
+workspace = true
+features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Threading",
+]

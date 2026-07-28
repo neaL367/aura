@@ -16,26 +16,36 @@
   - **Animated GIFs**: Streaming step-by-step frame decoding with full GIF disposal method compositing (`RestoreToPrevious` snapshot canvas).
   - **Video (Tier 1)**: Windows Media Foundation (`IMFSourceReader`) CPU decoding path. Vulkan Video hardware decode (`VK_KHR_video_decode_h264`) is scaffolded but not yet active — `spawn_hw_video_worker` currently routes through the Media Foundation path.
 - **Wallpaper Library, Live Watcher & Gallery UI**: Persistent library of discovered wallpapers stored in a JSON cache (`library.json`). Race-safe thumbnail generation (`ThumbnailStore`) and atomic file saves (`atomic_file.rs`) protect cache integrity. A debounced filesystem watcher (`LibraryWatcher`) automatically synchronizes live watch targets when scan paths are modified. The `wallpaper-ui` Control Panel displays a scrollable gallery grid (`library_panel/`) with per-card **Apply → Display N** assignment buttons and native folder/file pickers (`rfd`). A built-in toast overlay system (`ToastManager`) provides non-intrusive notifications for connection status, import results, and daemon errors.
-- **Process Isolation & Resilient IPC**: Headless daemon (`wallpaperd`) and control panel (`wallpaper-ui`) communicate over Windows Named Pipes (`\\.\pipe\aura-wallpaperd`) using an adjacently-tagged JSON protocol (`serde tag+content`). The IPC server accept loop handles pipe connection races and client disconnects cleanly without dropping daemon loops.
+- **Process Isolation & Resilient IPC**: Headless daemon (`wallpaperd`) and control panel (`wallpaper-ui`) communicate over Windows Named Pipes (`\\.\pipe\aura-wallpaperd`) using an adjacently-tagged JSON protocol (`serde tag+content`). The IPC server accept loop handles pipe connection races and client disconnects cleanly without dropping daemon loops. The unified `aura` binary merges both into one process: main thread runs eframe, background thread runs daemon, with `crossbeam_channel`-based shutdown signaling and IPC readiness handshake (deterministic, no sleep).
 
 ---
 
 ## Architecture Overview
 
 ```text
-wallpaper-ui (GUI Control Panel, egui/eframe)
-    │
-    │ Named Pipe IPC (\\.\pipe\aura-wallpaperd)
-    ▼
-wallpaperd (Headless Daemon Coordinator)
-    ├── Orchestrator (State machine & IPC handlers: status, assignment, library)
-    ├── AssignmentManager (Per-monitor wallpaper assignment state)
-    ├── RenderCoordinator (Per-monitor Vulkan render loops: placement, loop_runner)
-    ├── PerfMonitor (FPS counters, frame latency & process RAM metrics)
-    ├── platform-windows (WorkerW management, monitor_enumerator, mf_video_decoder, Win32 pump)
-    ├── storage (ConfigStore, LibraryStore, atomic_file, LibraryScanner, LibraryWatcher)
-    ├── media (Static Image, GIF streaming compositing, Media Foundation video)
-    └── renderer-vulkan (Vulkan context, MonitorRenderer: frame_pass, resources, RAII Drop)
+┌──────────────────────────────────────────────────┐
+│                   aura.exe                        │
+│  ┌────────────────────────────────────────────┐  │
+│  │  eframe (main thread) — egui UI            │  │
+│  │  ┌──────────────┐  ┌─────────────────────┐ │  │
+│  │  │ wallpaper-ui │  │  UiIpcClient        │ │  │
+│  │  │  Gallery     │  │  (background thread) │ │  │
+│  │  │  Settings    │  │  tokio reconnect     │ │  │
+│  │  │  Inspector   │  └─────┬───────────────┘ │  │
+│  │  └──────────────┘        │ named pipe       │  │
+│  └──────────────────────────┼──────────────────┘  │
+│                             │                      │
+│  ┌──────────────────────────┼──────────────────┐  │
+│  │  wallpaperd daemon thread ──┘               │  │
+│  │  ├── Orchestrator + IpcServer (tokio)       │  │
+│  │  ├── RenderCoordinator (per-monitor vulkan) │  │
+│  │  ├── EventPump (Win32 message loop)         │  │
+│  │  └── WorkerW / platform integration         │  │
+│  └─────────────────────────────────────────────┘  │
+│                                                    │
+│  crossbeam_channel: shutdown + ready + done        │
+│  ProcessSingleton: acquired on main thread         │
+└────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -51,10 +61,11 @@ wallpaperd (Headless Daemon Coordinator)
 
 ## Workspace Structure
 
-The project is structured as a modular Cargo workspace across 8 crates and 1 tool, organized into cohesive domain submodules following Single Responsibility Principle:
+The project is structured as a modular Cargo workspace across 9 crates and 1 tool, organized into cohesive domain submodules following Single Responsibility Principle:
 
 | Crate | Purpose |
 | :--- | :--- |
+| [`aura`](crates/aura) | Unified entry point binary — merges daemon + UI. Acquires singleton on main thread, spawns daemon background, runs eframe. Supports `--daemon-only` |
 | [`aura-core`](crates/core) | Platform-independent domain model (monitors, wallpaper lifecycle, configs) |
 | [`aura-ipc`](crates/ipc) | Length-prefixed JSON serialization protocol over Windows Named Pipes |
 | [`aura-storage`](crates/storage) | Persistence layer (`ConfigStore`, `LibraryStore`, `atomic_file`, `LibraryScanner`, `LibraryWatcher`) |
@@ -74,19 +85,35 @@ The project is structured as a modular Cargo workspace across 8 crates and 1 too
 cargo build --workspace --release
 ```
 
-### Run WorkerW Proof Validation Tool
+The workspace builds three binaries:
+- `aura` — Unified daemon + UI (primary, recommended)
+- `wallpaperd` — Standalone headless daemon
+- `wallpaper-ui` — Standalone control panel UI
+- `workerw-proof` — WorkerW integration validation tool
+
+### Run Aura (Unified — primary)
 ```powershell
-cargo run --bin workerw-proof
+cargo run --bin aura
 ```
 
-### Run Desktop Daemon
+Headless mode (no UI, IPC pipe listening):
+```powershell
+cargo run --bin aura -- --daemon-only
+```
+
+### Run Standalone Daemon Only
 ```powershell
 cargo run --bin wallpaperd
 ```
 
-### Run Control Panel UI
+### Run Standalone Control Panel UI
 ```powershell
 cargo run --bin wallpaper-ui
+```
+
+### Run WorkerW Proof Validation Tool
+```powershell
+cargo run --bin workerw-proof
 ```
 
 ### Verification & Testing

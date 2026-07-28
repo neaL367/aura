@@ -40,7 +40,8 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
   - `crates/platform-windows`: Win32 native window wrappers, WorkerW attach (`workerw/` split into `discovery`, `attachment`, `manager`), event pump, `monitor_enumerator`, `mf_video_decoder`, `power`, and singleton.
   - `crates/renderer-vulkan`: Vulkan pipeline, swapchain, texture upload, and `MonitorRenderer` (`monitor_renderer/` split into `frame_pass`, `resources`).
   - `crates/wallpaperd`: Aura background daemon coordinator (owns `WorkerW`, Vulkan render threads, IPC server). Split into focused submodules: `orchestrator/` (`handlers/` for `status`, `assignment`, `library`), `assignment_manager`, `perf_monitor`, and `render_thread/` (`placement`, `loop_runner`).
-  - `crates/wallpaper-ui`: `egui`/`eframe`-based Control Panel UI (`library_panel/` split into `card`, `mod`).
+  - `crates/wallpaper-ui`: `egui`/`eframe`-based Control Panel UI (`library_panel/` split into `card`, `mod`). Exposes `wallpaper_ui::run()` for use by the unified `aura` binary.
+  - `crates/aura`: Unified entry point binary combining daemon + UI. Acquires `ProcessSingleton` on main thread (eliminating TOCTOU race), spawns daemon on background thread, runs eframe on main thread. Supports `--daemon-only` for headless mode. On second-instance detection, brings existing window to front via `AttachThreadInput` + `SetForegroundWindow`.
   - `tools/workerw-proof`: Phase 0 standalone WorkerW validation tool.
 
 - **Threading Architecture**:
@@ -48,6 +49,7 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
   - `wallpaper-ui`: Main thread runs `eframe`/`egui` UI, while a background thread with a Tokio runtime manages connection/reconnection to `IpcClient`.
   - `MonitorRenderer`: Stores `Arc<VulkanContext>` and implements `Drop` for RAII resource teardown safety.
   - `ProcessSingleton`: Implements `Send` only (no `Sync`).
+  - `aura` (unified binary): Main thread acquires `ProcessSingleton` before any background spawn (eliminates TOCTOU), spawns daemon on background thread with `DaemonOptions`, waits for IPC readiness signal, runs `eframe` on main thread. On window close, signals daemon shutdown via `crossbeam_channel` and waits with timeout + wallpaper-restore fallback.
 
 ---
 
