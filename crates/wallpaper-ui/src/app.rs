@@ -39,7 +39,20 @@ pub struct AuraApp {
 
 impl AuraApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        crate::theme::setup_theme(&cc.egui_ctx);
+        let config_path = aura_storage::config_store::ConfigStore::default_path();
+        let config_store = aura_storage::config_store::ConfigStore::new(&config_path);
+        let dark_mode = config_store
+            .load()
+            .ok()
+            .map(|c| c.appearance.dark_mode)
+            .unwrap_or(false);
+
+        if dark_mode {
+            crate::theme::setup_dark_theme(&cc.egui_ctx);
+        } else {
+            crate::theme::setup_theme(&cc.egui_ctx);
+        }
+
         egui_extras::install_image_loaders(&cc.egui_ctx);
         let (toast_tx, toast_rx) = std::sync::mpsc::channel();
 
@@ -55,7 +68,7 @@ impl AuraApp {
             trimmed_since_idle: false,
             toasts: ToastManager::new(),
             toast_rx,
-            dark_mode: false,
+            dark_mode,
         }
     }
 }
@@ -99,6 +112,34 @@ impl eframe::App for AuraApp {
                     &self.ipc_client.status(),
                     self.ipc_client.last_error().as_deref(),
                 );
+
+                // Pause/Resume toggle
+                if let crate::ipc_client::ConnectionStatus::Connected(ref s) =
+                    self.ipc_client.status()
+                {
+                    ui.add_space(crate::theme::SPACING_SM);
+                    ui.separator();
+                    ui.add_space(crate::theme::SPACING_SM);
+                    let (label, variant) = if s.is_paused {
+                        (
+                            crate::theme::ICON_RESUME,
+                            crate::theme::ButtonVariant::Primary,
+                        )
+                    } else {
+                        (
+                            crate::theme::ICON_PAUSE,
+                            crate::theme::ButtonVariant::Secondary,
+                        )
+                    };
+                    if crate::theme::button(ui, label, variant).clicked() {
+                        use aura_ipc::protocol::Request;
+                        if s.is_paused {
+                            self.ipc_client.send(Request::ResumeAll);
+                        } else {
+                            self.ipc_client.send(Request::PauseAll);
+                        }
+                    }
+                }
             });
 
         // --- Main content area ---

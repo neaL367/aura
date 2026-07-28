@@ -26,11 +26,13 @@ path = "src/lib.rs"
 [dependencies]
 aura-core  = { workspace = true }
 aura-ipc   = { workspace = true }
+aura-storage = { workspace = true }
 
-eframe      = { workspace = true }
-egui        = { workspace = true }
-egui_extras = { workspace = true }
-rfd         = "0.15"
+eframe        = { workspace = true }
+egui          = { workspace = true }
+egui_extras   = { workspace = true }
+egui-phosphor = "0.13"
+rfd           = "0.15"
 
 serde             = { workspace = true }
 thiserror         = { workspace = true }

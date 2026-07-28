@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+use crate::theme;
 use egui::{Align2, Area, Color32, Frame, Id, Order, Vec2};
 
 pub type ToastEvent = (String, ToastKind);
@@ -25,10 +26,10 @@ impl ToastKind {
 
     fn icon(&self) -> &str {
         match self {
-            ToastKind::Success => "\u{2713}",
-            ToastKind::Error => "\u{2717}",
-            ToastKind::Info => "\u{2139}",
-            ToastKind::Warning => "\u{26A0}",
+            ToastKind::Success => theme::ICON_CHECK,
+            ToastKind::Error => theme::ICON_CLOSE,
+            ToastKind::Info => theme::ICON_INFO,
+            ToastKind::Warning => theme::ICON_WARNING,
         }
     }
 
@@ -144,13 +145,16 @@ fn draw_toast(ui: &mut egui::Ui, toast: &Toast) {
 
     Frame::new()
         .fill(bg)
-        .corner_radius(6.0)
-        .inner_margin(egui::Margin::symmetric(12, 10))
+        .corner_radius(theme::RADIUS_MD)
+        .inner_margin(egui::Margin::symmetric(
+            theme::SPACING_MD as i8,
+            theme::SPACING_SM as i8,
+        ))
         .show(ui, |ui| {
             ui.set_max_width(316.0);
             ui.vertical(|ui| {
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(icon).size(16.0).color(accent_faded));
+                    ui.colored_label(accent_faded, icon);
                     ui.add(
                         egui::Label::new(egui::RichText::new(&toast.message).color(text_faded))
                             .wrap(),
@@ -159,5 +163,5 @@ fn draw_toast(ui: &mut egui::Ui, toast: &Toast) {
             });
         });
 
-    ui.add_space(8.0);
+    ui.add_space(theme::SPACING_SM);
 }

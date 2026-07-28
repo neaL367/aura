@@ -42,11 +42,16 @@ impl GalleryPanel {
                             .desired_width(f32::INFINITY),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if theme::button(ui, "Refresh", theme::ButtonVariant::Ghost).clicked() {
+                        if theme::button(ui, theme::ICON_REFRESH, theme::ButtonVariant::Ghost)
+                            .on_hover_text("Refresh")
+                            .clicked()
+                        {
                             ipc_client.send(aura_ipc::Request::RefreshLibrary);
                         }
                         ui.add_space(theme::SPACING_XS);
-                        if theme::button(ui, "Import", theme::ButtonVariant::Ghost).clicked()
+                        if theme::button(ui, theme::ICON_IMPORT, theme::ButtonVariant::Ghost)
+                            .on_hover_text("Import files")
+                            .clicked()
                             && let Some(files) = rfd::FileDialog::new()
                                 .add_filter(
                                     "Media Files",
@@ -64,6 +69,7 @@ impl GalleryPanel {
                 if wallpapers.is_empty() {
                     theme::empty_state(
                         ui,
+                        theme::ICON_GALLERY,
                         "No wallpapers found",
                         "Import files or set a library directory to get started.",
                         |ui| {
@@ -183,7 +189,10 @@ impl GalleryPanel {
                         .wrap(),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if theme::button(ui, "\u{2716}", theme::ButtonVariant::Ghost).clicked() {
+                        if theme::button(ui, theme::ICON_DELETE, theme::ButtonVariant::Ghost)
+                            .on_hover_text("Delete wallpaper")
+                            .clicked()
+                        {
                             ipc_client.send(Request::DeleteWallpaper { id: entry.id });
                             *selected = None;
                         }
@@ -205,7 +214,7 @@ impl GalleryPanel {
 
                     if entry.width > 0 && entry.height > 0 {
                         ui.label(
-                            egui::RichText::new(format!("{}×{}", entry.width, entry.height))
+                            egui::RichText::new(format!("{} × {}", entry.width, entry.height))
                                 .size(theme::FONT_CAPTION)
                                 .color(theme::TEXT_MUTED),
                         );

@@ -171,7 +171,14 @@ impl InspectorPanel {
 
                         ui.add_space(theme::SPACING_LG);
 
-                        // Fit mode selector — buttons apply immediately via "Apply to All"
+                        // Fit mode selector — changes apply immediately to any monitors
+                        // that already have this wallpaper assigned.
+                        let assigned_mons: std::collections::HashSet<&MonitorId> = assignments
+                            .iter()
+                            .filter(|a| a.wallpaper_id == entry.id)
+                            .map(|a| &a.monitor_id)
+                            .collect();
+
                         theme::section_label(ui, "FIT MODE");
                         ui.add_space(theme::SPACING_SM);
                         ui.horizontal_wrapped(|ui| {
@@ -190,6 +197,16 @@ impl InspectorPanel {
                                 };
                                 if theme::button(ui, &format!("{}", mode), variant).clicked() {
                                     self.selected_fit_mode = mode;
+                                    // Push the new fit mode to already-assigned monitors
+                                    for mon in monitors {
+                                        if assigned_mons.contains(&mon.id) {
+                                            ipc_client.send(Request::AssignWallpaper {
+                                                monitor_id: mon.id,
+                                                wallpaper_id: entry.id,
+                                                fit_mode: Some(mode),
+                                            });
+                                        }
+                                    }
                                 }
                             }
                         });
@@ -201,19 +218,12 @@ impl InspectorPanel {
                             theme::section_label(ui, "APPLY TO MONITOR");
                             ui.add_space(theme::SPACING_SM);
 
-                            // Collect assignments targeting this wallpaper
-                            let assigned_mons: std::collections::HashSet<&MonitorId> = assignments
-                                .iter()
-                                .filter(|a| a.wallpaper_id == entry.id)
-                                .map(|a| &a.monitor_id)
-                                .collect();
-
                             for mon in monitors {
                                 let already = assigned_mons.contains(&mon.id);
                                 let label = if already {
-                                    format!("{} ✓ Applied", mon.name)
+                                    format!("{} {}", mon.name, theme::ICON_CHECK)
                                 } else {
-                                    format!("{} ─ {}", mon.name, self.selected_fit_mode)
+                                    format!("{}  {}", mon.name, self.selected_fit_mode)
                                 };
                                 let variant = if already {
                                     theme::ButtonVariant::Primary
@@ -225,11 +235,18 @@ impl InspectorPanel {
                                     |ui| {
                                         ui.set_min_width(theme::MONITOR_CARD_WIDTH);
                                         if theme::button(ui, &label, variant).clicked() {
-                                            ipc_client.send(Request::AssignWallpaper {
-                                                monitor_id: mon.id,
-                                                wallpaper_id: entry.id,
-                                                fit_mode: Some(self.selected_fit_mode),
-                                            });
+                                            if already {
+                                                // Re-click on an assigned monitor removes the assignment
+                                                ipc_client.send(Request::RemoveAssignment {
+                                                    monitor_id: mon.id,
+                                                });
+                                            } else {
+                                                ipc_client.send(Request::AssignWallpaper {
+                                                    monitor_id: mon.id,
+                                                    wallpaper_id: entry.id,
+                                                    fit_mode: Some(self.selected_fit_mode),
+                                                });
+                                            }
                                         }
                                     },
                                 );

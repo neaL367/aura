@@ -4,6 +4,28 @@ use egui::{
 use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
+// Phosphor icon constants (regular variant)
+// ---------------------------------------------------------------------------
+
+pub const ICON_GALLERY: &str = egui_phosphor::regular::IMAGE_SQUARE;
+pub const ICON_SETTINGS: &str = egui_phosphor::regular::GEAR_SIX;
+pub const ICON_SEARCH: &str = egui_phosphor::regular::MAGNIFYING_GLASS;
+pub const ICON_REFRESH: &str = egui_phosphor::regular::ARROW_CLOCKWISE;
+pub const ICON_IMPORT: &str = egui_phosphor::regular::PLUS;
+pub const ICON_DELETE: &str = egui_phosphor::regular::TRASH;
+pub const ICON_PAUSE: &str = egui_phosphor::regular::PAUSE;
+pub const ICON_RESUME: &str = egui_phosphor::regular::PLAY;
+pub const ICON_CHECK: &str = egui_phosphor::regular::CHECK;
+pub const ICON_CLOSE: &str = egui_phosphor::regular::X;
+pub const ICON_DOT: &str = egui_phosphor::regular::CIRCLE;
+pub const ICON_WARNING: &str = egui_phosphor::regular::WARNING;
+pub const ICON_INFO: &str = egui_phosphor::regular::INFO;
+pub const ICON_MONITOR: &str = egui_phosphor::regular::MONITOR;
+pub const ICON_DARK_MODE: &str = egui_phosphor::regular::MOON;
+pub const ICON_LIGHT_MODE: &str = egui_phosphor::regular::SUN;
+pub const ICON_SLIDESHOW: &str = egui_phosphor::regular::SLIDESHOW;
+
+// ---------------------------------------------------------------------------
 // Color Palette — Light Theme (Zinc / Vercel)
 // ---------------------------------------------------------------------------
 
@@ -98,9 +120,25 @@ pub const SPACING_SM: f32 = 8.0;
 pub const SPACING_MD: f32 = 12.0;
 pub const SPACING_LG: f32 = 16.0;
 pub const SPACING_XL: f32 = 24.0;
+pub const SPACING_2XL: f32 = 40.0;
+pub const SPACING_3XL: f32 = 48.0;
 
 pub const RADIUS_SM: f32 = 4.0;
 pub const RADIUS_MD: f32 = 6.0;
+pub const RADIUS_LG: f32 = 8.0;
+pub const RADIUS_XL: f32 = 12.0;
+
+// ---------------------------------------------------------------------------
+// Semantic background colors
+// ---------------------------------------------------------------------------
+
+pub const BG_SUCCESS: Color32 = Color32::from_rgb(240, 253, 244);
+pub const BG_WARNING: Color32 = Color32::from_rgb(255, 251, 235);
+pub const BG_ERROR: Color32 = Color32::from_rgb(254, 242, 242);
+
+pub const BG_SUCCESS_DARK: Color32 = Color32::from_rgb(20, 83, 45);
+pub const BG_WARNING_DARK: Color32 = Color32::from_rgb(113, 63, 18);
+pub const BG_ERROR_DARK: Color32 = Color32::from_rgb(127, 29, 29);
 
 // ---------------------------------------------------------------------------
 // Component Sizing
@@ -109,7 +147,16 @@ pub const RADIUS_MD: f32 = 6.0;
 pub const CARD_WIDTH: f32 = 240.0;
 pub const MONITOR_CARD_WIDTH: f32 = 360.0;
 pub const THUMBNAIL_SIZE: egui::Vec2 = egui::vec2(240.0, 135.0);
-pub const SIDEBAR_WIDTH: f32 = 48.0;
+pub const SIDEBAR_WIDTH: f32 = 200.0;
+pub const SIDEBAR_EXPANDED_WIDTH: f32 = 200.0;
+pub const SIDEBAR_COLLAPSED_WIDTH: f32 = 48.0;
+pub const NAV_ITEM_HEIGHT: f32 = 44.0;
+
+// ---------------------------------------------------------------------------
+// Layout constants
+// ---------------------------------------------------------------------------
+
+pub const SLIDESHOW_DEFAULT_INTERVAL_SECS: f32 = 300.0;
 
 // ---------------------------------------------------------------------------
 // Elevation helpers
@@ -298,6 +345,7 @@ pub fn section_label(ui: &mut egui::Ui, text: &str) {
 
 pub fn empty_state(
     ui: &mut egui::Ui,
+    icon: &str,
     title: &str,
     description: &str,
     add_extra: impl FnOnce(&mut egui::Ui),
@@ -306,6 +354,8 @@ pub fn empty_state(
         ui.set_width(ui.available_width());
         ui.vertical_centered(|ui| {
             ui.add_space(SPACING_XL);
+            ui.label(egui::RichText::new(icon).size(32.0).color(TEXT_MUTED));
+            ui.add_space(SPACING_SM);
             ui.label(
                 egui::RichText::new(title)
                     .size(FONT_SECTION_HEADER)
@@ -329,7 +379,7 @@ pub fn empty_state(
 // ---------------------------------------------------------------------------
 
 pub fn connection_dot(ui: &mut egui::Ui, color: Color32) {
-    ui.colored_label(color, "\u{25CF}");
+    ui.colored_label(color, ICON_DOT);
 }
 
 // ---------------------------------------------------------------------------
@@ -373,6 +423,30 @@ pub fn file_uri(path: &std::path::Path) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Font ID helpers
+// ---------------------------------------------------------------------------
+
+pub fn font_page_title() -> egui::FontId {
+    egui::FontId::proportional(FONT_WINDOW_TITLE)
+}
+
+pub fn font_section() -> egui::FontId {
+    egui::FontId::proportional(FONT_SECTION_HEADER)
+}
+
+pub fn font_body() -> egui::FontId {
+    egui::FontId::proportional(FONT_BODY)
+}
+
+pub fn font_caption() -> egui::FontId {
+    egui::FontId::proportional(FONT_SECONDARY)
+}
+
+pub fn font_label() -> egui::FontId {
+    egui::FontId::proportional(FONT_LABEL)
+}
+
+// ---------------------------------------------------------------------------
 // Setup — Geist fonts + light mode Visuals
 // ---------------------------------------------------------------------------
 
@@ -406,6 +480,8 @@ pub fn setup_theme(ctx: &egui::Context) {
         .entry(FontFamily::Name("geist-medium".into()))
         .or_default()
         .push("Geist-Medium".to_owned());
+
+    egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
 
     ctx.set_fonts(fonts);
 

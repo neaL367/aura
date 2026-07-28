@@ -196,6 +196,68 @@ impl SettingsPanel {
 
                 theme::group_frame().show(ui, |ui| {
                     ui.set_width(ui.available_width());
+                    theme::section_label(ui, "SLIDESHOW");
+                    ui.add_space(theme::SPACING_SM);
+
+                    if let Some(ref config) = config_opt {
+                        let mut updated = config.clone();
+                        let mut changed = false;
+
+                        let mut enabled = updated.appearance.slideshow_interval_secs > 0;
+                        let mut interval = if enabled {
+                            updated.appearance.slideshow_interval_secs as f32
+                        } else {
+                            theme::SLIDESHOW_DEFAULT_INTERVAL_SECS
+                        };
+
+                        ui.horizontal(|ui| {
+                            ui.label("Slideshow:");
+                            let prev = enabled;
+                            ui.toggle_value(&mut enabled, "");
+                            if enabled != prev && !enabled {
+                                updated.appearance.slideshow_interval_secs = 0;
+                                changed = true;
+                            }
+                        });
+
+                        if enabled {
+                            ui.add_space(theme::SPACING_SM);
+                            ui.horizontal(|ui| {
+                                ui.set_min_width(100.0);
+                                ui.label("Interval:");
+                                ui.add_space(theme::SPACING_SM);
+                                let prev = interval;
+                                ui.add(
+                                    egui::Slider::new(&mut interval, 30.0..=3600.0)
+                                        .step_by(30.0)
+                                        .text("seconds"),
+                                );
+                                if (interval - prev).abs() > f32::EPSILON {
+                                    updated.appearance.slideshow_interval_secs = interval as u64;
+                                    changed = true;
+                                }
+                            });
+                        }
+
+                        if changed {
+                            if enabled && updated.appearance.slideshow_interval_secs == 0 {
+                                updated.appearance.slideshow_interval_secs = interval as u64;
+                            }
+                            ipc_client.send(Request::UpdateConfig { config: updated });
+                        }
+                    } else {
+                        ui.label(
+                            egui::RichText::new("Loading slideshow settings...")
+                                .size(theme::FONT_SECONDARY)
+                                .color(theme::TEXT_MUTED),
+                        );
+                    }
+                });
+
+                ui.add_space(theme::SPACING_LG);
+
+                theme::group_frame().show(ui, |ui| {
+                    ui.set_width(ui.available_width());
                     theme::section_label(ui, "DAEMON & PLATFORM INFO");
                     ui.add_space(theme::SPACING_SM);
                     ui.label(
