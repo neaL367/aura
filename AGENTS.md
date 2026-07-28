@@ -127,5 +127,3 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 - **Timeline Semaphore Synchronization**: Queue family ownership transfers between Video Decode Queue (`VIDEO_DECODE_DST`) and Graphics Queue (`SHADER_READ_ONLY`) MUST be synchronized using a Vulkan Timeline Semaphore (`SemaphoreType::TIMELINE`).
 - **Session Reset on Loop**: When stream loops or seeks occur, `vkCmdControlVideoCodingKHR` reset flags MUST be submitted to clear reference frame history.
 
-
-
