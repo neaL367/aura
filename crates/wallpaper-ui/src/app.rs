@@ -35,6 +35,7 @@ pub struct AuraApp {
     toasts: ToastManager,
     toast_rx: std::sync::mpsc::Receiver<ToastEvent>,
     dark_mode: bool,
+    sidebar_collapsed: bool,
 }
 
 impl AuraApp {
@@ -69,6 +70,7 @@ impl AuraApp {
             toasts: ToastManager::new(),
             toast_rx,
             dark_mode,
+            sidebar_collapsed: false,
         }
     }
 }
@@ -157,7 +159,11 @@ impl eframe::App for AuraApp {
                 } else {
                     0.0
                 };
-                let sidebar_w = crate::theme::SIDEBAR_WIDTH;
+                let sidebar_w = if self.sidebar_collapsed {
+                    crate::theme::SIDEBAR_COLLAPSED_WIDTH
+                } else {
+                    crate::theme::SIDEBAR_EXPANDED_WIDTH
+                };
                 let content_avail = avail
                     - sidebar_w
                     - gap
@@ -175,7 +181,7 @@ impl eframe::App for AuraApp {
                         ui.set_min_width(sidebar_w);
                         ui.set_max_width(sidebar_w);
                         ui.set_min_height(full_height);
-                        Sidebar::show(ui, &mut self.active_tab);
+                        Sidebar::show(ui, &mut self.active_tab, &mut self.sidebar_collapsed);
                     });
 
                     ui.add(egui::Separator::default().vertical());

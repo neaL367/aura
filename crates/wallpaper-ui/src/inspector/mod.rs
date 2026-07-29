@@ -91,16 +91,6 @@ impl InspectorPanel {
                             );
                         }
                         ui.add_space(theme::SPACING_SM);
-                        {
-                            let rect = ui.available_rect_before_wrap();
-                            let y = rect.top();
-                            ui.painter().hline(
-                                rect.x_range(),
-                                y,
-                                egui::Stroke::new(1.0, theme::INSPECTOR_DIVIDER),
-                            );
-                            ui.add_space(1.0);
-                        }
                         ui.add_space(theme::SPACING_MD);
 
                         let file_name = entry

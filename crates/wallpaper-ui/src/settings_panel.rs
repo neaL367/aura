@@ -164,26 +164,52 @@ impl SettingsPanel {
                         let mut changed = false;
 
                         ui.horizontal(|ui| {
-                            ui.label("Dark Mode:");
-                            ui.add_space(theme::SPACING_SM);
-                            let mut dark = updated.appearance.dark_mode;
-                            ui.toggle_value(&mut dark, "");
-                            if dark != updated.appearance.dark_mode {
-                                updated.appearance.dark_mode = dark;
-                                changed = true;
-                            }
+                            ui.label(
+                                egui::RichText::new("Dark Mode")
+                                    .size(theme::FONT_BODY)
+                                    .color(theme::TEXT_PRIMARY),
+                            );
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    let dark = updated.appearance.dark_mode;
+                                    let label = if dark { "Enabled" } else { "Disabled" };
+                                    let variant = if dark {
+                                        theme::ButtonVariant::Primary
+                                    } else {
+                                        theme::ButtonVariant::Secondary
+                                    };
+                                    if theme::button(ui, label, variant).clicked() {
+                                        updated.appearance.dark_mode = !dark;
+                                        changed = true;
+                                    }
+                                },
+                            );
                         });
 
                         ui.add_space(theme::SPACING_SM);
                         ui.horizontal(|ui| {
-                            ui.label("Auto-start with Windows:");
-                            ui.add_space(theme::SPACING_SM);
-                            let mut auto = updated.appearance.auto_start;
-                            ui.toggle_value(&mut auto, "");
-                            if auto != updated.appearance.auto_start {
-                                updated.appearance.auto_start = auto;
-                                changed = true;
-                            }
+                            ui.label(
+                                egui::RichText::new("Auto-start with Windows")
+                                    .size(theme::FONT_BODY)
+                                    .color(theme::TEXT_PRIMARY),
+                            );
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    let auto = updated.appearance.auto_start;
+                                    let label = if auto { "Enabled" } else { "Disabled" };
+                                    let variant = if auto {
+                                        theme::ButtonVariant::Primary
+                                    } else {
+                                        theme::ButtonVariant::Secondary
+                                    };
+                                    if theme::button(ui, label, variant).clicked() {
+                                        updated.appearance.auto_start = !auto;
+                                        changed = true;
+                                    }
+                                },
+                            );
                         });
 
                         if changed {
@@ -203,7 +229,7 @@ impl SettingsPanel {
                         let mut updated = config.clone();
                         let mut changed = false;
 
-                        let mut enabled = updated.appearance.slideshow_interval_secs > 0;
+                        let enabled = updated.appearance.slideshow_interval_secs > 0;
                         let mut interval = if enabled {
                             updated.appearance.slideshow_interval_secs as f32
                         } else {
@@ -211,19 +237,36 @@ impl SettingsPanel {
                         };
 
                         ui.horizontal(|ui| {
-                            ui.label("Slideshow:");
-                            let prev = enabled;
-                            ui.toggle_value(&mut enabled, "");
-                            if enabled != prev && !enabled {
-                                updated.appearance.slideshow_interval_secs = 0;
-                                changed = true;
-                            }
+                            ui.label(
+                                egui::RichText::new("Slideshow")
+                                    .size(theme::FONT_BODY)
+                                    .color(theme::TEXT_PRIMARY),
+                            );
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    let label = if enabled { "Enabled" } else { "Disabled" };
+                                    let variant = if enabled {
+                                        theme::ButtonVariant::Primary
+                                    } else {
+                                        theme::ButtonVariant::Secondary
+                                    };
+                                    if theme::button(ui, label, variant).clicked() {
+                                        if enabled {
+                                            updated.appearance.slideshow_interval_secs = 0;
+                                        } else {
+                                            updated.appearance.slideshow_interval_secs =
+                                                interval as u64;
+                                        }
+                                        changed = true;
+                                    }
+                                },
+                            );
                         });
 
                         if enabled {
                             ui.add_space(theme::SPACING_SM);
                             ui.horizontal(|ui| {
-                                ui.set_min_width(100.0);
                                 ui.label("Interval:");
                                 ui.add_space(theme::SPACING_SM);
                                 let prev = interval;
@@ -240,9 +283,6 @@ impl SettingsPanel {
                         }
 
                         if changed {
-                            if enabled && updated.appearance.slideshow_interval_secs == 0 {
-                                updated.appearance.slideshow_interval_secs = interval as u64;
-                            }
                             ipc_client.send(Request::UpdateConfig { config: updated });
                         }
                     } else {

@@ -20,6 +20,7 @@ pub fn render_fit_mode_selector(
     theme::section_label(ui, "FIT MODE");
     ui.add_space(theme::SPACING_SM);
     ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(theme::SPACING_XS, theme::SPACING_XS);
         for mode in [
             FitMode::Fill,
             FitMode::Fit,

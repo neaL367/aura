@@ -15,3 +15,5 @@ pub const ICON_MONITOR: &str = egui_phosphor::regular::MONITOR;
 pub const ICON_DARK_MODE: &str = egui_phosphor::regular::MOON;
 pub const ICON_LIGHT_MODE: &str = egui_phosphor::regular::SUN;
 pub const ICON_SLIDESHOW: &str = egui_phosphor::regular::SLIDESHOW;
+pub const ICON_COLLAPSE: &str = egui_phosphor::regular::CARET_LEFT;
+pub const ICON_EXPAND: &str = egui_phosphor::regular::CARET_RIGHT;

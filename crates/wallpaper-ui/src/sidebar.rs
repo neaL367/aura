@@ -9,32 +9,45 @@ pub enum Tab {
 pub struct Sidebar;
 
 impl Sidebar {
-    pub fn show(ui: &mut egui::Ui, active_tab: &mut Tab) {
+    pub fn show(ui: &mut egui::Ui, active_tab: &mut Tab, collapsed: &mut bool) {
         let sidebar_id = ui.make_persistent_id("aura_sidebar");
+        let target_width = if *collapsed {
+            theme::SIDEBAR_COLLAPSED_WIDTH
+        } else {
+            theme::SIDEBAR_EXPANDED_WIDTH
+        };
+
         let sidebar_frame = egui::Frame::new()
             .fill(theme::BG_SIDEBAR)
             .corner_radius(0.0)
             .stroke(egui::Stroke::NONE);
 
         sidebar_frame.show(ui, |ui| {
-            ui.set_min_width(theme::SIDEBAR_EXPANDED_WIDTH);
-            ui.set_max_width(theme::SIDEBAR_EXPANDED_WIDTH);
+            ui.set_min_width(target_width);
+            ui.set_max_width(target_width);
             ui.set_min_height(ui.available_height());
 
             ui.vertical(|ui| {
-                // Logo / wordmark area
                 ui.add_space(theme::SPACING_LG);
                 ui.vertical_centered(|ui| {
-                    ui.label(
-                        egui::RichText::new("Aura")
-                            .size(theme::FONT_WINDOW_TITLE)
-                            .strong()
-                            .color(theme::TEXT_PRIMARY),
-                    );
+                    if *collapsed {
+                        ui.label(
+                            egui::RichText::new("A")
+                                .size(theme::FONT_WINDOW_TITLE)
+                                .strong()
+                                .color(theme::TEXT_PRIMARY),
+                        );
+                    } else {
+                        ui.label(
+                            egui::RichText::new("Aura")
+                                .size(theme::FONT_WINDOW_TITLE)
+                                .strong()
+                                .color(theme::TEXT_PRIMARY),
+                        );
+                    }
                 });
                 ui.add_space(theme::SPACING_LG);
 
-                // Nav items with icon + label
                 let mut clicked = None;
 
                 if Self::nav_item(
@@ -43,6 +56,7 @@ impl Sidebar {
                     theme::ICON_GALLERY,
                     "Gallery",
                     *active_tab == Tab::Gallery,
+                    *collapsed,
                 ) {
                     clicked = Some(Tab::Gallery);
                 }
@@ -53,6 +67,7 @@ impl Sidebar {
                     theme::ICON_SETTINGS,
                     "Settings",
                     *active_tab == Tab::Settings,
+                    *collapsed,
                 ) {
                     clicked = Some(Tab::Settings);
                 }
@@ -61,24 +76,51 @@ impl Sidebar {
                     *active_tab = tab;
                 }
 
-                // Spacer + version at bottom
+                // Collapse/Expand toggle & version at bottom
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
                     ui.add_space(theme::SPACING_SM);
-                    ui.label(
-                        egui::RichText::new("v0.1.0")
-                            .size(theme::FONT_CAPTION)
-                            .color(theme::TEXT_MUTED),
-                    );
+                    let toggle_icon = if *collapsed {
+                        theme::ICON_EXPAND
+                    } else {
+                        theme::ICON_COLLAPSE
+                    };
+                    let toggle_tooltip = if *collapsed {
+                        "Expand sidebar"
+                    } else {
+                        "Collapse sidebar"
+                    };
+                    if theme::button(ui, toggle_icon, theme::ButtonVariant::Ghost)
+                        .on_hover_text(toggle_tooltip)
+                        .clicked()
+                    {
+                        *collapsed = !*collapsed;
+                    }
+
+                    if !*collapsed {
+                        ui.add_space(theme::SPACING_SM);
+                        ui.label(
+                            egui::RichText::new("v0.1.0")
+                                .size(theme::FONT_CAPTION)
+                                .color(theme::TEXT_MUTED),
+                        );
+                    }
                     ui.add_space(theme::SPACING_SM);
                 });
             });
         });
     }
 
-    fn nav_item(ui: &mut egui::Ui, id: egui::Id, icon: &str, label: &str, is_active: bool) -> bool {
+    fn nav_item(
+        ui: &mut egui::Ui,
+        id: egui::Id,
+        icon: &str,
+        label: &str,
+        is_active: bool,
+        collapsed: bool,
+    ) -> bool {
         let available = ui.available_width();
         let item_height = theme::NAV_ITEM_HEIGHT;
-        let left_margin = theme::SPACING_MD;
+        let left_margin = if collapsed { 4.0 } else { theme::SPACING_MD };
 
         let (bg, fg) = if is_active {
             (theme::BG_SIDEBAR_ACTIVE, theme::TEXT_PRIMARY)
@@ -95,7 +137,6 @@ impl Sidebar {
             bg
         };
 
-        // Active indicator bar on the left edge
         if is_active {
             let indicator = egui::Rect::from_min_size(
                 egui::pos2(rect.left(), rect.top()),
@@ -105,45 +146,57 @@ impl Sidebar {
                 .rect_filled(indicator, 0.0, theme::SIDEBAR_INDICATOR);
         }
 
-        // Background fill — rounded on right side
         let bg_rect = egui::Rect::from_min_size(
             egui::pos2(rect.left() + left_margin, rect.top()),
-            egui::vec2(available - left_margin - theme::SPACING_SM, item_height),
+            egui::vec2(
+                available - left_margin - if collapsed { 4.0 } else { theme::SPACING_SM },
+                item_height,
+            ),
         );
         ui.painter()
             .rect_filled(bg_rect, theme::RADIUS_SM, hover_bg);
 
-        // Icon
-        let icon_rect = egui::Rect::from_min_size(
-            egui::pos2(rect.left() + left_margin + theme::SPACING_SM, rect.top()),
-            egui::vec2(20.0, item_height),
-        );
-        ui.painter().text(
-            icon_rect.center(),
-            egui::Align2::CENTER_CENTER,
-            icon,
-            egui::FontId::proportional(theme::FONT_BODY),
-            fg,
-        );
+        if collapsed {
+            // Icon centered
+            ui.painter().text(
+                bg_rect.center(),
+                egui::Align2::CENTER_CENTER,
+                icon,
+                egui::FontId::proportional(theme::FONT_BODY),
+                fg,
+            );
+        } else {
+            // Icon + Label
+            let icon_rect = egui::Rect::from_min_size(
+                egui::pos2(rect.left() + left_margin + theme::SPACING_SM, rect.top()),
+                egui::vec2(20.0, item_height),
+            );
+            ui.painter().text(
+                icon_rect.center(),
+                egui::Align2::CENTER_CENTER,
+                icon,
+                egui::FontId::proportional(theme::FONT_BODY),
+                fg,
+            );
 
-        // Label
-        let label_rect = egui::Rect::from_min_size(
-            egui::pos2(
-                rect.left() + left_margin + 20.0 + theme::SPACING_SM,
-                rect.top(),
-            ),
-            egui::vec2(
-                available - left_margin - 20.0 - theme::SPACING_LG,
-                item_height,
-            ),
-        );
-        ui.painter().text(
-            label_rect.center(),
-            egui::Align2::LEFT_CENTER,
-            label,
-            theme::font_body(),
-            fg,
-        );
+            let label_rect = egui::Rect::from_min_size(
+                egui::pos2(
+                    rect.left() + left_margin + 20.0 + theme::SPACING_SM,
+                    rect.top(),
+                ),
+                egui::vec2(
+                    available - left_margin - 20.0 - theme::SPACING_LG,
+                    item_height,
+                ),
+            );
+            ui.painter().text(
+                label_rect.center(),
+                egui::Align2::LEFT_CENTER,
+                label,
+                theme::font_body(),
+                fg,
+            );
+        }
 
         ui.advance_cursor_after_rect(rect);
 
