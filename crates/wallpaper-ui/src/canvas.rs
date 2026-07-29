@@ -26,21 +26,18 @@ impl MonitorCanvas {
             return;
         }
 
-        theme::header_frame(ui).show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.horizontal(|ui| {
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new("Display Topology Canvas")
+                    .strong()
+                    .size(theme::FONT_SECTION_HEADER),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
-                    egui::RichText::new("Display Topology Canvas")
-                        .strong()
-                        .size(theme::FONT_SECTION_HEADER),
+                    egui::RichText::new(format!("{} Monitor(s)", monitors.len()))
+                        .size(theme::FONT_SECONDARY)
+                        .color(ui.visuals().weak_text_color()),
                 );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(
-                        egui::RichText::new(format!("{} Monitor(s)", monitors.len()))
-                            .size(theme::FONT_SECONDARY)
-                            .color(ui.visuals().weak_text_color()),
-                    );
-                });
             });
         });
 

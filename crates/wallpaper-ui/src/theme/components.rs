@@ -155,7 +155,7 @@ pub fn card_frame<Id: Into<egui::Id>>(
     let id = id.into();
     let dark = ui.visuals().dark_mode;
 
-    let was_hovered = ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
+    let is_hovered = ui.rect_contains_pointer(ui.min_rect());
 
     let bg = if is_selected {
         if dark {
@@ -163,7 +163,7 @@ pub fn card_frame<Id: Into<egui::Id>>(
         } else {
             BG_CARD_SELECTED
         }
-    } else if was_hovered {
+    } else if is_hovered {
         if dark {
             BG_CARD_HOVER_DARK
         } else {
@@ -182,7 +182,7 @@ pub fn card_frame<Id: Into<egui::Id>>(
                 BORDER_ACCENT
             },
         )
-    } else if was_hovered {
+    } else if is_hovered {
         Stroke::new(
             1.0,
             if dark {
@@ -218,11 +218,9 @@ pub fn card_frame<Id: Into<egui::Id>>(
     let rect = inner.response.rect;
     let response = ui.interact(rect, id, egui::Sense::click());
 
-    let is_hovered = response.hovered();
-    if is_hovered != was_hovered {
-        ui.ctx().request_repaint();
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
-    ui.ctx().data_mut(|d| d.insert_temp(id, is_hovered));
 
     response
 }

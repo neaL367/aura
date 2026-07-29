@@ -71,14 +71,11 @@ impl InspectorPanel {
                 .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
                 .show(ui, |ui| {
                     ui.vertical(|ui| {
-                        theme::header_frame(ui).show(ui, |ui| {
-                            ui.set_min_width(ui.available_width());
-                            ui.label(
-                                egui::RichText::new("Details")
-                                    .strong()
-                                    .size(theme::FONT_SECTION_HEADER),
-                            );
-                        });
+                        ui.label(
+                            egui::RichText::new("Details")
+                                .strong()
+                                .size(theme::FONT_SECTION_HEADER),
+                        );
 
                         if let Some(ref thumb) = entry.thumbnail_path {
                             let thumb_size = egui::vec2(ui.available_width(), 160.0);
