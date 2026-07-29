@@ -156,14 +156,6 @@ impl Sidebar {
             bg
         };
 
-        if is_active {
-            let indicator = egui::Rect::from_min_size(
-                egui::pos2(rect.left(), rect.top()),
-                egui::vec2(theme::SIDEBAR_INDICATOR_WIDTH, rect.height()),
-            );
-            ui.painter().rect_filled(indicator, 0.0, active_indicator);
-        }
-
         let bg_rect = egui::Rect::from_min_size(
             egui::pos2(rect.left() + left_margin, rect.top()),
             egui::vec2(
@@ -179,6 +171,18 @@ impl Sidebar {
         );
         ui.painter()
             .rect_filled(bg_rect, theme::RADIUS_SM, hover_bg);
+
+        if is_active {
+            let indicator = egui::Rect::from_min_size(
+                egui::pos2(bg_rect.left(), bg_rect.top() + theme::SPACING_XS),
+                egui::vec2(
+                    theme::SIDEBAR_INDICATOR_WIDTH,
+                    bg_rect.height() - theme::SPACING_SM,
+                ),
+            );
+            ui.painter()
+                .rect_filled(indicator, theme::RADIUS_SM, active_indicator);
+        }
 
         if collapsed {
             // Icon centered

@@ -6,7 +6,16 @@ pub fn meta_row(ui: &mut egui::Ui, label: &str, value: &str, _value_col_w: f32) 
             .size(theme::FONT_SECONDARY)
             .color(ui.visuals().weak_text_color()),
     );
-    ui.add(egui::Label::new(egui::RichText::new(value).size(theme::FONT_BODY)).wrap());
+    let is_path = label.eq_ignore_ascii_case("path");
+    let text = if is_path {
+        egui::RichText::new(value)
+            .monospace()
+            .size(theme::FONT_SECONDARY)
+    } else {
+        egui::RichText::new(value).size(theme::FONT_BODY)
+    };
+    ui.add(egui::Label::new(text).truncate())
+        .on_hover_text(value);
     ui.end_row();
 }
 
@@ -27,5 +36,14 @@ pub fn format_duration(ms: u64) -> String {
         format!("{:.1}s", ms as f64 / 1_000.0)
     } else {
         format!("{}ms", ms)
+    }
+}
+
+pub fn format_timestamp(iso_str: &str) -> String {
+    if let Some((date, time)) = iso_str.split_once('T') {
+        let time_clean = time.trim_end_matches('Z').split('.').next().unwrap_or(time);
+        format!("{} {}", date, time_clean)
+    } else {
+        iso_str.to_string()
     }
 }

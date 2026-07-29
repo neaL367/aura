@@ -276,6 +276,9 @@ impl GalleryPanel {
                     theme::badge(ui, badge_label, variant);
 
                     if entry.width > 0 && entry.height > 0 {
+                        if entry.width < 1920 || entry.height < 1080 {
+                            theme::badge(ui, "LOW RES", theme::BadgeVariant::Gif);
+                        }
                         ui.add(
                             egui::Label::new(
                                 egui::RichText::new(format!(

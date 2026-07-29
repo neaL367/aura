@@ -11,7 +11,7 @@ use aura_core::{
 use aura_ipc::protocol::WallpaperEntry;
 
 use assignment::{render_fit_mode_selector, render_monitor_assignment};
-use formatting::{format_duration, format_size, meta_row};
+use formatting::{format_duration, format_size, format_timestamp, meta_row};
 pub use placeholder::show_placeholder;
 
 use crate::ipc_client::UiIpcClient;
@@ -136,7 +136,12 @@ impl InspectorPanel {
                                     );
                                 }
                                 if !entry.scanned_at.is_empty() {
-                                    meta_row(ui, "Scanned", &entry.scanned_at, value_col_w);
+                                    meta_row(
+                                        ui,
+                                        "Scanned",
+                                        &format_timestamp(&entry.scanned_at),
+                                        value_col_w,
+                                    );
                                 }
                                 meta_row(ui, "Path", &entry.path.to_string_lossy(), value_col_w);
                             });

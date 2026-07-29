@@ -49,27 +49,29 @@ impl SettingsPanel {
                     ui.add_space(theme::SPACING_SM);
 
                     if let Some(ref config) = config_opt {
+                        let path_str = config.library.library_path.to_string_lossy();
                         ui.horizontal(|ui| {
-                            // Reserve space for Change button before path label.
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    if theme::button(ui, "Change", theme::ButtonVariant::Ghost)
+                                    if theme::button(ui, "Change", theme::ButtonVariant::Secondary)
+                                        .on_hover_text("Choose a new wallpaper library folder")
                                         .clicked()
                                         && let Some(folder) = rfd::FileDialog::new().pick_folder()
                                     {
                                         ipc_client
                                             .send(Request::SetWallpaperLibrary { path: folder });
                                     }
+                                    ui.add_space(theme::SPACING_SM);
                                     ui.add(
                                         egui::Label::new(
-                                            egui::RichText::new(
-                                                config.library.library_path.to_string_lossy(),
-                                            )
-                                            .size(theme::FONT_BODY),
+                                            egui::RichText::new(path_str.as_ref())
+                                                .monospace()
+                                                .size(theme::FONT_SECONDARY),
                                         )
                                         .truncate(),
-                                    );
+                                    )
+                                    .on_hover_text(path_str.as_ref());
                                 },
                             );
                         });
@@ -199,16 +201,38 @@ impl SettingsPanel {
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
                                     let dark = updated.appearance.dark_mode;
-                                    let label = if dark { "Enabled" } else { "Disabled" };
-                                    let variant = if dark {
-                                        theme::ButtonVariant::Primary
-                                    } else {
-                                        theme::ButtonVariant::Secondary
-                                    };
-                                    if theme::button(ui, label, variant).clicked() {
-                                        updated.appearance.dark_mode = !dark;
-                                        changed = true;
-                                    }
+                                    theme::segmented_container(ui, |ui| {
+                                        ui.horizontal(|ui| {
+                                            if theme::button(
+                                                ui,
+                                                "Enabled",
+                                                if dark {
+                                                    theme::ButtonVariant::Primary
+                                                } else {
+                                                    theme::ButtonVariant::Ghost
+                                                },
+                                            )
+                                            .clicked()
+                                            {
+                                                updated.appearance.dark_mode = true;
+                                                changed = true;
+                                            }
+                                            if theme::button(
+                                                ui,
+                                                "Disabled",
+                                                if !dark {
+                                                    theme::ButtonVariant::Primary
+                                                } else {
+                                                    theme::ButtonVariant::Ghost
+                                                },
+                                            )
+                                            .clicked()
+                                            {
+                                                updated.appearance.dark_mode = false;
+                                                changed = true;
+                                            }
+                                        });
+                                    });
                                 },
                             );
                         });
@@ -223,16 +247,38 @@ impl SettingsPanel {
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
                                     let auto = updated.appearance.auto_start;
-                                    let label = if auto { "Enabled" } else { "Disabled" };
-                                    let variant = if auto {
-                                        theme::ButtonVariant::Primary
-                                    } else {
-                                        theme::ButtonVariant::Secondary
-                                    };
-                                    if theme::button(ui, label, variant).clicked() {
-                                        updated.appearance.auto_start = !auto;
-                                        changed = true;
-                                    }
+                                    theme::segmented_container(ui, |ui| {
+                                        ui.horizontal(|ui| {
+                                            if theme::button(
+                                                ui,
+                                                "Enabled",
+                                                if auto {
+                                                    theme::ButtonVariant::Primary
+                                                } else {
+                                                    theme::ButtonVariant::Ghost
+                                                },
+                                            )
+                                            .clicked()
+                                            {
+                                                updated.appearance.auto_start = true;
+                                                changed = true;
+                                            }
+                                            if theme::button(
+                                                ui,
+                                                "Disabled",
+                                                if !auto {
+                                                    theme::ButtonVariant::Primary
+                                                } else {
+                                                    theme::ButtonVariant::Ghost
+                                                },
+                                            )
+                                            .clicked()
+                                            {
+                                                updated.appearance.auto_start = false;
+                                                changed = true;
+                                            }
+                                        });
+                                    });
                                 },
                             );
                         });
@@ -266,21 +312,41 @@ impl SettingsPanel {
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    let label = if enabled { "Enabled" } else { "Disabled" };
-                                    let variant = if enabled {
-                                        theme::ButtonVariant::Primary
-                                    } else {
-                                        theme::ButtonVariant::Secondary
-                                    };
-                                    if theme::button(ui, label, variant).clicked() {
-                                        if enabled {
-                                            updated.appearance.slideshow_interval_secs = 0;
-                                        } else {
-                                            updated.appearance.slideshow_interval_secs =
-                                                interval as u64;
-                                        }
-                                        changed = true;
-                                    }
+                                    theme::segmented_container(ui, |ui| {
+                                        ui.horizontal(|ui| {
+                                            if theme::button(
+                                                ui,
+                                                "Enabled",
+                                                if enabled {
+                                                    theme::ButtonVariant::Primary
+                                                } else {
+                                                    theme::ButtonVariant::Ghost
+                                                },
+                                            )
+                                            .clicked()
+                                                && !enabled
+                                            {
+                                                updated.appearance.slideshow_interval_secs =
+                                                    interval as u64;
+                                                changed = true;
+                                            }
+                                            if theme::button(
+                                                ui,
+                                                "Disabled",
+                                                if !enabled {
+                                                    theme::ButtonVariant::Primary
+                                                } else {
+                                                    theme::ButtonVariant::Ghost
+                                                },
+                                            )
+                                            .clicked()
+                                                && enabled
+                                            {
+                                                updated.appearance.slideshow_interval_secs = 0;
+                                                changed = true;
+                                            }
+                                        });
+                                    });
                                 },
                             );
                         });
@@ -291,9 +357,10 @@ impl SettingsPanel {
                                 ui.label(egui::RichText::new("Interval").size(theme::FONT_BODY));
                                 ui.add_space(theme::SPACING_SM);
                                 let prev = interval;
-                                // Slider without suffix text to avoid checkbox widget appearance.
                                 ui.add(
-                                    egui::Slider::new(&mut interval, 30.0..=3600.0).step_by(30.0),
+                                    egui::Slider::new(&mut interval, 30.0..=3600.0)
+                                        .step_by(30.0)
+                                        .trailing_fill(true),
                                 );
                                 ui.label(
                                     egui::RichText::new("seconds")
@@ -327,11 +394,13 @@ impl SettingsPanel {
                     ui.add_space(theme::SPACING_SM);
                     ui.label(
                         egui::RichText::new("IPC Pipe: \\\\.\\pipe\\aura-wallpaperd")
+                            .monospace()
                             .size(theme::FONT_SECONDARY)
                             .color(ui.visuals().weak_text_color()),
                     );
                     ui.label(
                         egui::RichText::new("Platform Target: Windows 11 (WorkerW + Vulkan 1.4)")
+                            .monospace()
                             .size(theme::FONT_SECONDARY)
                             .color(ui.visuals().weak_text_color()),
                     );

@@ -75,9 +75,11 @@ impl MonitorCanvas {
         let box_w = ((rect.width() - (padding * (count + 1.0))) / count).clamp(120.0, 220.0);
         let box_h = (box_w * 9.0 / 16.0).clamp(70.0, 110.0);
         let start_y = rect.top() + (rect.height() - box_h) / 2.0;
+        let total_boxes_w = count * box_w + (count - 1.0) * padding;
+        let base_x = rect.left() + (rect.width() - total_boxes_w).max(0.0) / 2.0;
 
         for (i, mon) in monitors.iter().enumerate() {
-            let start_x = rect.left() + padding + i as f32 * (box_w + padding);
+            let start_x = base_x + i as f32 * (box_w + padding);
             let mon_rect =
                 egui::Rect::from_min_size(egui::pos2(start_x, start_y), egui::vec2(box_w, box_h));
 
