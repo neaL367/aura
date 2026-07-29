@@ -43,7 +43,7 @@ impl SettingsPanel {
         egui::ScrollArea::vertical()
             .id_salt("settings_scroll")
             .show(ui, |ui| {
-                theme::group_frame().show(ui, |ui| {
+                theme::group_frame(ui).show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     theme::section_label(ui, "WALLPAPER LIBRARY");
                     ui.add_space(theme::SPACING_SM);
@@ -92,7 +92,7 @@ impl SettingsPanel {
 
                 ui.add_space(theme::SPACING_LG);
 
-                theme::group_frame().show(ui, |ui| {
+                theme::group_frame(ui).show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     theme::section_label(ui, "PERFORMANCE & POWER");
                     ui.add_space(theme::SPACING_SM);
@@ -164,7 +164,7 @@ impl SettingsPanel {
 
                 ui.add_space(theme::SPACING_LG);
 
-                theme::group_frame().show(ui, |ui| {
+                theme::group_frame(ui).show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     theme::section_label(ui, "APPEARANCE");
                     ui.add_space(theme::SPACING_SM);
@@ -230,7 +230,7 @@ impl SettingsPanel {
 
                 ui.add_space(theme::SPACING_LG);
 
-                theme::group_frame().show(ui, |ui| {
+                theme::group_frame(ui).show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     theme::section_label(ui, "SLIDESHOW");
                     ui.add_space(theme::SPACING_SM);
@@ -310,7 +310,7 @@ impl SettingsPanel {
 
                 ui.add_space(theme::SPACING_LG);
 
-                theme::group_frame().show(ui, |ui| {
+                theme::group_frame(ui).show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     theme::section_label(ui, "DAEMON & PLATFORM INFO");
                     ui.add_space(theme::SPACING_SM);

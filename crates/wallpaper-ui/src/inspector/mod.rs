@@ -57,7 +57,7 @@ impl InspectorPanel {
             self.prev_entry_id = Some(entry.id);
         }
         let frame = egui::Frame::new()
-            .fill(theme::BG_INSPECTOR)
+            .fill(ui.visuals().window_fill)
             .corner_radius(0.0)
             .stroke(egui::Stroke::NONE)
             .inner_margin(egui::Margin::same(theme::SPACING_LG as i8));
@@ -71,7 +71,7 @@ impl InspectorPanel {
                 .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
                 .show(ui, |ui| {
                     ui.vertical(|ui| {
-                        theme::header_frame().show(ui, |ui| {
+                        theme::header_frame(ui).show(ui, |ui| {
                             ui.set_min_width(ui.available_width());
                             ui.label(
                                 egui::RichText::new("Details")

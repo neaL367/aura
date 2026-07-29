@@ -2,7 +2,7 @@ use crate::theme;
 
 pub fn show_placeholder(ui: &mut egui::Ui) {
     let frame = egui::Frame::new()
-        .fill(theme::BG_INSPECTOR)
+        .fill(ui.visuals().window_fill)
         .corner_radius(0.0)
         .stroke(egui::Stroke::NONE)
         .inner_margin(egui::Margin::same(theme::SPACING_LG as i8));

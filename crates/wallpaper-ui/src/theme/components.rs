@@ -30,18 +30,59 @@ pub enum ButtonVariant {
 }
 
 pub fn button(ui: &mut egui::Ui, label: &str, variant: ButtonVariant) -> egui::Response {
+    let dark = ui.visuals().dark_mode;
     let (bg, hover_bg, fg, stroke) = match variant {
-        ButtonVariant::Primary => (ACCENT_PRIMARY, ACCENT_HOVER, TEXT_ON_DARK, Stroke::NONE),
+        ButtonVariant::Primary => (
+            if dark {
+                ACCENT_PRIMARY_DARK
+            } else {
+                ACCENT_PRIMARY
+            },
+            if dark {
+                ACCENT_HOVER_DARK
+            } else {
+                ACCENT_HOVER
+            },
+            if dark {
+                TEXT_ON_DARK_DARK
+            } else {
+                TEXT_ON_DARK
+            },
+            Stroke::NONE,
+        ),
         ButtonVariant::Secondary => (
-            BG_CARD,
-            BG_CARD_HOVER,
-            TEXT_PRIMARY,
-            Stroke::new(1.0, BORDER_SUBTLE),
+            if dark { BG_CARD_DARK } else { BG_CARD },
+            if dark {
+                BG_CARD_HOVER_DARK
+            } else {
+                BG_CARD_HOVER
+            },
+            if dark {
+                TEXT_PRIMARY_DARK
+            } else {
+                TEXT_PRIMARY
+            },
+            Stroke::new(
+                1.0,
+                if dark {
+                    BORDER_SUBTLE_DARK
+                } else {
+                    BORDER_SUBTLE
+                },
+            ),
         ),
         ButtonVariant::Ghost => (
             Color32::TRANSPARENT,
-            BG_CARD_HOVER,
-            TEXT_PRIMARY,
+            if dark {
+                BG_CARD_HOVER_DARK
+            } else {
+                BG_CARD_HOVER
+            },
+            if dark {
+                TEXT_PRIMARY_DARK
+            } else {
+                TEXT_PRIMARY
+            },
             Stroke::NONE,
         ),
     };
@@ -113,23 +154,53 @@ pub fn card_frame<Id: Into<egui::Id>>(
     add_contents: impl FnOnce(&mut egui::Ui),
 ) -> egui::Response {
     let id = id.into();
+    let dark = ui.visuals().dark_mode;
 
     let was_hovered = ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
 
     let bg = if is_selected {
-        BG_CARD_SELECTED
+        if dark {
+            BG_CARD_SELECTED_DARK
+        } else {
+            BG_CARD_SELECTED
+        }
     } else if was_hovered {
-        BG_CARD_HOVER
+        if dark {
+            BG_CARD_HOVER_DARK
+        } else {
+            BG_CARD_HOVER
+        }
     } else {
-        BG_CARD
+        if dark { BG_CARD_DARK } else { BG_CARD }
     };
 
     let border_stroke = if is_selected {
-        Stroke::new(1.5, BORDER_ACCENT)
+        Stroke::new(
+            1.5,
+            if dark {
+                BORDER_ACCENT_DARK
+            } else {
+                BORDER_ACCENT
+            },
+        )
     } else if was_hovered {
-        Stroke::new(1.0, BORDER_STRONG)
+        Stroke::new(
+            1.0,
+            if dark {
+                BORDER_STRONG_DARK
+            } else {
+                BORDER_STRONG
+            },
+        )
     } else {
-        Stroke::new(1.0, BORDER_SUBTLE)
+        Stroke::new(
+            1.0,
+            if dark {
+                BORDER_SUBTLE_DARK
+            } else {
+                BORDER_SUBTLE
+            },
+        )
     };
 
     let shadow = match elevation {
@@ -158,11 +229,12 @@ pub fn card_frame<Id: Into<egui::Id>>(
 }
 
 pub fn section_label(ui: &mut egui::Ui, text: &str) {
+    let dark = ui.visuals().dark_mode;
     ui.label(
         egui::RichText::new(text)
             .size(FONT_LABEL)
             .strong()
-            .color(TEXT_MUTED),
+            .color(if dark { TEXT_MUTED_DARK } else { TEXT_MUTED }),
     );
 }
 
@@ -173,23 +245,25 @@ pub fn empty_state(
     description: &str,
     add_extra: impl FnOnce(&mut egui::Ui),
 ) {
-    group_frame().show(ui, |ui| {
+    let dark = ui.visuals().dark_mode;
+    let muted = if dark { TEXT_MUTED_DARK } else { TEXT_MUTED };
+    group_frame(ui).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.vertical_centered(|ui| {
             ui.add_space(SPACING_XL);
-            ui.label(egui::RichText::new(icon).size(32.0).color(TEXT_MUTED));
+            ui.label(egui::RichText::new(icon).size(32.0).color(muted));
             ui.add_space(SPACING_SM);
             ui.label(
                 egui::RichText::new(title)
                     .size(FONT_SECTION_HEADER)
                     .strong()
-                    .color(TEXT_MUTED),
+                    .color(muted),
             );
             ui.add_space(SPACING_SM);
             ui.label(
                 egui::RichText::new(description)
                     .size(FONT_SECONDARY)
-                    .color(TEXT_MUTED),
+                    .color(muted),
             );
             add_extra(ui);
             ui.add_space(SPACING_XL);
@@ -201,17 +275,33 @@ pub fn connection_dot(ui: &mut egui::Ui, color: Color32) {
     ui.colored_label(color, ICON_DOT);
 }
 
-pub fn header_frame() -> Frame {
+pub fn header_frame(ui: &egui::Ui) -> Frame {
+    let dark = ui.visuals().dark_mode;
     Frame::new()
-        .fill(BG_CARD)
-        .stroke(Stroke::new(1.0, BORDER_SUBTLE))
+        .fill(if dark { BG_CARD_DARK } else { BG_CARD })
+        .stroke(Stroke::new(
+            1.0,
+            if dark {
+                BORDER_SUBTLE_DARK
+            } else {
+                BORDER_SUBTLE
+            },
+        ))
         .inner_margin(Margin::symmetric(SPACING_LG as i8, SPACING_MD as i8))
 }
 
-pub fn group_frame() -> Frame {
+pub fn group_frame(ui: &egui::Ui) -> Frame {
+    let dark = ui.visuals().dark_mode;
     Frame::new()
-        .fill(BG_CARD)
-        .stroke(Stroke::new(1.0, BORDER_SUBTLE))
+        .fill(if dark { BG_CARD_DARK } else { BG_CARD })
+        .stroke(Stroke::new(
+            1.0,
+            if dark {
+                BORDER_SUBTLE_DARK
+            } else {
+                BORDER_SUBTLE
+            },
+        ))
         .corner_radius(RADIUS_MD)
         .inner_margin(Margin::same(SPACING_LG as i8))
 }

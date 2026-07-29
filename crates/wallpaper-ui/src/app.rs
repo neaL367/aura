@@ -79,6 +79,17 @@ impl eframe::App for AuraApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let prev_tab = self.active_tab;
 
+        if let Some(ref config) = self.ipc_client.config()
+            && config.appearance.dark_mode != self.dark_mode
+        {
+            self.dark_mode = config.appearance.dark_mode;
+            if self.dark_mode {
+                crate::theme::setup_dark_theme(ui.ctx());
+            } else {
+                crate::theme::setup_theme(ui.ctx());
+            }
+        }
+
         if ui.input(|i| {
             i.pointer.any_click()
                 || i.pointer.any_down()
@@ -89,25 +100,16 @@ impl eframe::App for AuraApp {
             self.trimmed_since_idle = false;
         }
 
-        if let Some(cfg) = self.ipc_client.config()
-            && cfg.appearance.dark_mode != self.dark_mode
-        {
-            self.dark_mode = cfg.appearance.dark_mode;
-            if self.dark_mode {
-                crate::theme::setup_dark_theme(ui.ctx());
-            } else {
-                crate::theme::setup_theme(ui.ctx());
-            }
-        }
-
         // --- Bottom: Status Bar ---
         egui::Panel::bottom("status_bar")
-            .frame(egui::Frame::new().fill(crate::theme::BG_CARD).inner_margin(
-                egui::Margin::symmetric(
-                    crate::theme::SPACING_SM as i8,
-                    crate::theme::SPACING_XS as i8,
-                ),
-            ))
+            .frame(
+                egui::Frame::new()
+                    .fill(ui.visuals().window_fill)
+                    .inner_margin(egui::Margin::symmetric(
+                        crate::theme::SPACING_SM as i8,
+                        crate::theme::SPACING_XS as i8,
+                    )),
+            )
             .show(ui, |ui| {
                 self.status.show(
                     ui,
@@ -150,7 +152,7 @@ impl eframe::App for AuraApp {
 
         // --- Main content area ---
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(crate::theme::BG_APP))
+            .frame(egui::Frame::new().fill(ui.visuals().panel_fill))
             .show(ui, |ui| {
                 let full_height = ui.available_height();
                 let gap = crate::theme::SPACING_SM;
@@ -196,7 +198,7 @@ impl eframe::App for AuraApp {
                         ui.set_max_width(content_avail);
                         ui.set_min_height(full_height);
                         let content_frame = egui::Frame::new()
-                            .fill(crate::theme::CONTENT_CARD)
+                            .fill(ui.visuals().window_fill)
                             .corner_radius(0.0)
                             .stroke(egui::Stroke::NONE)
                             .inner_margin(egui::Margin::symmetric(

@@ -26,7 +26,7 @@ impl MonitorCanvas {
             return;
         }
 
-        theme::header_frame().show(ui, |ui| {
+        theme::header_frame(ui).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.label(
@@ -55,9 +55,30 @@ impl MonitorCanvas {
             egui::Sense::hover(),
         );
 
+        let dark = ui.visuals().dark_mode;
+        let canvas_bg = if dark {
+            theme::BG_CARD_DARK
+        } else {
+            theme::BG_INSPECTOR
+        };
+        let box_bg = if dark {
+            theme::BG_CARD_DARK
+        } else {
+            theme::BG_CARD
+        };
+        let text_primary = if dark {
+            theme::TEXT_PRIMARY_DARK
+        } else {
+            theme::TEXT_PRIMARY
+        };
+        let text_muted = if dark {
+            theme::TEXT_MUTED_DARK
+        } else {
+            theme::TEXT_MUTED
+        };
+
         // Draw Canvas Background Frame
-        ui.painter()
-            .rect_filled(rect, theme::RADIUS_MD, theme::BG_INSPECTOR);
+        ui.painter().rect_filled(rect, theme::RADIUS_MD, canvas_bg);
 
         // Render Monitor boxes
         let padding = 12.0;
@@ -75,15 +96,20 @@ impl MonitorCanvas {
             let is_assigned = assigned.is_some();
 
             // Box Fill & Stroke
-            let fill_color = theme::BG_CARD;
             let stroke = if is_assigned {
                 egui::Stroke::new(1.5, theme::STATUS_CONNECTED)
             } else {
-                egui::Stroke::new(1.0, theme::BORDER_SUBTLE)
+                egui::Stroke::new(
+                    1.0,
+                    if dark {
+                        theme::BORDER_SUBTLE_DARK
+                    } else {
+                        theme::BORDER_SUBTLE
+                    },
+                )
             };
 
-            ui.painter()
-                .rect_filled(mon_rect, theme::RADIUS_MD, fill_color);
+            ui.painter().rect_filled(mon_rect, theme::RADIUS_MD, box_bg);
             ui.painter().rect_stroke(
                 mon_rect,
                 theme::RADIUS_MD,
@@ -102,13 +128,13 @@ impl MonitorCanvas {
                 egui::RichText::new(&mon.name)
                     .strong()
                     .size(theme::FONT_CARD_TITLE)
-                    .color(theme::TEXT_PRIMARY),
+                    .color(text_primary),
             );
 
             child_ui.label(
                 egui::RichText::new(format!("Display #{}", i + 1))
                     .size(theme::FONT_CAPTION)
-                    .color(theme::TEXT_MUTED),
+                    .color(text_muted),
             );
 
             if let Some(a) = assigned {
@@ -122,7 +148,7 @@ impl MonitorCanvas {
                     ui.label(
                         egui::RichText::new(format!("Fit: {}", a.fit_mode))
                             .size(theme::FONT_CAPTION)
-                            .color(theme::TEXT_PRIMARY),
+                            .color(text_primary),
                     );
                 });
             }

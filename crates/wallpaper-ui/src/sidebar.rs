@@ -18,7 +18,7 @@ impl Sidebar {
         };
 
         let sidebar_frame = egui::Frame::new()
-            .fill(theme::BG_SIDEBAR)
+            .fill(ui.visuals().window_fill)
             .corner_radius(0.0)
             .stroke(egui::Stroke::NONE);
 
@@ -122,17 +122,48 @@ impl Sidebar {
         let item_height = theme::NAV_ITEM_HEIGHT;
         let left_margin = if collapsed { 4.0 } else { theme::SPACING_MD };
 
-        let (bg, fg) = if is_active {
-            (theme::BG_SIDEBAR_ACTIVE, theme::TEXT_PRIMARY)
+        let dark = ui.visuals().dark_mode;
+        let active_bg = if dark {
+            theme::BG_CARD_SELECTED_DARK
         } else {
-            (theme::BG_SIDEBAR, theme::TEXT_MUTED)
+            theme::BG_SIDEBAR_ACTIVE
+        };
+        let hover_bg_color = if dark {
+            theme::BG_CARD_HOVER_DARK
+        } else {
+            theme::BG_SIDEBAR_HOVER
+        };
+        let active_indicator = if dark {
+            theme::BORDER_ACCENT_DARK
+        } else {
+            theme::SIDEBAR_INDICATOR
+        };
+
+        let (bg, fg) = if is_active {
+            (
+                active_bg,
+                if dark {
+                    theme::TEXT_PRIMARY_DARK
+                } else {
+                    theme::TEXT_PRIMARY
+                },
+            )
+        } else {
+            (
+                ui.visuals().window_fill,
+                if dark {
+                    theme::TEXT_MUTED_DARK
+                } else {
+                    theme::TEXT_MUTED
+                },
+            )
         };
 
         let rect = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(available, item_height));
 
         let hovered = ui.rect_contains_pointer(rect);
         let hover_bg = if hovered && !is_active {
-            theme::BG_SIDEBAR_HOVER
+            hover_bg_color
         } else {
             bg
         };
@@ -142,8 +173,7 @@ impl Sidebar {
                 egui::pos2(rect.left(), rect.top()),
                 egui::vec2(3.0, rect.height()),
             );
-            ui.painter()
-                .rect_filled(indicator, 0.0, theme::SIDEBAR_INDICATOR);
+            ui.painter().rect_filled(indicator, 0.0, active_indicator);
         }
 
         let bg_rect = egui::Rect::from_min_size(
