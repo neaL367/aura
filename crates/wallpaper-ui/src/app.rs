@@ -115,32 +115,36 @@ impl eframe::App for AuraApp {
                     self.ipc_client.last_error().as_deref(),
                 );
 
-                // Pause/Resume toggle
+                // Pause/Resume toggle on right side of status bar
                 if let crate::ipc_client::ConnectionStatus::Connected(ref s) =
                     self.ipc_client.status()
                 {
-                    ui.add_space(crate::theme::SPACING_SM);
-                    ui.separator();
-                    ui.add_space(crate::theme::SPACING_SM);
-                    let (label, variant) = if s.is_paused {
-                        (
-                            crate::theme::ICON_RESUME,
-                            crate::theme::ButtonVariant::Primary,
-                        )
-                    } else {
-                        (
-                            crate::theme::ICON_PAUSE,
-                            crate::theme::ButtonVariant::Secondary,
-                        )
-                    };
-                    if crate::theme::button(ui, label, variant).clicked() {
-                        use aura_ipc::protocol::Request;
-                        if s.is_paused {
-                            self.ipc_client.send(Request::ResumeAll);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let (icon, tooltip, variant) = if s.is_paused {
+                            (
+                                crate::theme::ICON_RESUME,
+                                "Resume presentation",
+                                crate::theme::ButtonVariant::Primary,
+                            )
                         } else {
-                            self.ipc_client.send(Request::PauseAll);
+                            (
+                                crate::theme::ICON_PAUSE,
+                                "Pause presentation",
+                                crate::theme::ButtonVariant::Secondary,
+                            )
+                        };
+                        if crate::theme::button(ui, icon, variant)
+                            .on_hover_text(tooltip)
+                            .clicked()
+                        {
+                            use aura_ipc::protocol::Request;
+                            if s.is_paused {
+                                self.ipc_client.send(Request::ResumeAll);
+                            } else {
+                                self.ipc_client.send(Request::PauseAll);
+                            }
                         }
-                    }
+                    });
                 }
             });
 

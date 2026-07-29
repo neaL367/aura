@@ -62,6 +62,7 @@ pub fn setup_theme(ctx: &egui::Context) {
     let mut visuals = Visuals::light();
     visuals.panel_fill = BG_APP;
     visuals.window_fill = BG_CARD;
+    visuals.extreme_bg_color = egui::Color32::from_rgb(255, 255, 255);
     visuals.override_text_color = Some(TEXT_PRIMARY);
 
     visuals.widgets.noninteractive.bg_fill = BG_CARD;
@@ -99,6 +100,7 @@ pub fn setup_dark_theme(ctx: &egui::Context) {
     let mut visuals = Visuals::dark();
     visuals.panel_fill = BG_APP_DARK;
     visuals.window_fill = BG_CARD_DARK;
+    visuals.extreme_bg_color = egui::Color32::from_rgb(18, 18, 20);
     visuals.override_text_color = Some(TEXT_PRIMARY_DARK);
 
     visuals.widgets.noninteractive.bg_fill = BG_CARD_DARK;

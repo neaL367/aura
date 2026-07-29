@@ -102,7 +102,12 @@ impl SettingsPanel {
                         let mut changed = false;
 
                         ui.horizontal(|ui| {
-                            ui.label("Target Frame Rate:");
+                            ui.label(
+                                egui::RichText::new("Target Frame Rate")
+                                    .size(theme::FONT_BODY)
+                                    .color(theme::TEXT_PRIMARY),
+                            );
+                            ui.add_space(theme::SPACING_SM);
                             let current_fps = updated_config.performance.target_fps;
                             for fps in [30, 60, 120] {
                                 let variant = if current_fps == fps {
@@ -119,7 +124,12 @@ impl SettingsPanel {
 
                         ui.add_space(theme::SPACING_SM);
                         ui.horizontal(|ui| {
-                            ui.label("Default Power Profile:");
+                            ui.label(
+                                egui::RichText::new("Default Power Profile")
+                                    .size(theme::FONT_BODY)
+                                    .color(theme::TEXT_PRIMARY),
+                            );
+                            ui.add_space(theme::SPACING_SM);
                             let current_profile = updated_config.performance.default_profile;
                             for (name, profile) in [
                                 ("Balanced", PerformanceProfile::Balanced),
@@ -267,7 +277,11 @@ impl SettingsPanel {
                         if enabled {
                             ui.add_space(theme::SPACING_SM);
                             ui.horizontal(|ui| {
-                                ui.label("Interval:");
+                                ui.label(
+                                    egui::RichText::new("Interval")
+                                        .size(theme::FONT_BODY)
+                                        .color(theme::TEXT_PRIMARY),
+                                );
                                 ui.add_space(theme::SPACING_SM);
                                 let prev = interval;
                                 ui.add(

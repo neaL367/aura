@@ -75,27 +75,22 @@ impl MonitorCanvas {
             let is_assigned = assigned.is_some();
 
             // Box Fill & Stroke
-            let fill_color = if is_assigned {
-                theme::ACCENT_PRIMARY.linear_multiply(0.15)
-            } else {
-                theme::BG_CARD
-            };
+            let fill_color = theme::BG_CARD;
             let stroke = if is_assigned {
-                egui::Stroke::new(1.5, theme::ACCENT_PRIMARY)
+                egui::Stroke::new(1.5, theme::STATUS_CONNECTED)
             } else {
                 egui::Stroke::new(1.0, theme::BORDER_SUBTLE)
             };
 
             ui.painter()
-                .rect_filled(mon_rect, theme::RADIUS_SM, fill_color);
+                .rect_filled(mon_rect, theme::RADIUS_MD, fill_color);
             ui.painter().rect_stroke(
                 mon_rect,
-                theme::RADIUS_SM,
+                theme::RADIUS_MD,
                 stroke,
                 egui::StrokeKind::Outside,
             );
 
-            // Render Monitor Label & Subtitle inside Box
             let child_ui = &mut ui.new_child(
                 egui::UiBuilder::new()
                     .max_rect(mon_rect)
@@ -118,11 +113,18 @@ impl MonitorCanvas {
 
             if let Some(a) = assigned {
                 child_ui.add_space(theme::SPACING_XS);
-                child_ui.label(
-                    egui::RichText::new(format!("Fit: {}", a.fit_mode))
-                        .size(theme::FONT_CAPTION)
-                        .color(theme::ACCENT_PRIMARY),
-                );
+                child_ui.horizontal_centered(|ui| {
+                    ui.label(
+                        egui::RichText::new(theme::ICON_DOT)
+                            .size(10.0)
+                            .color(theme::STATUS_CONNECTED),
+                    );
+                    ui.label(
+                        egui::RichText::new(format!("Fit: {}", a.fit_mode))
+                            .size(theme::FONT_CAPTION)
+                            .color(theme::TEXT_PRIMARY),
+                    );
+                });
             }
 
             // Quick Assign Button on click
