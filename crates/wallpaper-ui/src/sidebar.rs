@@ -184,46 +184,25 @@ impl Sidebar {
                 .rect_filled(indicator, theme::RADIUS_SM, active_indicator);
         }
 
-        if collapsed {
-            // Icon centered
-            ui.painter().text(
-                bg_rect.center(),
-                egui::Align2::CENTER_CENTER,
-                icon,
-                egui::FontId::proportional(theme::FONT_BODY),
-                fg,
-            );
-        } else {
-            // Icon + Label
-            let icon_rect = egui::Rect::from_min_size(
-                egui::pos2(rect.left() + left_margin + theme::SPACING_SM, rect.top()),
-                egui::vec2(theme::NAV_ICON_WIDTH, item_height),
-            );
-            ui.painter().text(
-                icon_rect.center(),
-                egui::Align2::CENTER_CENTER,
-                icon,
-                egui::FontId::proportional(theme::FONT_BODY),
-                fg,
-            );
+        let child_rect = egui::Rect::from_min_size(
+            egui::pos2(bg_rect.left() + theme::SPACING_SM, bg_rect.top()),
+            egui::vec2((bg_rect.width() - theme::SPACING_MD).max(1.0), item_height),
+        );
+        let mut child_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(child_rect)
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        );
 
-            let label_rect = egui::Rect::from_min_size(
-                egui::pos2(
-                    rect.left() + left_margin + theme::NAV_ICON_WIDTH + theme::SPACING_SM,
-                    rect.top(),
-                ),
-                egui::vec2(
-                    available - left_margin - theme::NAV_ICON_WIDTH - theme::SPACING_LG,
-                    item_height,
-                ),
-            );
-            ui.painter().text(
-                label_rect.center(),
-                egui::Align2::LEFT_CENTER,
-                label,
-                theme::font_body(),
-                fg,
-            );
+        if collapsed {
+            child_ui.centered_and_justified(|ui| {
+                ui.label(egui::RichText::new(icon).size(theme::FONT_BODY).color(fg));
+            });
+        } else {
+            child_ui.add_space(theme::SPACING_XS);
+            child_ui.label(egui::RichText::new(icon).size(theme::FONT_BODY).color(fg));
+            child_ui.add_space(theme::SPACING_SM);
+            child_ui.label(egui::RichText::new(label).size(theme::FONT_BODY).color(fg));
         }
 
         ui.advance_cursor_after_rect(rect);
