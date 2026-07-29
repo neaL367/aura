@@ -159,7 +159,7 @@ impl Sidebar {
         if is_active {
             let indicator = egui::Rect::from_min_size(
                 egui::pos2(rect.left(), rect.top()),
-                egui::vec2(3.0, rect.height()),
+                egui::vec2(theme::SIDEBAR_INDICATOR_WIDTH, rect.height()),
             );
             ui.painter().rect_filled(indicator, 0.0, active_indicator);
         }
@@ -193,7 +193,7 @@ impl Sidebar {
             // Icon + Label
             let icon_rect = egui::Rect::from_min_size(
                 egui::pos2(rect.left() + left_margin + theme::SPACING_SM, rect.top()),
-                egui::vec2(20.0, item_height),
+                egui::vec2(theme::NAV_ICON_WIDTH, item_height),
             );
             ui.painter().text(
                 icon_rect.center(),
@@ -205,11 +205,11 @@ impl Sidebar {
 
             let label_rect = egui::Rect::from_min_size(
                 egui::pos2(
-                    rect.left() + left_margin + 20.0 + theme::SPACING_SM,
+                    rect.left() + left_margin + theme::NAV_ICON_WIDTH + theme::SPACING_SM,
                     rect.top(),
                 ),
                 egui::vec2(
-                    available - left_margin - 20.0 - theme::SPACING_LG,
+                    available - left_margin - theme::NAV_ICON_WIDTH - theme::SPACING_LG,
                     item_height,
                 ),
             );

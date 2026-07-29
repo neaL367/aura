@@ -125,8 +125,8 @@ impl GalleryPanel {
                 // to use the real post-scrollbar available width.
                 let avail_w = ui.available_width();
                 let gap = theme::SPACING_MD;
-                let min_card_w: f32 = 160.0;
-                let max_card_w: f32 = 280.0;
+                let min_card_w = theme::CARD_MIN_WIDTH;
+                let max_card_w = theme::CARD_MAX_WIDTH;
                 let columns = ((avail_w + gap) / (min_card_w + gap)).floor().max(1.0) as usize;
                 let card_w = ((avail_w - gap * (columns.saturating_sub(1) as f32))
                     / columns as f32)
