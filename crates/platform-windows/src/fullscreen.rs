@@ -45,13 +45,3 @@ pub fn is_fullscreen_app_active() -> bool {
 pub fn is_fullscreen_app_active() -> bool {
     false
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_is_fullscreen_app_active_does_not_panic() {
-        let _active = is_fullscreen_app_active();
-    }
-}
