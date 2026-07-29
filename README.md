@@ -15,7 +15,15 @@
   - **Static Images**: High-performance single-pass RGBA decoding with max 4K automatic downsampling and immediate uncompressed RAM release.
   - **Animated GIFs**: Streaming step-by-step frame decoding with full GIF disposal method compositing (`RestoreToPrevious` snapshot canvas).
   - **Video (Tier 1)**: Windows Media Foundation (`IMFSourceReader`) CPU decoding path. Vulkan Video hardware decode (`VK_KHR_video_decode_h264`) is scaffolded but not yet active — `spawn_hw_video_worker` currently routes through the Media Foundation path.
-- **Wallpaper Library, Live Watcher & Gallery UI**: Persistent library of discovered wallpapers stored in a JSON cache (`library.json`). Race-safe thumbnail generation (`ThumbnailStore`) and atomic file saves (`atomic_file.rs`) protect cache integrity. A debounced filesystem watcher (`LibraryWatcher`) automatically synchronizes live watch targets when scan paths are modified. The `wallpaper-ui` Control Panel displays a scrollable gallery grid (`library_panel/`) with per-card **Apply → Display N** assignment buttons and native folder/file pickers (`rfd`). A built-in toast overlay system (`ToastManager`) provides non-intrusive notifications for connection status, import results, and daemon errors.
+- **Wallpaper Library, Live Watcher & Control Panel UI**: Persistent library of discovered wallpapers stored in a JSON cache (`library.json`). Race-safe thumbnail generation (`ThumbnailStore`) and atomic file saves (`atomic_file.rs`) protect cache integrity. A debounced filesystem watcher (`LibraryWatcher`) automatically synchronizes live watch targets when scan paths are modified.
+- **Modern egui Design System (`wallpaper-ui`)**:
+  - **Dynamic Theme Palette**: Unified `Palette::from_ui(ui)` design tokens with automatic HSL dark/light mode resolution and zero text contrast bugs.
+  - **Standard Toggle Switches**: Smooth pill-shaped sliding track toggles (`theme::toggle_switch`) for boolean controls (Dark Mode, Auto-Start with Windows, Slideshow).
+  - **Outlined Segmented Controls**: Outlined `border_subtle` container pills (`theme::segmented_container`) for multi-choice options (FPS, Power Profile, Fit Mode).
+  - **Compact Topology Canvas**: Single-monitor status bar (`Display 1 (Primary) ● Connected`) that expands to full 140px interactive canvas for multi-monitor setups (>=2).
+  - **Fluid Gallery & Hover Delete**: Fluid card grid with `LOW RES` warning badges (<1080p) and hover-revealed 28×28px trash icon targets.
+  - **2-Column Responsive Settings**: Automatically reflows settings cards into 2 columns (`ui.columns(2)`) on wide windows (>=720px).
+  - **Toast Overlay & Monospace Data**: Non-intrusive `ToastManager` notifications and clean monospace technical data formatting with hover tooltips.
 - **Process Isolation & Resilient IPC**: Headless daemon (`wallpaperd`) and control panel (`wallpaper-ui`) communicate over Windows Named Pipes (`\\.\pipe\aura-wallpaperd`) using an adjacently-tagged JSON protocol (`serde tag+content`). The IPC server accept loop handles pipe connection races and client disconnects cleanly without dropping daemon loops. The unified `aura` binary merges both into one process: main thread runs eframe, background thread runs daemon, with `crossbeam_channel`-based shutdown signaling and IPC readiness handshake (deterministic, no sleep).
 
 ---
@@ -73,7 +81,7 @@ The project is structured as a modular Cargo workspace across 9 crates and 1 too
 | [`aura-platform-windows`](crates/platform-windows) | Win32 HWND wrappers, WorkerW (`discovery`, `attachment`, `manager`), `monitor_enumerator`, `mf_video_decoder`, `power` |
 | [`aura-renderer-vulkan`](crates/renderer-vulkan) | Vulkan context, monitor renderers (`frame_pass`, `resources`), swapchains, shaders, RAII Drop |
 | [`wallpaperd`](crates/wallpaperd) | Headless daemon orchestrator (`handlers/`), `assignment_manager`, `perf_monitor` & render threads (`placement`, `loop_runner`) |
-| [`wallpaper-ui`](crates/wallpaper-ui) | `egui`/`eframe` GUI Control Panel (`library_panel/`, `toast.rs`) & reconnecting IPC client with toast notifications |
+| [`wallpaper-ui`](crates/wallpaper-ui) | `egui`/`eframe` GUI Control Panel (`theme/`, `sidebar.rs`, `gallery.rs`, `canvas.rs`, `inspector/`, `settings_panel.rs`, `status_bar.rs`, `toast.rs`) & reconnecting IPC client |
 | [`workerw-proof`](tools/workerw-proof) | Standalone validation tool for WorkerW integration proof |
 
 ---
