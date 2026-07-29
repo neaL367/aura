@@ -194,6 +194,20 @@ pub fn reconcile_monitors(
     orchestrator.update_monitors(summaries, wallpaper_txs.clone());
 }
 
+#[cfg(target_os = "windows")]
+pub fn check_game_mode_pause(coordinator: &mut RenderCoordinator, game_mode_paused: &mut bool) {
+    let is_fullscreen = aura_platform_windows::is_fullscreen_app_active();
+    if is_fullscreen && !*game_mode_paused {
+        tracing::info!("Game Mode: Full-screen app detected — pausing presentation (0% CPU/GPU)");
+        coordinator.set_paused(true);
+        *game_mode_paused = true;
+    } else if !is_fullscreen && *game_mode_paused {
+        tracing::info!("Game Mode: Full-screen app closed — resuming presentation");
+        coordinator.set_paused(false);
+        *game_mode_paused = false;
+    }
+}
+
 /// Drain any pending Win32 messages so the window message queue doesn't go
 /// un-pumped during long operations like surface recreation. This prevents
 /// Windows from marking the daemon as "Not Responding".
@@ -202,8 +216,8 @@ pub fn pump_messages_once() {
     use windows::Win32::UI::WindowsAndMessaging::{
         DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage,
     };
-    let mut msg = MSG::default();
     unsafe {
+        let mut msg = MSG::default();
         while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
             let _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);

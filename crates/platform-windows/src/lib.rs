@@ -36,9 +36,11 @@ pub use mf_video_decoder::{MfH264Demuxer, MfVideoDecoder};
 
 #[cfg(target_os = "windows")]
 pub mod autostart;
+pub mod fullscreen;
 pub mod system;
 
 pub use autostart::set_autostart;
+pub use fullscreen::is_fullscreen_app_active;
 pub use system::{
     enable_dpi_awareness, process_memory_mb, register_console_ctrl_handler, trim_working_set,
 };
