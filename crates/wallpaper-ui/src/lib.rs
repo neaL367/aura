@@ -1,4 +1,5 @@
 pub mod app;
+pub mod canvas;
 pub mod gallery;
 pub mod inspector;
 pub mod ipc_client;

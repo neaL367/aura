@@ -195,6 +195,26 @@ impl eframe::App for AuraApp {
                             ));
                         content_frame.show(ui, |ui| match self.active_tab {
                             Tab::Gallery => {
+                                let monitors = match self.ipc_client.status() {
+                                    crate::ipc_client::ConnectionStatus::Connected(ref s) => {
+                                        s.monitors.clone()
+                                    }
+                                    _ => Vec::new(),
+                                };
+                                let assignments = self
+                                    .ipc_client
+                                    .config()
+                                    .map(|c| c.assignments)
+                                    .unwrap_or_default();
+
+                                crate::canvas::MonitorCanvas::show(
+                                    ui,
+                                    &monitors,
+                                    &assignments,
+                                    self.selected_wallpaper.as_ref(),
+                                    &self.ipc_client,
+                                );
+
                                 self.gallery.show(
                                     ui,
                                     &self.ipc_client,
