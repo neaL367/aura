@@ -24,13 +24,68 @@ pub struct VulkanVideoSession {
 impl VulkanVideoSession {
     /// Create a new video decode session for H.264.
     pub fn create(
-        _context: &VulkanContext,
+        context: &VulkanContext,
         width: u32,
         height: u32,
         max_ref_frames: u32,
     ) -> Result<Self, VulkanError> {
         let dpb_capacity = (max_ref_frames + 1) as usize;
-        let dpb_slots = Vec::with_capacity(dpb_capacity);
+        let mut dpb_slots = Vec::with_capacity(dpb_capacity);
+
+        // Allocate DPB images
+        for i in 0..dpb_capacity {
+            let image_info = vk::ImageCreateInfo::default()
+                .image_type(vk::ImageType::TYPE_2D)
+                .format(vk::Format::G8_B8R8_2PLANE_420_UNORM) // Standard NV12 format for H.264 decode
+                .extent(vk::Extent3D {
+                    width,
+                    height,
+                    depth: 1,
+                })
+                .mip_levels(1)
+                .array_layers(1)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .tiling(vk::ImageTiling::OPTIMAL)
+                .usage(
+                    vk::ImageUsageFlags::VIDEO_DECODE_DPB_KHR
+                        | vk::ImageUsageFlags::VIDEO_DECODE_DST_KHR
+                        | vk::ImageUsageFlags::SAMPLED,
+                )
+                .sharing_mode(vk::SharingMode::EXCLUSIVE)
+                .initial_layout(vk::ImageLayout::UNDEFINED);
+
+            let image = unsafe {
+                context
+                    .device
+                    .create_image(&image_info, None)
+                    .map_err(|e| VulkanError::Allocation(format!("DPB Image {i} failed: {e}")))?
+            };
+
+            let reqs = unsafe { context.device.get_image_memory_requirements(image) };
+            let alloc = {
+                let mut guard = context.allocator.lock().unwrap();
+                if let Some(allocator) = guard.as_mut() {
+                    allocator
+                        .allocate(&gpu_allocator::vulkan::AllocationCreateDesc {
+                            name: "DPB Image Allocation",
+                            requirements: reqs,
+                            location: gpu_allocator::MemoryLocation::GpuOnly,
+                            linear: false,
+                            allocation_scheme:
+                                gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
+                        })
+                        .ok()
+                } else {
+                    None
+                }
+            };
+
+            dpb_slots.push(DpbSlot {
+                image,
+                view: vk::ImageView::null(),
+                allocation: alloc,
+            });
+        }
 
         tracing::info!(
             "VulkanVideoSession initialized: {}x{}, DPB slots: {}",
