@@ -5,6 +5,7 @@ use crate::theme;
 
 pub struct GalleryPanel {
     search_query: String,
+    delete_target: Option<WallpaperEntry>,
 }
 
 impl Default for GalleryPanel {
@@ -17,6 +18,7 @@ impl GalleryPanel {
     pub fn new() -> Self {
         Self {
             search_query: String::new(),
+            delete_target: None,
         }
     }
 
@@ -138,22 +140,61 @@ impl GalleryPanel {
                     .spacing(egui::vec2(gap, gap))
                     .show(ui, |ui| {
                         for (i, entry) in filtered.iter().enumerate() {
-                            Self::card(ui, entry, selected, ipc_client, card_w);
+                            if let Some(target) = Self::card(ui, entry, selected, card_w) {
+                                self.delete_target = Some(target);
+                            }
                             if (i + 1) % columns == 0 {
                                 ui.end_row();
                             }
                         }
                     });
             });
+
+        // Delete confirmation modal dialog
+        if let Some(ref target) = self.delete_target.clone() {
+            let mut close = false;
+            let file_name = target
+                .path
+                .file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_else(|| std::borrow::Cow::Borrowed("this wallpaper"));
+
+            egui::Window::new("Delete Wallpaper?")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(ui.ctx(), |ui| {
+                    ui.add_space(theme::SPACING_SM);
+                    ui.label(format!("Are you sure you want to permanently delete \"{}\" from disk?", file_name));
+                    ui.add_space(theme::SPACING_MD);
+                    ui.horizontal(|ui| {
+                        if theme::button(ui, "Cancel", theme::ButtonVariant::Secondary).clicked() {
+                            close = true;
+                        }
+                        ui.add_space(theme::SPACING_SM);
+                        if theme::button(ui, "Delete", theme::ButtonVariant::Primary).clicked() {
+                            ipc_client.send(Request::DeleteWallpaper { id: target.id });
+                            if selected.as_ref().map(|s| s.id) == Some(target.id) {
+                                *selected = None;
+                            }
+                            close = true;
+                        }
+                    });
+                });
+
+            if close {
+                self.delete_target = None;
+            }
+        }
     }
 
     fn card(
         ui: &mut egui::Ui,
         entry: &WallpaperEntry,
         selected: &mut Option<WallpaperEntry>,
-        ipc_client: &UiIpcClient,
         card_w: f32,
-    ) {
+    ) -> Option<WallpaperEntry> {
+        let mut delete_clicked = None;
         let is_selected = selected.as_ref().is_some_and(|s| s.id == entry.id);
         let id = egui::Id::new("gallery_card").with(entry.id);
         let elevation = if is_selected {
@@ -191,8 +232,6 @@ impl GalleryPanel {
 
                 // Filename row - truncated single-line + delete button.
                 ui.horizontal(|ui| {
-                    // Constrain name width by allocating a scoped ui that leaves
-                    // room for the delete button (~26px) on the right.
                     let name_w = (inner_w - 26.0).max(20.0);
                     let file_name = entry
                         .path
@@ -217,8 +256,7 @@ impl GalleryPanel {
                             .on_hover_text("Delete wallpaper")
                             .clicked()
                         {
-                            ipc_client.send(Request::DeleteWallpaper { id: entry.id });
-                            *selected = None;
+                            delete_clicked = Some((*entry).clone());
                         }
                     });
                 });
@@ -253,10 +291,12 @@ impl GalleryPanel {
             });
         });
 
-        if response.clicked() && !is_selected {
+        if response.clicked() && delete_clicked.is_none() && !is_selected {
             *selected = Some((*entry).clone());
-        } else if response.clicked() {
+        } else if response.clicked() && delete_clicked.is_none() {
             *selected = None;
         }
+
+        delete_clicked
     }
 }

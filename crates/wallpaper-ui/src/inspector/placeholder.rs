@@ -13,14 +13,14 @@ pub fn show_placeholder(ui: &mut egui::Ui) {
         egui::ScrollArea::vertical()
             .id_salt("inspector_placeholder_scroll")
             .auto_shrink([false, false])
-            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
             .show(ui, |ui| {
                 ui.vertical_centered(|ui| {
-                    ui.add_space(60.0);
+                    ui.add_space(theme::SPACING_2XL);
                     ui.label(
                         egui::RichText::new("No Selection")
                             .size(theme::FONT_SECTION_HEADER)
-                            .color(theme::TEXT_MUTED),
+                            .color(ui.visuals().weak_text_color()),
                     );
                     ui.add_space(theme::SPACING_SM);
                     ui.label(
@@ -28,7 +28,7 @@ pub fn show_placeholder(ui: &mut egui::Ui) {
                             "Click a wallpaper to see\ndetails and assign it to\na monitor.",
                         )
                         .size(theme::FONT_SECONDARY)
-                        .color(theme::TEXT_MUTED),
+                        .color(ui.visuals().weak_text_color()),
                     );
                 });
             });

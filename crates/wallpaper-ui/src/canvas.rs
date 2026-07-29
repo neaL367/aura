@@ -83,7 +83,7 @@ impl MonitorCanvas {
         let padding = 12.0;
         let count = monitors.len() as f32;
         let box_w = ((rect.width() - (padding * (count + 1.0))) / count).clamp(120.0, 220.0);
-        let box_h = 100.0;
+        let box_h = (box_w * 9.0 / 16.0).clamp(70.0, 110.0);
         let start_y = rect.top() + (rect.height() - box_h) / 2.0;
 
         for (i, mon) in monitors.iter().enumerate() {
@@ -139,11 +139,7 @@ impl MonitorCanvas {
             if let Some(a) = assigned {
                 child_ui.add_space(theme::SPACING_XS);
                 child_ui.horizontal_centered(|ui| {
-                    ui.label(
-                        egui::RichText::new("●")
-                            .size(8.0)
-                            .color(theme::STATUS_CONNECTED),
-                    );
+                    theme::status_dot(ui, theme::STATUS_CONNECTED, 8.0);
                     ui.label(
                         egui::RichText::new(format!("Fit: {}", a.fit_mode))
                             .size(theme::FONT_CAPTION)

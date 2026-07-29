@@ -1,6 +1,5 @@
 use egui::{Color32, Frame, Margin, Stroke, epaint::Shadow};
 
-use super::icons::ICON_DOT;
 use super::palette::*;
 use super::spacing::*;
 use super::typography::*;
@@ -271,8 +270,12 @@ pub fn empty_state(
     });
 }
 
+pub fn status_dot(ui: &mut egui::Ui, color: Color32, size: f32) {
+    ui.label(egui::RichText::new("●").size(size).color(color));
+}
+
 pub fn connection_dot(ui: &mut egui::Ui, color: Color32) {
-    ui.colored_label(color, ICON_DOT);
+    status_dot(ui, color, 10.0);
 }
 
 pub fn header_frame(ui: &egui::Ui) -> Frame {

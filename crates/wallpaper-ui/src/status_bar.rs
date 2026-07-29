@@ -39,7 +39,7 @@ impl StatusBar {
                             if s.is_paused { "Paused" } else { "Active" }
                         ))
                         .size(theme::FONT_SECONDARY)
-                        .color(theme::TEXT_MUTED),
+                        .color(ui.visuals().weak_text_color()),
                     );
                 }
                 ConnectionStatus::Connecting => {
