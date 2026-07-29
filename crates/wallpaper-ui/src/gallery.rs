@@ -53,10 +53,10 @@ impl GalleryPanel {
                 {
                     ipc_client.import_files(files);
                 }
-                // Search fills remaining width (added last in rtl layout = leftmost).
+                // Search box fills remaining width (added last in rtl layout = leftmost).
                 ui.add(
                     egui::TextEdit::singleline(&mut self.search_query)
-                        .hint_text("Search wallpapers...")
+                        .hint_text(format!("{} Search wallpapers...", theme::ICON_SEARCH))
                         .desired_width(ui.available_width()),
                 );
             });

@@ -19,34 +19,36 @@ pub fn render_fit_mode_selector(
 ) {
     theme::section_label(ui, "FIT MODE");
     ui.add_space(theme::SPACING_SM);
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = egui::vec2(theme::SPACING_XS, theme::SPACING_XS);
-        for mode in [
-            FitMode::Fill,
-            FitMode::Fit,
-            FitMode::Stretch,
-            FitMode::Center,
-            FitMode::Tile,
-            FitMode::Span,
-        ] {
-            let variant = if *selected_fit_mode == mode {
-                theme::ButtonVariant::Primary
-            } else {
-                theme::ButtonVariant::Secondary
-            };
-            if theme::button(ui, &format!("{}", mode), variant).clicked() {
-                *selected_fit_mode = mode;
-                for mon in monitors {
-                    if assigned_mons.contains(&mon.id) {
-                        ipc_client.send(Request::AssignWallpaper {
-                            monitor_id: mon.id,
-                            wallpaper_id: entry.id,
-                            fit_mode: Some(mode),
-                        });
+    theme::segmented_container(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(theme::SPACING_XS, theme::SPACING_XS);
+            for mode in [
+                FitMode::Fill,
+                FitMode::Fit,
+                FitMode::Stretch,
+                FitMode::Center,
+                FitMode::Tile,
+                FitMode::Span,
+            ] {
+                let variant = if *selected_fit_mode == mode {
+                    theme::ButtonVariant::Primary
+                } else {
+                    theme::ButtonVariant::Ghost
+                };
+                if theme::button(ui, &format!("{}", mode), variant).clicked() {
+                    *selected_fit_mode = mode;
+                    for mon in monitors {
+                        if assigned_mons.contains(&mon.id) {
+                            ipc_client.send(Request::AssignWallpaper {
+                                monitor_id: mon.id,
+                                wallpaper_id: entry.id,
+                                fit_mode: Some(mode),
+                            });
+                        }
                     }
                 }
             }
-        }
+        });
     });
 }
 

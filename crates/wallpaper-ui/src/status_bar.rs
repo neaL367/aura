@@ -14,7 +14,13 @@ impl StatusBar {
         Self
     }
 
-    pub fn show(&mut self, ui: &mut egui::Ui, status: &ConnectionStatus, last_error: Option<&str>) {
+    pub fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        status: &ConnectionStatus,
+        last_error: Option<&str>,
+    ) -> Option<crate::action::UiAction> {
+        let mut action = None;
         ui.horizontal(|ui| {
             ui.add_space(theme::SPACING_SM);
             match status {
@@ -41,6 +47,28 @@ impl StatusBar {
                         .size(theme::FONT_SECONDARY)
                         .color(ui.visuals().weak_text_color()),
                     );
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let (icon, tooltip, next_action) = if s.is_paused {
+                            (
+                                theme::ICON_RESUME,
+                                "Resume all wallpapers",
+                                crate::action::UiAction::ResumeAll,
+                            )
+                        } else {
+                            (
+                                theme::ICON_PAUSE,
+                                "Pause all wallpapers",
+                                crate::action::UiAction::PauseAll,
+                            )
+                        };
+                        if theme::button(ui, icon, theme::ButtonVariant::Ghost)
+                            .on_hover_text(tooltip)
+                            .clicked()
+                        {
+                            action = Some(next_action);
+                        }
+                    });
                 }
                 ConnectionStatus::Connecting => {
                     theme::badge_frame(theme::STATUS_BADGE_CONNECTING).show(ui, |ui| {
@@ -98,5 +126,6 @@ impl StatusBar {
                 );
             }
         });
+        action
     }
 }

@@ -119,18 +119,24 @@ impl SettingsPanel {
                                 egui::RichText::new("Target Frame Rate").size(theme::FONT_BODY),
                             );
                             ui.add_space(theme::SPACING_SM);
-                            let current_fps = updated_config.performance.target_fps;
-                            for fps in [30, 60, 120] {
-                                let variant = if current_fps == fps {
-                                    theme::ButtonVariant::Primary
-                                } else {
-                                    theme::ButtonVariant::Secondary
-                                };
-                                if theme::button(ui, &format!("{} FPS", fps), variant).clicked() {
-                                    updated_config.performance.target_fps = fps;
-                                    changed = true;
-                                }
-                            }
+                            theme::segmented_container(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    let current_fps = updated_config.performance.target_fps;
+                                    for fps in [30, 60, 120] {
+                                        let variant = if current_fps == fps {
+                                            theme::ButtonVariant::Primary
+                                        } else {
+                                            theme::ButtonVariant::Ghost
+                                        };
+                                        if theme::button(ui, &format!("{} FPS", fps), variant)
+                                            .clicked()
+                                        {
+                                            updated_config.performance.target_fps = fps;
+                                            changed = true;
+                                        }
+                                    }
+                                });
+                            });
                         });
 
                         ui.add_space(theme::SPACING_SM);
@@ -139,22 +145,27 @@ impl SettingsPanel {
                                 egui::RichText::new("Default Power Profile").size(theme::FONT_BODY),
                             );
                             ui.add_space(theme::SPACING_SM);
-                            let current_profile = updated_config.performance.default_profile;
-                            for (name, profile) in [
-                                ("Balanced", PerformanceProfile::Balanced),
-                                ("Maximum", PerformanceProfile::Maximum),
-                                ("Paused", PerformanceProfile::Paused),
-                            ] {
-                                let variant = if current_profile == profile {
-                                    theme::ButtonVariant::Primary
-                                } else {
-                                    theme::ButtonVariant::Secondary
-                                };
-                                if theme::button(ui, name, variant).clicked() {
-                                    updated_config.performance.default_profile = profile;
-                                    changed = true;
-                                }
-                            }
+                            theme::segmented_container(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    let current_profile =
+                                        updated_config.performance.default_profile;
+                                    for (name, profile) in [
+                                        ("Balanced", PerformanceProfile::Balanced),
+                                        ("Maximum", PerformanceProfile::Maximum),
+                                        ("Paused", PerformanceProfile::Paused),
+                                    ] {
+                                        let variant = if current_profile == profile {
+                                            theme::ButtonVariant::Primary
+                                        } else {
+                                            theme::ButtonVariant::Ghost
+                                        };
+                                        if theme::button(ui, name, variant).clicked() {
+                                            updated_config.performance.default_profile = profile;
+                                            changed = true;
+                                        }
+                                    }
+                                });
+                            });
                         });
 
                         if changed {

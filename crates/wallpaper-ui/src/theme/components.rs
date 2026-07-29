@@ -315,3 +315,17 @@ pub fn badge_frame(bg: Color32) -> Frame {
         .corner_radius(RADIUS_SM)
         .inner_margin(Margin::symmetric(SPACING_SM as i8, SPACING_XS as i8))
 }
+
+pub fn segmented_container(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui)) {
+    let dark = ui.visuals().dark_mode;
+    let bg = if dark {
+        Color32::from_rgb(18, 18, 22)
+    } else {
+        Color32::from_rgb(238, 240, 244)
+    };
+    Frame::new()
+        .fill(bg)
+        .corner_radius(RADIUS_SM)
+        .inner_margin(Margin::same(2))
+        .show(ui, add_contents);
+}

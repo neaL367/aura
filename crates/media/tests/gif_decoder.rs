@@ -25,11 +25,18 @@ fn make_gif(width: u16, height: u16, color: [u8; 3], dispose: gif::DisposalMetho
     buf
 }
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
 /// Open a GIF from in-memory bytes by writing to a temp file.
 fn open_gif_bytes(bytes: &[u8]) -> GifDecoder {
     let dir = std::env::temp_dir();
+    let count = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
     let path = dir.join(format!(
-        "aura_test_{}.gif",
+        "aura_test_{}_{}_{}.gif",
+        std::process::id(),
+        count,
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
