@@ -80,8 +80,7 @@ impl PocReorderBuffer {
         self.buffer.insert(poc, frame);
 
         if self.buffer.len() > self.max_reorder_latency {
-            let smallest_poc = *self.buffer.keys().next().unwrap();
-            self.buffer.remove(&smallest_poc)
+            self.buffer.pop_first().map(|(_, frame)| frame)
         } else {
             None
         }
@@ -94,5 +93,60 @@ impl PocReorderBuffer {
             frames.push(frame);
         }
         frames
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_avcc_to_annex_b_conversion() {
+        let nal_payload = [0x67, 0x42, 0x00, 0x0a];
+        let mut avcc = vec![0, 0, 0, 4];
+        avcc.extend_from_slice(&nal_payload);
+
+        let annex_b = avcc_to_annex_b(&avcc);
+        assert_eq!(&annex_b[..4], &[0, 0, 0, 1]);
+        assert_eq!(&annex_b[4..], &nal_payload);
+    }
+
+    #[test]
+    fn test_poc_reorder_buffer_sorting() {
+        let mut reorder = PocReorderBuffer::new(2);
+
+        let frame1 = ParsedH264Frame {
+            frame_num: 0,
+            poc: 4,
+            is_idr: false,
+            nal_data: vec![1],
+            pts_ms: 100,
+        };
+        let frame2 = ParsedH264Frame {
+            frame_num: 1,
+            poc: 2,
+            is_idr: false,
+            nal_data: vec![2],
+            pts_ms: 50,
+        };
+        let frame3 = ParsedH264Frame {
+            frame_num: 2,
+            poc: 0,
+            is_idr: true,
+            nal_data: vec![3],
+            pts_ms: 0,
+        };
+
+        assert!(reorder.push(frame1).is_none());
+        assert!(reorder.push(frame2).is_none());
+
+        // Pushing 3rd frame exceeds latency of 2, returning smallest POC (poc 0)
+        let popped = reorder.push(frame3).unwrap();
+        assert_eq!(popped.poc, 0);
+
+        let flushed = reorder.flush();
+        assert_eq!(flushed.len(), 2);
+        assert_eq!(flushed[0].poc, 2);
+        assert_eq!(flushed[1].poc, 4);
     }
 }
