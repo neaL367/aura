@@ -75,17 +75,27 @@ impl AuraApp {
     }
 
     pub fn dispatch_action(&mut self, action: crate::action::UiAction) {
-        use aura_ipc::protocol::Request;
         use crate::action::UiAction;
+        use aura_ipc::protocol::Request;
         match action {
-            UiAction::AssignWallpaper { monitor_id, wallpaper_id, fit_mode } => {
-                self.ipc_client.send(Request::AssignWallpaper { monitor_id, wallpaper_id, fit_mode });
+            UiAction::AssignWallpaper {
+                monitor_id,
+                wallpaper_id,
+                fit_mode,
+            } => {
+                self.ipc_client.send(Request::AssignWallpaper {
+                    monitor_id,
+                    wallpaper_id,
+                    fit_mode,
+                });
             }
             UiAction::RemoveAssignment { monitor_id } => {
-                self.ipc_client.send(Request::RemoveAssignment { monitor_id });
+                self.ipc_client
+                    .send(Request::RemoveAssignment { monitor_id });
             }
             UiAction::DeleteWallpaper { wallpaper_id } => {
-                self.ipc_client.send(Request::DeleteWallpaper { id: wallpaper_id });
+                self.ipc_client
+                    .send(Request::DeleteWallpaper { id: wallpaper_id });
             }
             UiAction::RefreshLibrary => {
                 self.ipc_client.send(Request::RefreshLibrary);

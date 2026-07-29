@@ -97,15 +97,14 @@ impl InspectorPanel {
                             .map(|n| n.to_string_lossy())
                             .unwrap_or_else(|| std::borrow::Cow::Borrowed("unknown"));
                         ui.label(
-                            egui::RichText::new(file_name.as_ref())
-                                .size(theme::FONT_CARD_TITLE),
+                            egui::RichText::new(file_name.as_ref()).size(theme::FONT_CARD_TITLE),
                         );
 
                         ui.add_space(theme::SPACING_SM);
 
                         // Label column fixed at 80px; value column fills remainder.
-                        let value_col_w = (ui.available_width() - 80.0 - theme::SPACING_SM)
-                            .max(60.0);
+                        let value_col_w =
+                            (ui.available_width() - 80.0 - theme::SPACING_SM).max(60.0);
                         egui::Grid::new("inspector_meta")
                             .min_col_width(80.0)
                             .max_col_width(80.0)
@@ -139,12 +138,7 @@ impl InspectorPanel {
                                 if !entry.scanned_at.is_empty() {
                                     meta_row(ui, "Scanned", &entry.scanned_at, value_col_w);
                                 }
-                                meta_row(
-                                    ui,
-                                    "Path",
-                                    &entry.path.to_string_lossy(),
-                                    value_col_w,
-                                );
+                                meta_row(ui, "Path", &entry.path.to_string_lossy(), value_col_w);
                             });
 
                         ui.add_space(theme::SPACING_LG);

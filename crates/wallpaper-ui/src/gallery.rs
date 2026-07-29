@@ -127,9 +127,7 @@ impl GalleryPanel {
                 let gap = theme::SPACING_MD;
                 let min_card_w: f32 = 160.0;
                 let max_card_w: f32 = 280.0;
-                let columns = ((avail_w + gap) / (min_card_w + gap))
-                    .floor()
-                    .max(1.0) as usize;
+                let columns = ((avail_w + gap) / (min_card_w + gap)).floor().max(1.0) as usize;
                 let card_w = ((avail_w - gap * (columns.saturating_sub(1) as f32))
                     / columns as f32)
                     .clamp(min_card_w, max_card_w);
@@ -165,7 +163,10 @@ impl GalleryPanel {
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .show(ui.ctx(), |ui| {
                     ui.add_space(theme::SPACING_SM);
-                    ui.label(format!("Are you sure you want to permanently delete \"{}\" from disk?", file_name));
+                    ui.label(format!(
+                        "Are you sure you want to permanently delete \"{}\" from disk?",
+                        file_name
+                    ));
                     ui.add_space(theme::SPACING_MD);
                     ui.horizontal(|ui| {
                         if theme::button(ui, "Cancel", theme::ButtonVariant::Secondary).clicked() {

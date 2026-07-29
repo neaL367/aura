@@ -51,23 +51,27 @@ impl SettingsPanel {
                     if let Some(ref config) = config_opt {
                         ui.horizontal(|ui| {
                             // Reserve space for Change button before path label.
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if theme::button(ui, "Change", theme::ButtonVariant::Ghost)
-                                    .clicked()
-                                    && let Some(folder) = rfd::FileDialog::new().pick_folder()
-                                {
-                                    ipc_client.send(Request::SetWallpaperLibrary { path: folder });
-                                }
-                                ui.add(
-                                    egui::Label::new(
-                                        egui::RichText::new(
-                                            config.library.library_path.to_string_lossy(),
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if theme::button(ui, "Change", theme::ButtonVariant::Ghost)
+                                        .clicked()
+                                        && let Some(folder) = rfd::FileDialog::new().pick_folder()
+                                    {
+                                        ipc_client
+                                            .send(Request::SetWallpaperLibrary { path: folder });
+                                    }
+                                    ui.add(
+                                        egui::Label::new(
+                                            egui::RichText::new(
+                                                config.library.library_path.to_string_lossy(),
+                                            )
+                                            .size(theme::FONT_BODY),
                                         )
-                                        .size(theme::FONT_BODY),
-                                    )
-                                    .truncate(),
-                                );
-                            });
+                                        .truncate(),
+                                    );
+                                },
+                            );
                         });
                     } else {
                         ui.label(
@@ -112,8 +116,7 @@ impl SettingsPanel {
 
                         ui.horizontal(|ui| {
                             ui.label(
-                                egui::RichText::new("Target Frame Rate")
-                                    .size(theme::FONT_BODY),
+                                egui::RichText::new("Target Frame Rate").size(theme::FONT_BODY),
                             );
                             ui.add_space(theme::SPACING_SM);
                             let current_fps = updated_config.performance.target_fps;
@@ -133,8 +136,7 @@ impl SettingsPanel {
                         ui.add_space(theme::SPACING_SM);
                         ui.horizontal(|ui| {
                             ui.label(
-                                egui::RichText::new("Default Power Profile")
-                                    .size(theme::FONT_BODY),
+                                egui::RichText::new("Default Power Profile").size(theme::FONT_BODY),
                             );
                             ui.add_space(theme::SPACING_SM);
                             let current_profile = updated_config.performance.default_profile;
@@ -181,10 +183,7 @@ impl SettingsPanel {
                         let mut changed = false;
 
                         ui.horizontal(|ui| {
-                            ui.label(
-                                egui::RichText::new("Dark Mode")
-                                    .size(theme::FONT_BODY),
-                            );
+                            ui.label(egui::RichText::new("Dark Mode").size(theme::FONT_BODY));
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
@@ -252,10 +251,7 @@ impl SettingsPanel {
                         };
 
                         ui.horizontal(|ui| {
-                            ui.label(
-                                egui::RichText::new("Slideshow")
-                                    .size(theme::FONT_BODY),
-                            );
+                            ui.label(egui::RichText::new("Slideshow").size(theme::FONT_BODY));
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
@@ -281,16 +277,12 @@ impl SettingsPanel {
                         if enabled {
                             ui.add_space(theme::SPACING_SM);
                             ui.horizontal(|ui| {
-                                ui.label(
-                                    egui::RichText::new("Interval")
-                                        .size(theme::FONT_BODY),
-                                );
+                                ui.label(egui::RichText::new("Interval").size(theme::FONT_BODY));
                                 ui.add_space(theme::SPACING_SM);
                                 let prev = interval;
                                 // Slider without suffix text to avoid checkbox widget appearance.
                                 ui.add(
-                                    egui::Slider::new(&mut interval, 30.0..=3600.0)
-                                        .step_by(30.0),
+                                    egui::Slider::new(&mut interval, 30.0..=3600.0).step_by(30.0),
                                 );
                                 ui.label(
                                     egui::RichText::new("seconds")

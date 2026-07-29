@@ -118,7 +118,11 @@ impl Sidebar {
     ) -> bool {
         let available = ui.available_width();
         let item_height = theme::NAV_ITEM_HEIGHT;
-        let left_margin = if collapsed { theme::SPACING_XS } else { theme::SPACING_MD };
+        let left_margin = if collapsed {
+            theme::SPACING_XS
+        } else {
+            theme::SPACING_MD
+        };
 
         let dark = ui.visuals().dark_mode;
         let active_bg = if dark {
@@ -163,7 +167,13 @@ impl Sidebar {
         let bg_rect = egui::Rect::from_min_size(
             egui::pos2(rect.left() + left_margin, rect.top()),
             egui::vec2(
-                available - left_margin - if collapsed { theme::SPACING_XS } else { theme::SPACING_SM },
+                available
+                    - left_margin
+                    - if collapsed {
+                        theme::SPACING_XS
+                    } else {
+                        theme::SPACING_SM
+                    },
                 item_height,
             ),
         );
