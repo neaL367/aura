@@ -34,15 +34,13 @@ impl Sidebar {
                         ui.label(
                             egui::RichText::new("A")
                                 .size(theme::FONT_WINDOW_TITLE)
-                                .strong()
-                                .color(theme::TEXT_PRIMARY),
+                                .strong(),
                         );
                     } else {
                         ui.label(
                             egui::RichText::new("Aura")
                                 .size(theme::FONT_WINDOW_TITLE)
-                                .strong()
-                                .color(theme::TEXT_PRIMARY),
+                                .strong(),
                         );
                     }
                 });
@@ -101,7 +99,7 @@ impl Sidebar {
                         ui.label(
                             egui::RichText::new("v0.1.0")
                                 .size(theme::FONT_CAPTION)
-                                .color(theme::TEXT_MUTED),
+                                .color(ui.visuals().weak_text_color()),
                         );
                     }
                     ui.add_space(theme::SPACING_SM);
@@ -120,7 +118,7 @@ impl Sidebar {
     ) -> bool {
         let available = ui.available_width();
         let item_height = theme::NAV_ITEM_HEIGHT;
-        let left_margin = if collapsed { 4.0 } else { theme::SPACING_MD };
+        let left_margin = if collapsed { theme::SPACING_XS } else { theme::SPACING_MD };
 
         let dark = ui.visuals().dark_mode;
         let active_bg = if dark {
@@ -140,23 +138,9 @@ impl Sidebar {
         };
 
         let (bg, fg) = if is_active {
-            (
-                active_bg,
-                if dark {
-                    theme::TEXT_PRIMARY_DARK
-                } else {
-                    theme::TEXT_PRIMARY
-                },
-            )
+            (active_bg, ui.visuals().text_color())
         } else {
-            (
-                ui.visuals().window_fill,
-                if dark {
-                    theme::TEXT_MUTED_DARK
-                } else {
-                    theme::TEXT_MUTED
-                },
-            )
+            (ui.visuals().window_fill, ui.visuals().weak_text_color())
         };
 
         let rect = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(available, item_height));
@@ -179,7 +163,7 @@ impl Sidebar {
         let bg_rect = egui::Rect::from_min_size(
             egui::pos2(rect.left() + left_margin, rect.top()),
             egui::vec2(
-                available - left_margin - if collapsed { 4.0 } else { theme::SPACING_SM },
+                available - left_margin - if collapsed { theme::SPACING_XS } else { theme::SPACING_SM },
                 item_height,
             ),
         );

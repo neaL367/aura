@@ -79,7 +79,7 @@ pub fn render_monitor_assignment(
             theme::ButtonVariant::Secondary
         };
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-            ui.set_min_width(theme::MONITOR_CARD_WIDTH);
+            ui.set_min_width(ui.available_width());
             if theme::button(ui, &label, variant).clicked() {
                 if already {
                     ipc_client.send(Request::RemoveAssignment { monitor_id: mon.id });
@@ -103,7 +103,7 @@ pub fn render_monitor_assignment(
         ui.label(
             egui::RichText::new("Applied to all monitors")
                 .size(theme::FONT_CAPTION)
-                .color(theme::TEXT_MUTED),
+                .color(ui.visuals().weak_text_color()),
         );
     }
 

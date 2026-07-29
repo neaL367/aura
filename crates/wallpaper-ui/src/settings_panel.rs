@@ -33,8 +33,7 @@ impl SettingsPanel {
         ui.label(
             egui::RichText::new("Settings")
                 .strong()
-                .size(theme::FONT_WINDOW_TITLE)
-                .color(theme::TEXT_PRIMARY),
+                .size(theme::FONT_WINDOW_TITLE),
         );
         ui.add_space(theme::SPACING_MD);
         ui.separator();
@@ -42,6 +41,7 @@ impl SettingsPanel {
 
         egui::ScrollArea::vertical()
             .id_salt("settings_scroll")
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
             .show(ui, |ui| {
                 theme::group_frame(ui).show(ui, |ui| {
                     ui.set_width(ui.available_width());
@@ -73,7 +73,7 @@ impl SettingsPanel {
                         ui.label(
                             egui::RichText::new("Loading configuration...")
                                 .size(theme::FONT_SECONDARY)
-                                .color(theme::TEXT_MUTED),
+                                .color(ui.visuals().weak_text_color()),
                         );
                     }
 
@@ -113,8 +113,7 @@ impl SettingsPanel {
                         ui.horizontal(|ui| {
                             ui.label(
                                 egui::RichText::new("Target Frame Rate")
-                                    .size(theme::FONT_BODY)
-                                    .color(theme::TEXT_PRIMARY),
+                                    .size(theme::FONT_BODY),
                             );
                             ui.add_space(theme::SPACING_SM);
                             let current_fps = updated_config.performance.target_fps;
@@ -135,8 +134,7 @@ impl SettingsPanel {
                         ui.horizontal(|ui| {
                             ui.label(
                                 egui::RichText::new("Default Power Profile")
-                                    .size(theme::FONT_BODY)
-                                    .color(theme::TEXT_PRIMARY),
+                                    .size(theme::FONT_BODY),
                             );
                             ui.add_space(theme::SPACING_SM);
                             let current_profile = updated_config.performance.default_profile;
@@ -166,7 +164,7 @@ impl SettingsPanel {
                         ui.label(
                             egui::RichText::new("Loading performance settings...")
                                 .size(theme::FONT_SECONDARY)
-                                .color(theme::TEXT_MUTED),
+                                .color(ui.visuals().weak_text_color()),
                         );
                     }
                 });
@@ -185,8 +183,7 @@ impl SettingsPanel {
                         ui.horizontal(|ui| {
                             ui.label(
                                 egui::RichText::new("Dark Mode")
-                                    .size(theme::FONT_BODY)
-                                    .color(theme::TEXT_PRIMARY),
+                                    .size(theme::FONT_BODY),
                             );
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
@@ -210,8 +207,7 @@ impl SettingsPanel {
                         ui.horizontal(|ui| {
                             ui.label(
                                 egui::RichText::new("Auto-start with Windows")
-                                    .size(theme::FONT_BODY)
-                                    .color(theme::TEXT_PRIMARY),
+                                    .size(theme::FONT_BODY),
                             );
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
@@ -258,8 +254,7 @@ impl SettingsPanel {
                         ui.horizontal(|ui| {
                             ui.label(
                                 egui::RichText::new("Slideshow")
-                                    .size(theme::FONT_BODY)
-                                    .color(theme::TEXT_PRIMARY),
+                                    .size(theme::FONT_BODY),
                             );
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
@@ -316,7 +311,7 @@ impl SettingsPanel {
                         ui.label(
                             egui::RichText::new("Loading slideshow settings...")
                                 .size(theme::FONT_SECONDARY)
-                                .color(theme::TEXT_MUTED),
+                                .color(ui.visuals().weak_text_color()),
                         );
                     }
                 });
@@ -330,12 +325,12 @@ impl SettingsPanel {
                     ui.label(
                         egui::RichText::new("IPC Pipe: \\\\.\\pipe\\aura-wallpaperd")
                             .size(theme::FONT_SECONDARY)
-                            .color(theme::TEXT_MUTED),
+                            .color(ui.visuals().weak_text_color()),
                     );
                     ui.label(
                         egui::RichText::new("Platform Target: Windows 11 (WorkerW + Vulkan 1.4)")
                             .size(theme::FONT_SECONDARY)
-                            .color(theme::TEXT_MUTED),
+                            .color(ui.visuals().weak_text_color()),
                     );
                 });
             });

@@ -20,7 +20,7 @@ impl MonitorCanvas {
                 ui.label(
                     egui::RichText::new("No active monitors detected")
                         .size(crate::theme::FONT_BODY)
-                        .color(crate::theme::TEXT_MUTED),
+                        .color(ui.visuals().weak_text_color()),
                 );
             });
             return;
@@ -38,7 +38,7 @@ impl MonitorCanvas {
                     ui.label(
                         egui::RichText::new(format!("{} Monitor(s)", monitors.len()))
                             .size(theme::FONT_SECONDARY)
-                            .color(theme::TEXT_MUTED),
+                            .color(ui.visuals().weak_text_color()),
                     );
                 });
             });
@@ -64,16 +64,6 @@ impl MonitorCanvas {
             theme::BG_CARD_DARK
         } else {
             theme::BG_CARD
-        };
-        let text_primary = if dark {
-            theme::TEXT_PRIMARY_DARK
-        } else {
-            theme::TEXT_PRIMARY
-        };
-        let text_muted = if dark {
-            theme::TEXT_MUTED_DARK
-        } else {
-            theme::TEXT_MUTED
         };
 
         // Draw Canvas Background Frame
@@ -126,14 +116,13 @@ impl MonitorCanvas {
             child_ui.label(
                 egui::RichText::new(&mon.name)
                     .strong()
-                    .size(theme::FONT_CARD_TITLE)
-                    .color(text_primary),
+                    .size(theme::FONT_CARD_TITLE),
             );
 
             child_ui.label(
                 egui::RichText::new(format!("Display #{}", i + 1))
                     .size(theme::FONT_CAPTION)
-                    .color(text_muted),
+                    .color(child_ui.visuals().weak_text_color()),
             );
 
             if let Some(a) = assigned {
@@ -142,8 +131,7 @@ impl MonitorCanvas {
                     theme::status_dot(ui, theme::STATUS_CONNECTED, 8.0);
                     ui.label(
                         egui::RichText::new(format!("Fit: {}", a.fit_mode))
-                            .size(theme::FONT_CAPTION)
-                            .color(text_primary),
+                            .size(theme::FONT_CAPTION),
                     );
                 });
             }
