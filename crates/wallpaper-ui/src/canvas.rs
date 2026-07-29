@@ -32,8 +32,7 @@ impl MonitorCanvas {
                 ui.label(
                     egui::RichText::new("Display Topology Canvas")
                         .strong()
-                        .size(theme::FONT_SECTION_HEADER)
-                        .color(theme::TEXT_PRIMARY),
+                        .size(theme::FONT_SECTION_HEADER),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
@@ -141,8 +140,8 @@ impl MonitorCanvas {
                 child_ui.add_space(theme::SPACING_XS);
                 child_ui.horizontal_centered(|ui| {
                     ui.label(
-                        egui::RichText::new(theme::ICON_DOT)
-                            .size(10.0)
+                        egui::RichText::new("●")
+                            .size(8.0)
                             .color(theme::STATUS_CONNECTED),
                     );
                     ui.label(

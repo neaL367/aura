@@ -1,21 +1,22 @@
 use crate::theme;
 
-pub fn meta_row(ui: &mut egui::Ui, label: &str, value: &str) {
+pub fn meta_row(ui: &mut egui::Ui, label: &str, value: &str, _value_col_w: f32) {
     ui.label(
         egui::RichText::new(label)
             .size(theme::FONT_SECONDARY)
-            .color(theme::TEXT_MUTED),
+            .color(ui.visuals().weak_text_color()),
     );
     ui.add(
         egui::Label::new(
             egui::RichText::new(value)
-                .size(theme::FONT_BODY)
-                .color(theme::TEXT_PRIMARY),
+                .size(theme::FONT_BODY),
         )
         .wrap(),
     );
     ui.end_row();
 }
+
+
 
 pub fn format_size(bytes: u64) -> String {
     if bytes >= 1_048_576 {

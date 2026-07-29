@@ -68,7 +68,7 @@ impl InspectorPanel {
             egui::ScrollArea::vertical()
                 .id_salt("inspector_scroll")
                 .auto_shrink([false, false])
-                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
                 .show(ui, |ui| {
                     ui.vertical(|ui| {
                         theme::header_frame(ui).show(ui, |ui| {
@@ -76,8 +76,7 @@ impl InspectorPanel {
                             ui.label(
                                 egui::RichText::new("Details")
                                     .strong()
-                                    .size(theme::FONT_SECTION_HEADER)
-                                    .color(theme::TEXT_PRIMARY),
+                                    .size(theme::FONT_SECTION_HEADER),
                             );
                         });
 
@@ -90,7 +89,6 @@ impl InspectorPanel {
                                     .corner_radius(theme::RADIUS_MD),
                             );
                         }
-                        ui.add_space(theme::SPACING_SM);
                         ui.add_space(theme::SPACING_MD);
 
                         let file_name = entry
@@ -100,35 +98,53 @@ impl InspectorPanel {
                             .unwrap_or_else(|| std::borrow::Cow::Borrowed("unknown"));
                         ui.label(
                             egui::RichText::new(file_name.as_ref())
-                                .size(theme::FONT_CARD_TITLE)
-                                .color(theme::TEXT_PRIMARY),
+                                .size(theme::FONT_CARD_TITLE),
                         );
 
                         ui.add_space(theme::SPACING_SM);
 
+                        // Label column fixed at 80px; value column fills remainder.
+                        let value_col_w = (ui.available_width() - 80.0 - theme::SPACING_SM)
+                            .max(60.0);
                         egui::Grid::new("inspector_meta")
-                            .min_col_width(100.0)
-                            .max_col_width(100.0)
+                            .min_col_width(80.0)
+                            .max_col_width(80.0)
                             .spacing(egui::vec2(theme::SPACING_SM, theme::SPACING_XS))
                             .show(ui, |ui| {
-                                meta_row(ui, "Type", &format!("{}", entry.kind));
+                                meta_row(ui, "Type", &format!("{}", entry.kind), value_col_w);
                                 if entry.width > 0 && entry.height > 0 {
                                     meta_row(
                                         ui,
                                         "Dimensions",
                                         &format!("{} × {} px", entry.width, entry.height),
+                                        value_col_w,
                                     );
                                 }
                                 if entry.file_size > 0 {
-                                    meta_row(ui, "File Size", &format_size(entry.file_size));
+                                    meta_row(
+                                        ui,
+                                        "File Size",
+                                        &format_size(entry.file_size),
+                                        value_col_w,
+                                    );
                                 }
                                 if entry.duration_ms > 0 {
-                                    meta_row(ui, "Duration", &format_duration(entry.duration_ms));
+                                    meta_row(
+                                        ui,
+                                        "Duration",
+                                        &format_duration(entry.duration_ms),
+                                        value_col_w,
+                                    );
                                 }
                                 if !entry.scanned_at.is_empty() {
-                                    meta_row(ui, "Scanned", &entry.scanned_at);
+                                    meta_row(ui, "Scanned", &entry.scanned_at, value_col_w);
                                 }
-                                meta_row(ui, "Path", &entry.path.to_string_lossy());
+                                meta_row(
+                                    ui,
+                                    "Path",
+                                    &entry.path.to_string_lossy(),
+                                    value_col_w,
+                                );
                             });
 
                         ui.add_space(theme::SPACING_LG);

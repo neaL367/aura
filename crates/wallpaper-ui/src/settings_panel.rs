@@ -50,15 +50,24 @@ impl SettingsPanel {
 
                     if let Some(ref config) = config_opt {
                         ui.horizontal(|ui| {
-                            ui.label(
-                                egui::RichText::new(config.library.library_path.to_string_lossy())
-                                    .color(theme::TEXT_PRIMARY),
-                            );
-                            if theme::button(ui, "Change", theme::ButtonVariant::Ghost).clicked()
-                                && let Some(folder) = rfd::FileDialog::new().pick_folder()
-                            {
-                                ipc_client.send(Request::SetWallpaperLibrary { path: folder });
-                            }
+                            // Reserve space for Change button before path label.
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if theme::button(ui, "Change", theme::ButtonVariant::Ghost)
+                                    .clicked()
+                                    && let Some(folder) = rfd::FileDialog::new().pick_folder()
+                                {
+                                    ipc_client.send(Request::SetWallpaperLibrary { path: folder });
+                                }
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new(
+                                            config.library.library_path.to_string_lossy(),
+                                        )
+                                        .size(theme::FONT_BODY),
+                                    )
+                                    .truncate(),
+                                );
+                            });
                         });
                     } else {
                         ui.label(
@@ -279,15 +288,19 @@ impl SettingsPanel {
                             ui.horizontal(|ui| {
                                 ui.label(
                                     egui::RichText::new("Interval")
-                                        .size(theme::FONT_BODY)
-                                        .color(theme::TEXT_PRIMARY),
+                                        .size(theme::FONT_BODY),
                                 );
                                 ui.add_space(theme::SPACING_SM);
                                 let prev = interval;
+                                // Slider without suffix text to avoid checkbox widget appearance.
                                 ui.add(
                                     egui::Slider::new(&mut interval, 30.0..=3600.0)
-                                        .step_by(30.0)
-                                        .text("seconds"),
+                                        .step_by(30.0),
+                                );
+                                ui.label(
+                                    egui::RichText::new("seconds")
+                                        .size(theme::FONT_BODY)
+                                        .color(ui.visuals().weak_text_color()),
                                 );
                                 if (interval - prev).abs() > f32::EPSILON {
                                     updated.appearance.slideshow_interval_secs = interval as u64;

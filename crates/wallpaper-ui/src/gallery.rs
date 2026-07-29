@@ -27,45 +27,46 @@ impl GalleryPanel {
         selected: &mut Option<WallpaperEntry>,
     ) {
         let wallpapers = ipc_client.wallpapers();
-        let available = ui.available_width();
+
+        // --- Search + action button header ---
+        // Right-to-left: buttons on right, search fills remaining left space.
+        ui.horizontal(|ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if theme::button(ui, theme::ICON_REFRESH, theme::ButtonVariant::Ghost)
+                    .on_hover_text("Refresh library")
+                    .clicked()
+                {
+                    ipc_client.send(aura_ipc::Request::RefreshLibrary);
+                }
+                ui.add_space(theme::SPACING_XS);
+                if theme::button(ui, theme::ICON_IMPORT, theme::ButtonVariant::Ghost)
+                    .on_hover_text("Import files")
+                    .clicked()
+                    && let Some(files) = rfd::FileDialog::new()
+                        .add_filter(
+                            "Media Files",
+                            &["png", "jpg", "jpeg", "bmp", "webp", "gif", "mp4", "webm"],
+                        )
+                        .pick_files()
+                {
+                    ipc_client.import_files(files);
+                }
+                // Search fills remaining width (added last in rtl layout = leftmost).
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.search_query)
+                        .hint_text("Search wallpapers...")
+                        .desired_width(ui.available_width()),
+                );
+            });
+        });
+
+        ui.add_space(theme::SPACING_MD);
 
         egui::ScrollArea::vertical()
             .id_salt("gallery_scroll")
             .auto_shrink([false, false])
-            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
             .show(ui, |ui| {
-                // Header row
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.search_query)
-                            .hint_text("Search wallpapers...")
-                            .desired_width(f32::INFINITY),
-                    );
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if theme::button(ui, theme::ICON_REFRESH, theme::ButtonVariant::Ghost)
-                            .on_hover_text("Refresh")
-                            .clicked()
-                        {
-                            ipc_client.send(aura_ipc::Request::RefreshLibrary);
-                        }
-                        ui.add_space(theme::SPACING_XS);
-                        if theme::button(ui, theme::ICON_IMPORT, theme::ButtonVariant::Ghost)
-                            .on_hover_text("Import files")
-                            .clicked()
-                            && let Some(files) = rfd::FileDialog::new()
-                                .add_filter(
-                                    "Media Files",
-                                    &["png", "jpg", "jpeg", "bmp", "webp", "gif", "mp4", "webm"],
-                                )
-                                .pick_files()
-                        {
-                            ipc_client.import_files(files);
-                        }
-                    });
-                });
-
-                ui.add_space(theme::SPACING_MD);
-
                 if wallpapers.is_empty() {
                     theme::empty_state(
                         ui,
@@ -118,19 +119,27 @@ impl GalleryPanel {
                         .collect()
                 };
 
-                let card_w = theme::CARD_WIDTH;
-                let columns = ((available - theme::SPACING_SM) / (card_w + theme::SPACING_MD))
+                // Fluid column + card width computed inside scroll area
+                // to use the real post-scrollbar available width.
+                let avail_w = ui.available_width();
+                let gap = theme::SPACING_MD;
+                let min_card_w: f32 = 160.0;
+                let max_card_w: f32 = 280.0;
+                let columns = ((avail_w + gap) / (min_card_w + gap))
                     .floor()
                     .max(1.0) as usize;
+                let card_w = ((avail_w - gap * (columns.saturating_sub(1) as f32))
+                    / columns as f32)
+                    .clamp(min_card_w, max_card_w);
 
                 egui::Grid::new("gallery_grid")
                     .min_col_width(card_w)
                     .max_col_width(card_w)
-                    .spacing(egui::vec2(theme::SPACING_MD, theme::SPACING_MD))
+                    .spacing(egui::vec2(gap, gap))
                     .show(ui, |ui| {
                         for (i, entry) in filtered.iter().enumerate() {
-                            Self::card(ui, entry, selected, ipc_client);
-                            if (i + 1) % columns == 0 && i + 1 < filtered.len() {
+                            Self::card(ui, entry, selected, ipc_client, card_w);
+                            if (i + 1) % columns == 0 {
                                 ui.end_row();
                             }
                         }
@@ -143,23 +152,25 @@ impl GalleryPanel {
         entry: &WallpaperEntry,
         selected: &mut Option<WallpaperEntry>,
         ipc_client: &UiIpcClient,
+        card_w: f32,
     ) {
         let is_selected = selected.as_ref().is_some_and(|s| s.id == entry.id);
-
         let id = egui::Id::new("gallery_card").with(entry.id);
         let elevation = if is_selected {
             theme::Elevation::Raised
         } else {
             theme::Elevation::Rest
         };
+
         let response = theme::card_frame(ui, id, is_selected, elevation, |ui| {
-            ui.set_width(theme::CARD_WIDTH);
+            // Inner width = card_w minus frame inner_margin * 2 (SPACING_MD each side).
+            let inner_w = (card_w - 2.0 * theme::SPACING_MD).max(1.0);
+            ui.set_width(inner_w);
             ui.vertical(|ui| {
-                // Thumbnail
-                let thumbnail_size = egui::vec2(
-                    theme::CARD_WIDTH - 2.0 * theme::SPACING_MD,
-                    theme::THUMBNAIL_SIZE.y,
-                );
+                // 16:9 thumbnail.
+                let thumb_h = (inner_w * 9.0 / 16.0).round();
+                let thumbnail_size = egui::vec2(inner_w, thumb_h);
+
                 if let Some(ref thumb) = entry.thumbnail_path {
                     let uri = theme::file_uri(thumb);
                     ui.add(
@@ -168,25 +179,38 @@ impl GalleryPanel {
                             .corner_radius(theme::RADIUS_SM),
                     );
                 } else {
-                    ui.allocate_space(thumbnail_size);
+                    let (rect, _) = ui.allocate_exact_size(thumbnail_size, egui::Sense::hover());
+                    ui.painter().rect_filled(
+                        rect,
+                        theme::RADIUS_SM,
+                        ui.visuals().widgets.noninteractive.bg_fill,
+                    );
                 }
 
                 ui.add_space(theme::SPACING_XS);
 
-                // File name row with delete button
+                // Filename row - truncated single-line + delete button.
                 ui.horizontal(|ui| {
+                    // Constrain name width by allocating a scoped ui that leaves
+                    // room for the delete button (~26px) on the right.
+                    let name_w = (inner_w - 26.0).max(20.0);
                     let file_name = entry
                         .path
                         .file_name()
                         .map(|n| n.to_string_lossy())
                         .unwrap_or_else(|| std::borrow::Cow::Borrowed("unknown"));
-                    ui.add(
-                        egui::Label::new(
-                            egui::RichText::new(file_name.as_ref())
-                                .size(theme::FONT_CARD_TITLE)
-                                .color(theme::TEXT_PRIMARY),
-                        )
-                        .wrap(),
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(name_w, 16.0),
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(file_name.as_ref())
+                                        .size(theme::FONT_CARD_TITLE),
+                                )
+                                .truncate(),
+                            );
+                        },
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if theme::button(ui, theme::ICON_DELETE, theme::ButtonVariant::Ghost)
@@ -199,7 +223,7 @@ impl GalleryPanel {
                     });
                 });
 
-                // Meta row: media badge + dimensions
+                // Meta row: badge + dimensions.
                 ui.horizontal(|ui| {
                     let (badge_label, variant) = match entry.kind {
                         aura_core::wallpaper::MediaKind::Image => {
@@ -213,10 +237,16 @@ impl GalleryPanel {
                     theme::badge(ui, badge_label, variant);
 
                     if entry.width > 0 && entry.height > 0 {
-                        ui.label(
-                            egui::RichText::new(format!("{} × {}", entry.width, entry.height))
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(format!(
+                                    "{} \u{00d7} {}",
+                                    entry.width, entry.height
+                                ))
                                 .size(theme::FONT_CAPTION)
-                                .color(theme::TEXT_MUTED),
+                                .color(ui.visuals().weak_text_color()),
+                            )
+                            .truncate(),
                         );
                     }
                 });
