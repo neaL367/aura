@@ -228,39 +228,11 @@ impl SettingsPanel {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Dark Mode").size(theme::FONT_BODY));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let dark = updated.appearance.dark_mode;
-                        theme::segmented_container(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                if theme::button(
-                                    ui,
-                                    "Enabled",
-                                    if dark {
-                                        theme::ButtonVariant::Primary
-                                    } else {
-                                        theme::ButtonVariant::Ghost
-                                    },
-                                )
-                                .clicked()
-                                {
-                                    updated.appearance.dark_mode = true;
-                                    changed = true;
-                                }
-                                if theme::button(
-                                    ui,
-                                    "Disabled",
-                                    if !dark {
-                                        theme::ButtonVariant::Primary
-                                    } else {
-                                        theme::ButtonVariant::Ghost
-                                    },
-                                )
-                                .clicked()
-                                {
-                                    updated.appearance.dark_mode = false;
-                                    changed = true;
-                                }
-                            });
-                        });
+                        let mut dark = updated.appearance.dark_mode;
+                        if theme::toggle_switch(ui, &mut dark).changed() {
+                            updated.appearance.dark_mode = dark;
+                            changed = true;
+                        }
                     });
                 });
 
@@ -268,39 +240,11 @@ impl SettingsPanel {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Auto-start with Windows").size(theme::FONT_BODY));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let auto = updated.appearance.auto_start;
-                        theme::segmented_container(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                if theme::button(
-                                    ui,
-                                    "Enabled",
-                                    if auto {
-                                        theme::ButtonVariant::Primary
-                                    } else {
-                                        theme::ButtonVariant::Ghost
-                                    },
-                                )
-                                .clicked()
-                                {
-                                    updated.appearance.auto_start = true;
-                                    changed = true;
-                                }
-                                if theme::button(
-                                    ui,
-                                    "Disabled",
-                                    if !auto {
-                                        theme::ButtonVariant::Primary
-                                    } else {
-                                        theme::ButtonVariant::Ghost
-                                    },
-                                )
-                                .clicked()
-                                {
-                                    updated.appearance.auto_start = false;
-                                    changed = true;
-                                }
-                            });
-                        });
+                        let mut auto = updated.appearance.auto_start;
+                        if theme::toggle_switch(ui, &mut auto).changed() {
+                            updated.appearance.auto_start = auto;
+                            changed = true;
+                        }
                     });
                 });
 
@@ -335,40 +279,15 @@ impl SettingsPanel {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Slideshow").size(theme::FONT_BODY));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        theme::segmented_container(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                if theme::button(
-                                    ui,
-                                    "Enabled",
-                                    if enabled {
-                                        theme::ButtonVariant::Primary
-                                    } else {
-                                        theme::ButtonVariant::Ghost
-                                    },
-                                )
-                                .clicked()
-                                    && !enabled
-                                {
-                                    updated.appearance.slideshow_interval_secs = interval as u64;
-                                    changed = true;
-                                }
-                                if theme::button(
-                                    ui,
-                                    "Disabled",
-                                    if !enabled {
-                                        theme::ButtonVariant::Primary
-                                    } else {
-                                        theme::ButtonVariant::Ghost
-                                    },
-                                )
-                                .clicked()
-                                    && enabled
-                                {
-                                    updated.appearance.slideshow_interval_secs = 0;
-                                    changed = true;
-                                }
-                            });
-                        });
+                        let mut is_on = enabled;
+                        if theme::toggle_switch(ui, &mut is_on).changed() {
+                            if is_on {
+                                updated.appearance.slideshow_interval_secs = interval as u64;
+                            } else {
+                                updated.appearance.slideshow_interval_secs = 0;
+                            }
+                            changed = true;
+                        }
                     });
                 });
 

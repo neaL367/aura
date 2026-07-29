@@ -106,6 +106,7 @@ impl InspectorPanel {
                         let value_col_w =
                             (ui.available_width() - 80.0 - theme::SPACING_SM).max(60.0);
                         egui::Grid::new("inspector_meta")
+                            .num_columns(2)
                             .min_col_width(80.0)
                             .max_col_width(80.0)
                             .spacing(egui::vec2(theme::SPACING_SM, theme::SPACING_XS))

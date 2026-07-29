@@ -48,7 +48,8 @@ impl MonitorCanvas {
 
         // 2D Monitor Canvas Container
         let canvas_rect = ui.available_rect_before_wrap();
-        let max_canvas_height = 140.0;
+        let is_single = monitors.len() <= 1;
+        let max_canvas_height = if is_single { 36.0 } else { 140.0 };
         let (rect, _response) = ui.allocate_at_least(
             egui::vec2(canvas_rect.width(), max_canvas_height),
             egui::Sense::hover(),
@@ -69,7 +70,32 @@ impl MonitorCanvas {
         // Draw Canvas Background Frame
         ui.painter().rect_filled(rect, theme::RADIUS_MD, canvas_bg);
 
-        // Render Monitor boxes
+        if is_single {
+            let child_ui = &mut ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(rect)
+                    .layout(egui::Layout::left_to_right(egui::Align::Center)),
+            );
+            child_ui.add_space(theme::SPACING_MD);
+            if let Some(mon) = monitors.first() {
+                theme::connection_dot(child_ui, theme::STATUS_CONNECTED);
+                child_ui.add_space(theme::SPACING_XS);
+                child_ui.label(
+                    egui::RichText::new(&mon.name)
+                        .strong()
+                        .size(theme::FONT_BODY),
+                );
+            } else {
+                child_ui.label(
+                    egui::RichText::new("No monitors detected")
+                        .size(theme::FONT_SECONDARY)
+                        .color(ui.visuals().weak_text_color()),
+                );
+            }
+            return;
+        }
+
+        // Render Monitor boxes for 2+ monitors
         let padding = 12.0;
         let count = monitors.len() as f32;
         let box_w = ((rect.width() - (padding * (count + 1.0))) / count).clamp(120.0, 220.0);

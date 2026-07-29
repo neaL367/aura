@@ -253,9 +253,11 @@ impl GalleryPanel {
                         },
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if theme::button(ui, theme::ICON_DELETE, theme::ButtonVariant::Ghost)
-                            .on_hover_text("Delete wallpaper")
-                            .clicked()
+                        ui.spacing_mut().interact_size = egui::vec2(28.0, 28.0);
+                        if (is_selected || ui.rect_contains_pointer(ui.max_rect()))
+                            && theme::button(ui, theme::ICON_DELETE, theme::ButtonVariant::Ghost)
+                                .on_hover_text("Delete wallpaper")
+                                .clicked()
                         {
                             delete_clicked = Some((*entry).clone());
                         }
