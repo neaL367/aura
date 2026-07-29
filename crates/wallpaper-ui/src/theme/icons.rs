@@ -1,0 +1,17 @@
+pub const ICON_GALLERY: &str = egui_phosphor::regular::IMAGE_SQUARE;
+pub const ICON_SETTINGS: &str = egui_phosphor::regular::GEAR_SIX;
+pub const ICON_SEARCH: &str = egui_phosphor::regular::MAGNIFYING_GLASS;
+pub const ICON_REFRESH: &str = egui_phosphor::regular::ARROW_CLOCKWISE;
+pub const ICON_IMPORT: &str = egui_phosphor::regular::PLUS;
+pub const ICON_DELETE: &str = egui_phosphor::regular::TRASH;
+pub const ICON_PAUSE: &str = egui_phosphor::regular::PAUSE;
+pub const ICON_RESUME: &str = egui_phosphor::regular::PLAY;
+pub const ICON_CHECK: &str = egui_phosphor::regular::CHECK;
+pub const ICON_CLOSE: &str = egui_phosphor::regular::X;
+pub const ICON_DOT: &str = egui_phosphor::regular::CIRCLE;
+pub const ICON_WARNING: &str = egui_phosphor::regular::WARNING;
+pub const ICON_INFO: &str = egui_phosphor::regular::INFO;
+pub const ICON_MONITOR: &str = egui_phosphor::regular::MONITOR;
+pub const ICON_DARK_MODE: &str = egui_phosphor::regular::MOON;
+pub const ICON_LIGHT_MODE: &str = egui_phosphor::regular::SUN;
+pub const ICON_SLIDESHOW: &str = egui_phosphor::regular::SLIDESHOW;

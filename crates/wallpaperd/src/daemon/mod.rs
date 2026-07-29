@@ -1,7 +1,7 @@
+pub mod options;
 pub mod reconciliation;
 pub mod slideshow;
 
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -10,12 +10,11 @@ use aura_platform_windows::event_pump::{EventPump, HostEvent};
 use aura_platform_windows::monitor_enumerator::MonitorEnumerator;
 use aura_platform_windows::register_console_ctrl_handler;
 use aura_platform_windows::set_autostart;
-use aura_platform_windows::singleton::ProcessSingleton;
 use aura_platform_windows::workerw::WorkerWManager;
 use aura_renderer_vulkan::VulkanContext;
 use crossbeam_channel::RecvTimeoutError;
-use thiserror::Error;
 
+pub use options::{DaemonError, DaemonOptions};
 pub use reconciliation::{AttachState, attach_or_detach, pump_messages_once, reconcile_monitors};
 pub use slideshow::run_slideshow_cycle;
 
@@ -27,54 +26,6 @@ use crate::perf_monitor::PerfMonitor;
 use crate::recovery::RecoveryManager;
 use crate::render_coordinator::RenderCoordinator;
 use crate::render_thread;
-
-#[derive(Debug, Error)]
-pub enum DaemonError {
-    #[error("storage error: {0}")]
-    Storage(#[from] aura_storage::StorageError),
-    #[error("Vulkan error: {0}")]
-    Vulkan(#[from] aura_renderer_vulkan::VulkanError),
-    #[error("platform error: {0}")]
-    Platform(#[from] aura_platform_windows::PlatformError),
-    #[error("media error: {0}")]
-    Media(#[from] aura_media::MediaError),
-    #[error("another instance of wallpaperd is already running")]
-    AlreadyRunning,
-    #[error("event pump channel disconnected")]
-    EventPumpDisconnected,
-    #[error("failed to spawn render thread")]
-    ThreadSpawn,
-}
-
-/// Configuration passed into `run()` from the hosting binary.
-pub struct DaemonOptions {
-    pub wallpaper_path: Option<PathBuf>,
-    pub shutdown_rx: crossbeam_channel::Receiver<()>,
-    pub ready_tx: std::sync::mpsc::SyncSender<()>,
-    pub done_tx: crossbeam_channel::Sender<()>,
-    pub _singleton: ProcessSingleton,
-}
-
-impl DaemonOptions {
-    /// Create options suitable for a standalone headless daemon
-    /// (wallpaperd -- standalone binary).
-    pub fn standalone(wallpaper_path: Option<PathBuf>) -> Self {
-        let (shutdown_tx, shutdown_rx) = crossbeam_channel::bounded::<()>(1);
-        // Leak sender so receiver never closes (standalone runs until signal).
-        std::mem::forget(shutdown_tx);
-        let (ready_tx, _) = std::sync::mpsc::sync_channel(1);
-        let (done_tx, _) = crossbeam_channel::bounded(1);
-        let singleton =
-            ProcessSingleton::acquire().expect("another wallpaperd instance is already running");
-        Self {
-            wallpaper_path,
-            shutdown_rx,
-            ready_tx,
-            done_tx,
-            _singleton: singleton,
-        }
-    }
-}
 
 pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
     let wallpaper_path = opts.wallpaper_path;
