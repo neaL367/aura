@@ -172,8 +172,9 @@ pub fn restore_desktop_wallpaper() {
         use windows::Win32::Foundation::{LPARAM, WPARAM};
         use windows::Win32::Graphics::Gdi::InvalidateRect;
         use windows::Win32::UI::WindowsAndMessaging::{
-            FindWindowExW, FindWindowW, SEND_MESSAGE_TIMEOUT_FLAGS, SPI_SETDESKWALLPAPER,
-            SPIF_SENDCHANGE, SPIF_UPDATEINIFILE, SendMessageTimeoutW, SystemParametersInfoW,
+            FindWindowExW, FindWindowW, SEND_MESSAGE_TIMEOUT_FLAGS, SPI_GETDESKWALLPAPER,
+            SPI_SETDESKWALLPAPER, SPIF_SENDCHANGE, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+            SendMessageTimeoutW, SystemParametersInfoW,
         };
         use windows::core::w;
 
@@ -195,11 +196,29 @@ pub fn restore_desktop_wallpaper() {
             let _ = InvalidateRect(Some(progman), None, true);
         }
 
-        let _ = SystemParametersInfoW(
-            SPI_SETDESKWALLPAPER,
-            0,
-            None,
-            SPIF_UPDATEINIFILE | SPIF_SENDCHANGE,
-        );
+        // Query current Windows desktop wallpaper path first so we can trigger a refresh
+        // without replacing the wallpaper with Windows default or mutating registry.
+        let mut path_buf = [0u16; 260];
+        if SystemParametersInfoW(
+            SPI_GETDESKWALLPAPER,
+            path_buf.len() as u32,
+            Some(path_buf.as_mut_ptr() as *mut _),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+        .is_ok()
+        {
+            let len = path_buf
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(path_buf.len());
+            if len > 0 {
+                let _ = SystemParametersInfoW(
+                    SPI_SETDESKWALLPAPER,
+                    0,
+                    Some(path_buf.as_ptr() as *mut _),
+                    SPIF_SENDCHANGE,
+                );
+            }
+        }
     }
 }

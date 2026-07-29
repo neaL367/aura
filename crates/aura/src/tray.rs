@@ -21,9 +21,9 @@ use windows::Win32::{
     UI::WindowsAndMessaging::{
         AppendMenuW, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreatePopupMenu, CreateWindowExW,
         DefWindowProcW, DestroyMenu, DestroyWindow, DispatchMessageW, FindWindowW, GetCursorPos,
-        GetMessageW, GetWindowThreadProcessId, IDI_APPLICATION, IsWindowVisible, LoadCursorW,
-        LoadIconW, MF_STRING, MSG, PostMessageW, PostQuitMessage, RegisterClassW, SW_HIDE,
-        SW_RESTORE, SetForegroundWindow, ShowWindow, TPM_RIGHTBUTTON, TrackPopupMenu,
+        GetMessageW, GetWindowThreadProcessId, IDC_ARROW, IDI_APPLICATION, IsWindowVisible,
+        LoadCursorW, LoadIconW, MF_STRING, MSG, PostMessageW, PostQuitMessage, RegisterClassW,
+        SW_HIDE, SW_RESTORE, SetForegroundWindow, ShowWindow, TPM_RIGHTBUTTON, TrackPopupMenu,
         WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDOWN, WM_NULL,
         WM_RBUTTONDOWN, WNDCLASSW,
     },
@@ -70,7 +70,7 @@ impl TrayManager {
             style: CS_HREDRAW | CS_VREDRAW,
             lpfnWndProc: Some(Self::wnd_proc),
             hInstance: instance.into(),
-            hCursor: unsafe { LoadCursorW(None, w!("IDC_ARROW")).unwrap_or_default() },
+            hCursor: unsafe { LoadCursorW(None, IDC_ARROW).unwrap_or_default() },
             lpszClassName: w!("AuraTrayWindow"),
             ..Default::default()
         };

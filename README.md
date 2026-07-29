@@ -24,28 +24,28 @@
 
 ```text
 ┌──────────────────────────────────────────────────┐
-│                   aura.exe                        │
+│                   aura.exe                       │
 │  ┌────────────────────────────────────────────┐  │
 │  │  eframe (main thread) — egui UI            │  │
 │  │  ┌──────────────┐  ┌─────────────────────┐ │  │
 │  │  │ wallpaper-ui │  │  UiIpcClient        │ │  │
-│  │  │  Gallery     │  │  (background thread) │ │  │
-│  │  │  Settings    │  │  tokio reconnect     │ │  │
+│  │  │  Gallery     │  │  (background thread)│ │  │
+│  │  │  Settings    │  │  tokio reconnect    │ │  │
 │  │  │  Inspector   │  └─────┬───────────────┘ │  │
-│  │  └──────────────┘        │ named pipe       │  │
-│  └──────────────────────────┼──────────────────┘  │
-│                             │                      │
-│  ┌──────────────────────────┼──────────────────┐  │
-│  │  wallpaperd daemon thread ──┘               │  │
-│  │  ├── Orchestrator + IpcServer (tokio)       │  │
-│  │  ├── RenderCoordinator (per-monitor vulkan) │  │
-│  │  ├── EventPump (Win32 message loop)         │  │
-│  │  └── WorkerW / platform integration         │  │
-│  └─────────────────────────────────────────────┘  │
-│                                                    │
-│  crossbeam_channel: shutdown + ready + done        │
-│  ProcessSingleton: acquired on main thread         │
-└────────────────────────────────────────────────────┘
+│  │  └──────────────┘        │ named pipe      │  │
+│  └──────────────────────────┼─────────────────┘  │
+│                             │                    │
+│  ┌──────────────────────────┼──────────────────┐ │
+│  │  wallpaperd daemon thread                   │ │
+│  │  ├── Orchestrator + IpcServer (tokio)       │ │
+│  │  ├── RenderCoordinator (per-monitor vulkan) │ │
+│  │  ├── EventPump (Win32 message loop)         │ │
+│  │  └── WorkerW / platform integration         │ │
+│  └─────────────────────────────────────────────┘ │
+│                                                  │
+│  crossbeam_channel: shutdown + ready + done      │
+│  ProcessSingleton: acquired on main thread       │
+└──────────────────────────────────────────────────┘
 ```
 
 ---
