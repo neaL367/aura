@@ -299,14 +299,14 @@ name = "aura"
 version = "0.1.0"
 dependencies = [
  "aura-core",
- "aura-platform-windows",
+ "aura-daemon",
+ "aura-ui",
+ "aura-win",
  "crossbeam-channel",
  "eframe",
  "egui",
  "tracing",
  "tracing-subscriber",
- "wallpaper-ui",
- "wallpaperd",
  "windows",
 ]
 
@@ -319,6 +319,28 @@ dependencies = [
  "thiserror 2.0.19",
  "toml",
  "uuid",
+]
+
+[[package]]
+name = "aura-daemon"
+version = "0.1.0"
+dependencies = [
+ "aura-core",
+ "aura-ipc",
+ "aura-media",
+ "aura-security",
+ "aura-storage",
+ "aura-vulkan",
+ "aura-win",
+ "crossbeam-channel",
+ "rand 0.9.5",
+ "serde",
+ "thiserror 2.0.19",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "windows",
 ]
 
 [[package]]
@@ -348,32 +370,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aura-platform-windows"
-version = "0.1.0"
-dependencies = [
- "aura-core",
- "aura-media",
- "aura-security",
- "crossbeam-channel",
- "h264-reader",
- "thiserror 2.0.19",
- "tracing",
- "windows",
-]
-
-[[package]]
-name = "aura-renderer-vulkan"
-version = "0.1.0"
-dependencies = [
- "ash",
- "aura-core",
- "gpu-allocator",
- "thiserror 2.0.19",
- "tracing",
- "windows",
-]
-
-[[package]]
 name = "aura-security"
 version = "0.1.0"
 dependencies = [
@@ -389,8 +385,8 @@ version = "0.1.0"
 dependencies = [
  "aura-core",
  "aura-media",
- "aura-platform-windows",
  "aura-security",
+ "aura-win",
  "chrono",
  "image",
  "notify-debouncer-full",
@@ -401,6 +397,52 @@ dependencies = [
  "toml",
  "tracing",
  "uuid",
+ "windows",
+]
+
+[[package]]
+name = "aura-ui"
+version = "0.1.0"
+dependencies = [
+ "aura-core",
+ "aura-ipc",
+ "aura-storage",
+ "eframe",
+ "egui",
+ "egui-phosphor",
+ "egui_extras",
+ "rfd",
+ "serde",
+ "thiserror 2.0.19",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "windows",
+]
+
+[[package]]
+name = "aura-vulkan"
+version = "0.1.0"
+dependencies = [
+ "ash",
+ "aura-core",
+ "gpu-allocator",
+ "thiserror 2.0.19",
+ "tracing",
+ "windows",
+]
+
+[[package]]
+name = "aura-win"
+version = "0.1.0"
+dependencies = [
+ "aura-core",
+ "aura-media",
+ "aura-security",
+ "crossbeam-channel",
+ "h264-reader",
+ "thiserror 2.0.19",
+ "tracing",
  "windows",
 ]
 
@@ -3691,48 +3733,6 @@ checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
 dependencies = [
  "same-file",
  "winapi-util",
-]
-
-[[package]]
-name = "wallpaper-ui"
-version = "0.1.0"
-dependencies = [
- "aura-core",
- "aura-ipc",
- "aura-storage",
- "eframe",
- "egui",
- "egui-phosphor",
- "egui_extras",
- "rfd",
- "serde",
- "thiserror 2.0.19",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "windows",
-]
-
-[[package]]
-name = "wallpaperd"
-version = "0.1.0"
-dependencies = [
- "aura-core",
- "aura-ipc",
- "aura-media",
- "aura-platform-windows",
- "aura-renderer-vulkan",
- "aura-security",
- "aura-storage",
- "crossbeam-channel",
- "rand 0.9.5",
- "serde",
- "thiserror 2.0.19",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "windows",
 ]
 
 [[package]]

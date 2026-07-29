@@ -74,14 +74,14 @@ The project is structured as a modular Cargo workspace across 9 crates and 1 too
 | Crate | Purpose |
 | :--- | :--- |
 | [`aura`](crates/aura) | Unified entry point binary — merges daemon + UI. Acquires singleton on main thread, spawns daemon background, runs eframe. Supports `--daemon-only` |
-| [`aura-core`](crates/core) | Platform-independent domain model (monitors, wallpaper lifecycle, configs) |
-| [`aura-ipc`](crates/ipc) | Length-prefixed JSON serialization protocol over Windows Named Pipes |
-| [`aura-storage`](crates/storage) | Persistence layer (`ConfigStore`, `LibraryStore`, `atomic_file`, `LibraryScanner`, `LibraryWatcher`) |
-| [`aura-media`](crates/media) | Frame-bounded image/GIF decoders and decoder traits |
-| [`aura-platform-windows`](crates/platform-windows) | Win32 HWND wrappers, WorkerW (`discovery`, `attachment`, `manager`), `monitor_enumerator`, `mf_video_decoder`, `power` |
-| [`aura-renderer-vulkan`](crates/renderer-vulkan) | Vulkan context, monitor renderers (`frame_pass`, `resources`), swapchains, shaders, RAII Drop |
-| [`wallpaperd`](crates/wallpaperd) | Headless daemon orchestrator (`handlers/`), `assignment_manager`, `perf_monitor` & render threads (`placement`, `loop_runner`) |
-| [`wallpaper-ui`](crates/wallpaper-ui) | `egui`/`eframe` GUI Control Panel (`theme/`, `sidebar.rs`, `gallery.rs`, `canvas.rs`, `inspector/`, `settings_panel.rs`, `status_bar.rs`, `toast.rs`) & reconnecting IPC client |
+| [`aura-core`](crates/aura-core) | Platform-independent domain model (monitors, wallpaper lifecycle, configs) |
+| [`aura-ipc`](crates/aura-ipc) | Length-prefixed JSON serialization protocol over Windows Named Pipes |
+| [`aura-storage`](crates/aura-storage) | Persistence layer (`ConfigStore`, `LibraryStore`, `atomic_file`, `LibraryScanner`, `LibraryWatcher`) |
+| [`aura-media`](crates/aura-media) | Frame-bounded image/GIF decoders and decoder traits |
+| [`aura-win`](crates/aura-win) | Win32 HWND wrappers, WorkerW (`discovery`, `attachment`, `manager`), `monitor_enumerator`, `mf_video_decoder`, `power` |
+| [`aura-vulkan`](crates/aura-vulkan) | Vulkan context, monitor renderers (`frame_pass`, `resources`), swapchains, shaders, RAII Drop |
+| [`aura-daemon`](crates/aura-daemon) | Headless daemon orchestrator (`handlers/`), `assignment_manager`, `perf_monitor` & render threads (`placement`, `loop_runner`) |
+| [`aura-ui`](crates/aura-ui) | `egui`/`eframe` GUI Control Panel (`theme/`, `sidebar.rs`, `gallery.rs`, `canvas.rs`, `inspector/`, `settings_panel.rs`, `status_bar.rs`, `toast.rs`) & reconnecting IPC client |
 | [`workerw-proof`](tools/workerw-proof) | Standalone validation tool for WorkerW integration proof |
 
 ---

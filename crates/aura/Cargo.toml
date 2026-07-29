@@ -11,10 +11,10 @@ name = "aura"
 path = "src/main.rs"
 
 [dependencies]
-aura-core     = { workspace = true }
-wallpaperd     = { path = "../wallpaperd" }
-wallpaper-ui   = { path = "../wallpaper-ui" }
-aura-platform-windows = { path = "../platform-windows" }
+aura-core   = { workspace = true }
+aura-daemon = { workspace = true }
+aura-ui     = { workspace = true }
+aura-win    = { workspace = true }
 
 eframe      = { workspace = true }
 egui        = { workspace = true }

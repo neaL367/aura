@@ -1,15 +1,15 @@
 [workspace]
 members = [
     "crates/aura",
-    "crates/core",
-    "crates/ipc",
-    "crates/storage",
-    "crates/media",
-    "crates/platform-windows",
-    "crates/renderer-vulkan",
-    "crates/security",
-    "crates/wallpaperd",
-    "crates/wallpaper-ui",
+    "crates/aura-core",
+    "crates/aura-ipc",
+    "crates/aura-storage",
+    "crates/aura-media",
+    "crates/aura-win",
+    "crates/aura-vulkan",
+    "crates/aura-security",
+    "crates/aura-daemon",
+    "crates/aura-ui",
     "tools/workerw-proof",
 ]
 resolver = "2"
@@ -71,13 +71,15 @@ egui        = "0.35"
 egui_extras = { version = "0.35", features = ["image", "file"] }
 
 # Internal workspace crates
-aura-core             = { path = "crates/core" }
-aura-ipc              = { path = "crates/ipc" }
-aura-storage          = { path = "crates/storage" }
-aura-media            = { path = "crates/media" }
-aura-platform-windows = { path = "crates/platform-windows" }
-aura-renderer-vulkan  = { path = "crates/renderer-vulkan" }
-aura-security         = { path = "crates/security" }
+aura-core     = { path = "crates/aura-core" }
+aura-ipc      = { path = "crates/aura-ipc" }
+aura-storage  = { path = "crates/aura-storage" }
+aura-media    = { path = "crates/aura-media" }
+aura-win      = { path = "crates/aura-win" }
+aura-vulkan   = { path = "crates/aura-vulkan" }
+aura-security = { path = "crates/aura-security" }
+aura-daemon   = { path = "crates/aura-daemon" }
+aura-ui       = { path = "crates/aura-ui" }
 
 # ---------------------------------------------------------------------------
 # Build profiles

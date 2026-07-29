@@ -6,7 +6,7 @@ mod tray;
 #[cfg(target_os = "windows")]
 fn main() {
     // Step 0: DPI awareness — must be before thread spawn or run_native()
-    if let Err(e) = aura_platform_windows::enable_dpi_awareness() {
+    if let Err(e) = aura_win::enable_dpi_awareness() {
         eprintln!("DPI awareness failed: {e}");
     }
 
@@ -14,7 +14,7 @@ fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "aura=info,wallpaperd=info,aura_platform_windows=info".into()),
+                .unwrap_or_else(|_| "aura=info,aura_daemon=info,aura_win=info".into()),
         )
         .init();
 
@@ -23,8 +23,8 @@ fn main() {
 
     if daemon_only {
         // No singleton check — headless daemon mode
-        let opts = wallpaperd::daemon::DaemonOptions::standalone(None);
-        if let Err(e) = wallpaperd::daemon::run(opts) {
+        let opts = aura_daemon::daemon::DaemonOptions::standalone(None);
+        if let Err(e) = aura_daemon::daemon::run(opts) {
             tracing::error!("daemon exited with error: {e}");
             std::process::exit(1);
         }
@@ -32,13 +32,13 @@ fn main() {
     }
 
     // Step 3: check singleton — if running, bring existing window to front
-    if aura_platform_windows::singleton::ProcessSingleton::is_running() {
+    if aura_win::singleton::ProcessSingleton::is_running() {
         bring_existing_window_to_front();
         std::process::exit(0);
     }
 
     // Step 4: acquire singleton on main thread (eliminates TOCTOU race)
-    let singleton = match aura_platform_windows::singleton::ProcessSingleton::acquire() {
+    let singleton = match aura_win::singleton::ProcessSingleton::acquire() {
         Ok(s) => s,
         Err(_) => {
             // Race lost between is_running() and acquire()
@@ -52,7 +52,7 @@ fn main() {
     let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel::<()>(1);
     let (done_tx, done_rx) = crossbeam_channel::bounded::<()>(1);
 
-    let opts = wallpaperd::daemon::DaemonOptions {
+    let opts = aura_daemon::daemon::DaemonOptions {
         wallpaper_path: None,
         shutdown_rx,
         ready_tx,
@@ -64,7 +64,7 @@ fn main() {
     std::thread::Builder::new()
         .name("daemon".into())
         .spawn(move || {
-            if let Err(e) = wallpaperd::daemon::run(opts) {
+            if let Err(e) = aura_daemon::daemon::run(opts) {
                 tracing::error!("daemon thread exited with error: {e}");
             }
         })
@@ -116,14 +116,14 @@ fn main() {
                 tracing::error!(
                     "quit-fallback: exhausted retries — restoring wallpaper then force-exiting"
                 );
-                aura_platform_windows::workerw::restore_desktop_wallpaper();
+                aura_win::workerw::restore_desktop_wallpaper();
                 std::process::exit(0);
             })
             .expect("failed to spawn quit-fallback thread")
     };
 
     // Step 9: run eframe (blocks until window closed)
-    wallpaper_ui::run();
+    aura_ui::run();
 
     // Step 10: signal daemon to stop
     let _ = shutdown_tx.send(());
@@ -133,7 +133,7 @@ fn main() {
         Ok(()) => tracing::info!("daemon shutdown complete"),
         Err(_) => {
             tracing::warn!("daemon shutdown timed out — restoring wallpaper directly");
-            aura_platform_windows::workerw::restore_desktop_wallpaper();
+            aura_win::workerw::restore_desktop_wallpaper();
         }
     }
 }

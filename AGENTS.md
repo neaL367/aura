@@ -8,7 +8,7 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 
 - **Target OS**: Windows 11 only. Win32 APIs, undocumented desktop composition messages (`0x052C`), and `WorkerW` desktop layers are utilized.
 - **Rust Toolchain**: Pinned to `1.97.1` (as configured in `rust-toolchain.toml`).
-- **Cross-Platform Stubs**: For non-Windows developers or CI systems (like Linux runners), target-gated stubs are provided in `crates/platform-windows/src/lib.rs` and `crates/renderer-vulkan/src/lib.rs`. Do not break these stubs when adding platform-specific features.
+- **Cross-Platform Stubs**: For non-Windows developers or CI systems (like Linux runners), target-gated stubs are provided in `crates/aura-win/src/lib.rs` and `crates/aura-vulkan/src/lib.rs`. Do not break these stubs when adding platform-specific features.
 
 ---
 
@@ -33,14 +33,14 @@ This project is a high-performance, low-overhead Windows 11 Desktop Wallpaper Pl
 ## 4. Architectural Rules
 
 - **Crate Layout & Module Boundaries**:
-  - `crates/core`: Platform-independent domain types (monitors, wallpaper lifecycle, configs).
-  - `crates/ipc`: Typed length-prefixed JSON protocol over `\\.\pipe\aura-wallpaperd`.
-  - `crates/storage`: TOML configs (`aura.toml` via `ConfigStore`), JSON wallpaper library cache (`library.json` via `LibraryStore`), atomic file updates (`atomic_file.rs`), live watcher (`LibraryWatcher`), and recursive `LibraryScanner` (multi-format media discovery: `png`, `jpg`, `jpeg`, `bmp`, `gif`, `webp`, `mp4`, `mkv`). Paths for both files are resolved under `%APPDATA%/aura` using `dirs::config_dir()`.
-  - `crates/media`: Static image and GIF decoding (using disposal canvas composition).
-  - `crates/platform-windows`: Win32 native window wrappers, WorkerW attach (`workerw/` split into `discovery`, `attachment`, `manager`), event pump, `monitor_enumerator`, `mf_video_decoder`, `power`, and singleton.
-  - `crates/renderer-vulkan`: Vulkan pipeline, swapchain, texture upload, and `MonitorRenderer` (`monitor_renderer/` split into `frame_pass`, `resources`).
-  - `crates/wallpaperd`: Aura background daemon coordinator (owns `WorkerW`, Vulkan render threads, IPC server). Split into focused submodules: `orchestrator/` (`handlers/` for `status`, `assignment`, `library`), `assignment_manager`, `perf_monitor`, and `render_thread/` (`placement`, `loop_runner`).
-  - `crates/wallpaper-ui`: `egui`/`eframe`-based Control Panel UI (`theme/`, `sidebar.rs`, `gallery.rs`, `canvas.rs`, `inspector/`, `settings_panel.rs`, `status_bar.rs`, `toast.rs`). Exposes `wallpaper_ui::run()` for use by the unified `aura` binary.
+  - `crates/aura-core`: Platform-independent domain types (monitors, wallpaper lifecycle, configs).
+  - `crates/aura-ipc`: Typed length-prefixed JSON protocol over `\\.\pipe\aura-wallpaperd`.
+  - `crates/aura-storage`: TOML configs (`aura.toml` via `ConfigStore`), JSON wallpaper library cache (`library.json` via `LibraryStore`), atomic file updates (`atomic_file.rs`), live watcher (`LibraryWatcher`), and recursive `LibraryScanner` (multi-format media discovery: `png`, `jpg`, `jpeg`, `bmp`, `gif`, `webp`, `mp4`, `mkv`). Paths for both files are resolved under `%APPDATA%/aura` using `dirs::config_dir()`.
+  - `crates/aura-media`: Static image and GIF decoding (using disposal canvas composition).
+  - `crates/aura-win`: Win32 native window wrappers, WorkerW attach (`workerw/` split into `discovery`, `attachment`, `manager`), event pump, `monitor_enumerator`, `mf_video_decoder`, `power`, and singleton.
+  - `crates/aura-vulkan`: Vulkan pipeline, swapchain, texture upload, and `MonitorRenderer` (`monitor_renderer/` split into `frame_pass`, `resources`).
+  - `crates/aura-daemon`: Aura background daemon coordinator (owns `WorkerW`, Vulkan render threads, IPC server). Split into focused submodules: `orchestrator/` (`handlers/` for `status`, `assignment`, `library`), `assignment_manager`, `perf_monitor`, and `render_thread/` (`placement`, `loop_runner`).
+  - `crates/aura-ui`: `egui`/`eframe`-based Control Panel UI (`theme/`, `sidebar.rs`, `gallery.rs`, `canvas.rs`, `inspector/`, `settings_panel.rs`, `status_bar.rs`, `toast.rs`). Exposes `aura_ui::run()` for use by the unified `aura` binary.
   - `crates/aura`: Unified entry point binary combining daemon + UI. Acquires `ProcessSingleton` on main thread (eliminating TOCTOU race), spawns daemon on background thread, runs eframe on main thread. Supports `--daemon-only` for headless mode. On second-instance detection, brings existing window to front via `AttachThreadInput` + `SetForegroundWindow`.
   - `tools/workerw-proof`: Phase 0 standalone WorkerW validation tool.
 
