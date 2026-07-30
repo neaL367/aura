@@ -24,7 +24,7 @@ pub fn file_uri(path: &std::path::Path) -> String {
     format!("file:///{}", normalized)
 }
 
-pub fn setup_theme(ctx: &egui::Context) {
+pub fn setup_fonts(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
 
     let regular_ttf = include_bytes!("../../../../resources/fonts/Geist-Regular.ttf");
@@ -58,12 +58,16 @@ pub fn setup_theme(ctx: &egui::Context) {
     egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
 
     ctx.set_fonts(fonts);
+}
+
+pub fn setup_theme(ctx: &egui::Context) {
+    setup_fonts(ctx);
 
     let mut visuals = Visuals::light();
     visuals.panel_fill = BG_APP;
     visuals.window_fill = BG_CARD;
     visuals.extreme_bg_color = egui::Color32::from_rgb(255, 255, 255);
-    visuals.override_text_color = Some(TEXT_PRIMARY);
+    visuals.override_text_color = None;
 
     visuals.widgets.noninteractive.bg_fill = BG_CARD;
     visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, BORDER_SUBTLE);
@@ -94,14 +98,21 @@ pub fn setup_theme(ctx: &egui::Context) {
     visuals.selection.stroke = Stroke::new(1.0, TEXT_ON_DARK);
 
     ctx.set_visuals(visuals);
+    ctx.style_mut_of(egui::Theme::Light, |style| {
+        style.spacing.scroll.bar_width = 8.0;
+        style.spacing.scroll.bar_inner_margin = 2.0;
+        style.spacing.scroll.bar_outer_margin = 2.0;
+    });
 }
 
 pub fn setup_dark_theme(ctx: &egui::Context) {
+    setup_fonts(ctx);
+
     let mut visuals = Visuals::dark();
     visuals.panel_fill = BG_APP_DARK;
     visuals.window_fill = BG_CARD_DARK;
     visuals.extreme_bg_color = egui::Color32::from_rgb(18, 18, 20);
-    visuals.override_text_color = Some(TEXT_PRIMARY_DARK);
+    visuals.override_text_color = None;
 
     visuals.widgets.noninteractive.bg_fill = BG_CARD_DARK;
     visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, BORDER_SUBTLE_DARK);
@@ -132,4 +143,9 @@ pub fn setup_dark_theme(ctx: &egui::Context) {
     visuals.selection.stroke = Stroke::new(1.0, TEXT_ON_DARK_DARK);
 
     ctx.set_visuals(visuals);
+    ctx.style_mut_of(egui::Theme::Dark, |style| {
+        style.spacing.scroll.bar_width = 8.0;
+        style.spacing.scroll.bar_inner_margin = 2.0;
+        style.spacing.scroll.bar_outer_margin = 2.0;
+    });
 }

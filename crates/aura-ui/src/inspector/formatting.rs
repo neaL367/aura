@@ -1,6 +1,6 @@
 use crate::theme;
 
-pub fn meta_row(ui: &mut egui::Ui, label: &str, value: &str, _value_col_w: f32) {
+pub fn meta_row(ui: &mut egui::Ui, label: &str, value: &str, value_col_w: f32) {
     ui.label(
         egui::RichText::new(label)
             .size(theme::FONT_SECONDARY)
@@ -14,8 +14,13 @@ pub fn meta_row(ui: &mut egui::Ui, label: &str, value: &str, _value_col_w: f32) 
     } else {
         egui::RichText::new(value).size(theme::FONT_BODY)
     };
-    ui.add(egui::Label::new(text).truncate())
-        .on_hover_text(value);
+    ui.allocate_ui_with_layout(
+        egui::vec2(value_col_w, 18.0),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.add(egui::Label::new(text).truncate());
+        },
+    );
     ui.end_row();
 }
 

@@ -15,6 +15,7 @@ pub fn render_fit_mode_selector(
     entry: &WallpaperEntry,
     monitors: &[aura_ipc::protocol::MonitorSummary],
     assigned_mons: &HashSet<&MonitorId>,
+    has_generic: bool,
     ipc_client: &UiIpcClient,
 ) {
     theme::section_label(ui, "FIT MODE");
@@ -38,7 +39,7 @@ pub fn render_fit_mode_selector(
                 if theme::button(ui, &format!("{}", mode), variant).clicked() {
                     *selected_fit_mode = mode;
                     for mon in monitors {
-                        if assigned_mons.contains(&mon.id) {
+                        if assigned_mons.contains(&mon.id) || has_generic {
                             ipc_client.send(Request::AssignWallpaper {
                                 monitor_id: mon.id,
                                 wallpaper_id: entry.id,
@@ -52,13 +53,15 @@ pub fn render_fit_mode_selector(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_monitor_assignment(
     ui: &mut egui::Ui,
     selected_fit_mode: FitMode,
     entry: &WallpaperEntry,
     monitors: &[aura_ipc::protocol::MonitorSummary],
-    assignments: &[MonitorAssignment],
+    _assignments: &[MonitorAssignment],
     assigned_mons: &HashSet<&MonitorId>,
+    has_generic: bool,
     ipc_client: &UiIpcClient,
 ) {
     if monitors.is_empty() {
@@ -69,7 +72,7 @@ pub fn render_monitor_assignment(
     ui.add_space(theme::SPACING_SM);
 
     for mon in monitors {
-        let already = assigned_mons.contains(&mon.id);
+        let already = assigned_mons.contains(&mon.id) || has_generic;
         let label = if already {
             format!("{} {}", mon.name, theme::ICON_CHECK)
         } else {
@@ -80,12 +83,14 @@ pub fn render_monitor_assignment(
         } else {
             theme::ButtonVariant::Secondary
         };
-        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
             ui.set_min_width(ui.available_width());
             if theme::button(ui, &label, variant).clicked() {
                 if already {
+                    ipc_client.remove_assignment_optimistic(mon.id);
                     ipc_client.send(Request::RemoveAssignment { monitor_id: mon.id });
                 } else {
+                    ipc_client.assign_wallpaper_optimistic(mon.id, entry.id, selected_fit_mode);
                     ipc_client.send(Request::AssignWallpaper {
                         monitor_id: mon.id,
                         wallpaper_id: entry.id,
@@ -97,9 +102,6 @@ pub fn render_monitor_assignment(
         ui.add_space(theme::SPACING_XS);
     }
 
-    let has_generic = assignments
-        .iter()
-        .any(|a| a.wallpaper_id == entry.id && a.monitor_id.as_uuid().is_nil());
     if has_generic {
         ui.add_space(theme::SPACING_XS);
         ui.label(

@@ -63,8 +63,6 @@ impl InspectorPanel {
             .inner_margin(egui::Margin::same(theme::SPACING_LG as i8));
 
         frame.show(ui, |ui| {
-            ui.set_min_height(ui.available_height());
-            ui.set_min_width(ui.available_width());
             egui::ScrollArea::vertical()
                 .id_salt("inspector_scroll")
                 .auto_shrink([false, false])
@@ -78,11 +76,13 @@ impl InspectorPanel {
                         );
 
                         if let Some(ref thumb) = entry.thumbnail_path {
-                            let thumb_size = egui::vec2(ui.available_width(), 160.0);
+                            let thumb_h = (ui.available_width() * 9.0 / 16.0).round();
+                            let thumb_size = egui::vec2(ui.available_width(), thumb_h);
                             let uri = theme::file_uri(thumb);
                             ui.add(
                                 egui::Image::new(&uri)
                                     .fit_to_exact_size(thumb_size)
+                                    .maintain_aspect_ratio(false)
                                     .corner_radius(theme::RADIUS_MD),
                             );
                         }
@@ -99,13 +99,11 @@ impl InspectorPanel {
 
                         ui.add_space(theme::SPACING_SM);
 
-                        // Label column fixed at 80px; value column fills remainder.
+                        // Label column ~80px; value column fills remainder.
                         let value_col_w =
-                            (ui.available_width() - 80.0 - theme::SPACING_SM).max(60.0);
+                            (ui.available_width() - 85.0 - theme::SPACING_SM).max(60.0);
                         egui::Grid::new("inspector_meta")
                             .num_columns(2)
-                            .min_col_width(80.0)
-                            .max_col_width(80.0)
                             .spacing(egui::vec2(theme::SPACING_SM, theme::SPACING_XS))
                             .show(ui, |ui| {
                                 meta_row(ui, "Type", &format!("{}", entry.kind), value_col_w);
@@ -152,12 +150,17 @@ impl InspectorPanel {
                             .map(|a| &a.monitor_id)
                             .collect();
 
+                        let has_generic = assignments
+                            .iter()
+                            .any(|a| a.wallpaper_id == entry.id && a.monitor_id.as_uuid().is_nil());
+
                         render_fit_mode_selector(
                             ui,
                             &mut self.selected_fit_mode,
                             entry,
                             monitors,
                             &assigned_mons,
+                            has_generic,
                             ipc_client,
                         );
 
@@ -170,6 +173,7 @@ impl InspectorPanel {
                             monitors,
                             assignments,
                             &assigned_mons,
+                            has_generic,
                             ipc_client,
                         );
                     });

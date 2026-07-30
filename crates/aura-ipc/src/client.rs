@@ -31,17 +31,20 @@ impl IpcClient {
         const MAX_ATTEMPTS: u32 = 40; // ~2 s at 50 ms cadence
         let mut attempts = 0u32;
         let pipe = loop {
+            attempts += 1;
             match ClientOptions::new().open(pipe_name) {
                 Ok(p) => break p,
-                Err(e) if e.raw_os_error() == Some(231) => {
-                    attempts += 1;
-                    if attempts >= MAX_ATTEMPTS {
+                Err(e) => {
+                    let is_busy = matches!(e.raw_os_error(), Some(231 | 170));
+                    if is_busy && attempts < MAX_ATTEMPTS {
+                        debug!(attempt = attempts, "Pipe busy, retrying…");
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    } else if is_busy {
                         return Err(IpcError::PipeBusy { attempts });
+                    } else {
+                        return Err(IpcError::Io(e));
                     }
-                    debug!(attempt = attempts, "Pipe busy, retrying…");
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 }
-                Err(e) => return Err(IpcError::Io(e)),
             }
         };
         Ok(Self { pipe })

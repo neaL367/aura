@@ -16,7 +16,6 @@ pub const CARD_MIN_WIDTH: f32 = 180.0;
 pub const CARD_MAX_WIDTH: f32 = 280.0;
 pub const MONITOR_CARD_WIDTH: f32 = 360.0;
 pub const THUMBNAIL_SIZE: egui::Vec2 = egui::vec2(240.0, 135.0);
-pub const SIDEBAR_WIDTH: f32 = 200.0;
 pub const SIDEBAR_EXPANDED_WIDTH: f32 = 200.0;
 pub const SIDEBAR_COLLAPSED_WIDTH: f32 = 48.0;
 pub const SIDEBAR_INDICATOR_WIDTH: f32 = 3.0;

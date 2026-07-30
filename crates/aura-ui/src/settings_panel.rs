@@ -34,7 +34,8 @@ impl SettingsPanel {
         ui.label(
             egui::RichText::new("Settings")
                 .strong()
-                .size(theme::FONT_WINDOW_TITLE),
+                .size(theme::FONT_WINDOW_TITLE)
+                .color(ui.visuals().text_color()),
         );
         ui.add_space(theme::SPACING_MD);
         ui.separator();
@@ -45,20 +46,31 @@ impl SettingsPanel {
             .id_salt("settings_scroll")
             .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
             .show(ui, |ui| {
+                let gap = theme::SPACING_LG;
                 if avail_w >= 720.0 {
-                    ui.columns(2, |cols| {
-                        cols[0].vertical(|ui| {
-                            Self::render_library_card(ui, &config_opt, ipc_client);
-                            ui.add_space(theme::SPACING_LG);
-                            Self::render_performance_card(ui, &config_opt, ipc_client);
-                        });
-                        cols[1].vertical(|ui| {
-                            Self::render_appearance_card(ui, &config_opt, ipc_client);
-                            ui.add_space(theme::SPACING_LG);
-                            Self::render_slideshow_card(ui, &config_opt, ipc_client);
-                            ui.add_space(theme::SPACING_LG);
-                            Self::render_info_card(ui);
-                        });
+                    let col_w = ((avail_w - gap) / 2.0).max(300.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = gap;
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(col_w, 0.0),
+                            egui::Layout::top_down(egui::Align::LEFT),
+                            |ui| {
+                                Self::render_library_card(ui, &config_opt, ipc_client);
+                                ui.add_space(theme::SPACING_LG);
+                                Self::render_performance_card(ui, &config_opt, ipc_client);
+                            },
+                        );
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(col_w, 0.0),
+                            egui::Layout::top_down(egui::Align::LEFT),
+                            |ui| {
+                                Self::render_appearance_card(ui, &config_opt, ipc_client);
+                                ui.add_space(theme::SPACING_LG);
+                                Self::render_slideshow_card(ui, &config_opt, ipc_client);
+                                ui.add_space(theme::SPACING_LG);
+                                Self::render_info_card(ui);
+                            },
+                        );
                     });
                 } else {
                     Self::render_library_card(ui, &config_opt, ipc_client);

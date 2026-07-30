@@ -74,26 +74,8 @@ impl Sidebar {
                     *active_tab = tab;
                 }
 
-                // Collapse/Expand toggle & version at bottom
+                // Version at bottom
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-                    ui.add_space(theme::SPACING_SM);
-                    let toggle_icon = if *collapsed {
-                        theme::ICON_EXPAND
-                    } else {
-                        theme::ICON_COLLAPSE
-                    };
-                    let toggle_tooltip = if *collapsed {
-                        "Expand sidebar"
-                    } else {
-                        "Collapse sidebar"
-                    };
-                    if theme::button(ui, toggle_icon, theme::ButtonVariant::Ghost)
-                        .on_hover_text(toggle_tooltip)
-                        .clicked()
-                    {
-                        *collapsed = !*collapsed;
-                    }
-
                     if !*collapsed {
                         ui.add_space(theme::SPACING_SM);
                         ui.label(
@@ -101,11 +83,41 @@ impl Sidebar {
                                 .size(theme::FONT_CAPTION)
                                 .color(ui.visuals().weak_text_color()),
                         );
+                        ui.add_space(theme::SPACING_SM);
                     }
-                    ui.add_space(theme::SPACING_SM);
                 });
             });
         });
+
+        // Floating collapse/expand toggle button centered vertically on the right sidebar border
+        let sidebar_rect = ui.min_rect();
+        let toggle_size = egui::vec2(24.0, 24.0);
+        let toggle_pos = egui::pos2(sidebar_rect.right() - 12.0, sidebar_rect.center().y - 12.0);
+
+        let toggle_icon = if *collapsed {
+            theme::ICON_EXPAND
+        } else {
+            theme::ICON_COLLAPSE
+        };
+        let toggle_tooltip = if *collapsed {
+            "Expand sidebar"
+        } else {
+            "Collapse sidebar"
+        };
+
+        egui::Area::new(sidebar_id.with("toggle_button"))
+            .fixed_pos(toggle_pos)
+            .order(egui::Order::Foreground)
+            .show(ui.ctx(), |ui| {
+                ui.set_min_size(toggle_size);
+                ui.set_max_size(toggle_size);
+                if theme::button(ui, toggle_icon, theme::ButtonVariant::Secondary)
+                    .on_hover_text(toggle_tooltip)
+                    .clicked()
+                {
+                    *collapsed = !*collapsed;
+                }
+            });
     }
 
     fn nav_item(

@@ -113,7 +113,7 @@ impl ToastManager {
         ctx.request_repaint();
 
         Area::new(Id::new("aura_toast_overlay"))
-            .anchor(Align2::RIGHT_TOP, Vec2::new(-16.0, 16.0))
+            .anchor(Align2::RIGHT_BOTTOM, Vec2::new(-16.0, -36.0))
             .order(Order::Foreground)
             .show(ctx, |ui| {
                 ui.set_min_width(340.0);

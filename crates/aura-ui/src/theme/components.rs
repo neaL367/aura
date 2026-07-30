@@ -30,7 +30,7 @@ pub enum ButtonVariant {
 
 pub fn button(ui: &mut egui::Ui, label: &str, variant: ButtonVariant) -> egui::Response {
     let dark = ui.visuals().dark_mode;
-    let (bg, hover_bg, fg, stroke) = match variant {
+    let (bg, _hover_bg, fg, stroke) = match variant {
         ButtonVariant::Primary => (
             if dark {
                 ACCENT_PRIMARY_DARK
@@ -86,27 +86,18 @@ pub fn button(ui: &mut egui::Ui, label: &str, variant: ButtonVariant) -> egui::R
         ),
     };
 
-    let id = ui.next_auto_id();
-    let was_hovered = ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
-    let fill = if was_hovered { hover_bg } else { bg };
-
     let text = egui::RichText::new(label)
         .size(FONT_BODY)
         .strong()
         .color(fg);
 
     let btn = egui::Button::new(text)
-        .fill(fill)
+        .fill(bg)
         .corner_radius(RADIUS_SM)
         .stroke(stroke);
 
     let response = ui.add(btn);
-    let is_hovered = response.hovered();
-    if is_hovered != was_hovered {
-        ui.ctx().data_mut(|d| d.insert_temp(id, is_hovered));
-        ui.ctx().request_repaint();
-    }
-    if is_hovered {
+    if response.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     response
@@ -155,7 +146,8 @@ pub fn card_frame<Id: Into<egui::Id>>(
     let id = id.into();
     let dark = ui.visuals().dark_mode;
 
-    let is_hovered = ui.rect_contains_pointer(ui.min_rect());
+    let was_hovered = ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
+    let is_hovered = was_hovered;
 
     let bg = if is_selected {
         if dark {
@@ -217,6 +209,12 @@ pub fn card_frame<Id: Into<egui::Id>>(
     let inner = frame.show(ui, add_contents);
     let rect = inner.response.rect;
     let response = ui.interact(rect, id, egui::Sense::click());
+
+    let hover_now = response.hovered();
+    if hover_now != was_hovered {
+        ui.ctx().data_mut(|d| d.insert_temp(id, hover_now));
+        ui.ctx().request_repaint();
+    }
 
     if response.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -330,8 +328,12 @@ pub fn segmented_container(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egu
         .fill(bg)
         .stroke(Stroke::new(1.0, border))
         .corner_radius(RADIUS_MD)
-        .inner_margin(Margin::same(2))
-        .show(ui, add_contents);
+        .inner_margin(Margin::same(3))
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(3.0, 2.0);
+            ui.spacing_mut().button_padding = egui::vec2(10.0, 5.0);
+            add_contents(ui);
+        });
 }
 
 pub fn toggle_switch(ui: &mut egui::Ui, value: &mut bool) -> egui::Response {

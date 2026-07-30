@@ -57,7 +57,7 @@ impl GalleryPanel {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.search_query)
                         .hint_text(format!("{} Search wallpapers...", theme::ICON_SEARCH))
-                        .desired_width(ui.available_width()),
+                        .desired_width(260.0),
                 );
             });
         });
@@ -121,16 +121,16 @@ impl GalleryPanel {
                         .collect()
                 };
 
-                // Fluid column + card width computed inside scroll area
-                // to use the real post-scrollbar available width.
-                let avail_w = ui.available_width();
+                // Fluid column + card width computed inside scroll area,
+                // accounting for scrollbar width so rightmost cards never overlap the scrollbar.
+                let scroll_w = ui.spacing().scroll.bar_width + theme::SPACING_SM;
+                let avail_w = (ui.available_width() - scroll_w).max(1.0);
                 let gap = theme::SPACING_MD;
                 let min_card_w = theme::CARD_MIN_WIDTH;
-                let max_card_w = theme::CARD_MAX_WIDTH;
                 let columns = ((avail_w + gap) / (min_card_w + gap)).floor().max(1.0) as usize;
                 let card_w = ((avail_w - gap * (columns.saturating_sub(1) as f32))
                     / columns as f32)
-                    .clamp(min_card_w, max_card_w);
+                    .max(min_card_w);
 
                 egui::Grid::new("gallery_grid")
                     .min_col_width(card_w)
@@ -218,6 +218,7 @@ impl GalleryPanel {
                     ui.add(
                         egui::Image::new(&uri)
                             .fit_to_exact_size(thumbnail_size)
+                            .maintain_aspect_ratio(false)
                             .corner_radius(theme::RADIUS_SM),
                     );
                 } else {
@@ -231,41 +232,55 @@ impl GalleryPanel {
 
                 ui.add_space(theme::SPACING_XS);
 
-                // Filename row - truncated single-line + delete button.
-                ui.horizontal(|ui| {
-                    let name_w = (inner_w - 26.0).max(20.0);
-                    let file_name = entry
-                        .path
-                        .file_name()
-                        .map(|n| n.to_string_lossy())
-                        .unwrap_or_else(|| std::borrow::Cow::Borrowed("unknown"));
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(name_w, 16.0),
-                        egui::Layout::left_to_right(egui::Align::Center),
-                        |ui| {
-                            ui.add(
-                                egui::Label::new(
-                                    egui::RichText::new(file_name.as_ref())
-                                        .size(theme::FONT_CARD_TITLE),
+                // Filename row - truncated single-line + delete button (fixed 28px height).
+                let card_hovered =
+                    is_selected || ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
+                ui.allocate_ui_with_layout(
+                    egui::vec2(inner_w, 28.0),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        let name_w = (inner_w - 32.0).max(20.0);
+                        let file_name = entry
+                            .path
+                            .file_name()
+                            .map(|n| n.to_string_lossy())
+                            .unwrap_or_else(|| std::borrow::Cow::Borrowed("unknown"));
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(name_w, 28.0),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new(file_name.as_ref())
+                                            .size(theme::FONT_CARD_TITLE),
+                                    )
+                                    .truncate(),
+                                );
+                            },
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.spacing_mut().interact_size = egui::vec2(28.0, 28.0);
+                            if card_hovered {
+                                if theme::button(
+                                    ui,
+                                    theme::ICON_DELETE,
+                                    theme::ButtonVariant::Ghost,
                                 )
-                                .truncate(),
-                            );
-                        },
-                    );
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.spacing_mut().interact_size = egui::vec2(28.0, 28.0);
-                        if (is_selected || ui.rect_contains_pointer(ui.min_rect()))
-                            && theme::button(ui, theme::ICON_DELETE, theme::ButtonVariant::Ghost)
                                 .on_hover_text("Delete wallpaper")
                                 .clicked()
-                        {
-                            delete_clicked = Some((*entry).clone());
-                        }
-                    });
-                });
+                                {
+                                    delete_clicked = Some((*entry).clone());
+                                }
+                            } else {
+                                ui.add_space(28.0);
+                            }
+                        });
+                    },
+                );
 
                 // Meta row: badge + dimensions.
                 ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = theme::SPACING_XS;
                     let (badge_label, variant) = match entry.kind {
                         aura_core::wallpaper::MediaKind::Image => {
                             ("IMG", theme::BadgeVariant::Image)
@@ -281,14 +296,20 @@ impl GalleryPanel {
                         if entry.width < 1920 || entry.height < 1080 {
                             theme::badge(ui, "LOW RES", theme::BadgeVariant::Gif);
                         }
+                        let res_tag = if entry.width >= 3840 || entry.height >= 2160 {
+                            format!("4K ({} \u{00d7} {})", entry.width, entry.height)
+                        } else if entry.width >= 2560 || entry.height >= 1440 {
+                            format!("2K ({} \u{00d7} {})", entry.width, entry.height)
+                        } else if entry.width >= 1920 || entry.height >= 1080 {
+                            format!("1080p ({} \u{00d7} {})", entry.width, entry.height)
+                        } else {
+                            format!("{} \u{00d7} {}", entry.width, entry.height)
+                        };
                         ui.add(
                             egui::Label::new(
-                                egui::RichText::new(format!(
-                                    "{} \u{00d7} {}",
-                                    entry.width, entry.height
-                                ))
-                                .size(theme::FONT_CAPTION)
-                                .color(ui.visuals().weak_text_color()),
+                                egui::RichText::new(res_tag)
+                                    .size(theme::FONT_CAPTION)
+                                    .color(ui.visuals().weak_text_color()),
                             )
                             .truncate(),
                         );
