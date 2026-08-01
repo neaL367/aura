@@ -40,6 +40,7 @@ pub fn render_fit_mode_selector(
                     *selected_fit_mode = mode;
                     for mon in monitors {
                         if assigned_mons.contains(&mon.id) || has_generic {
+                            ipc_client.assign_wallpaper_optimistic(mon.id, entry.id, mode);
                             ipc_client.send(Request::AssignWallpaper {
                                 monitor_id: mon.id,
                                 wallpaper_id: entry.id,
@@ -121,6 +122,7 @@ pub fn render_monitor_assignment(
         .clicked()
         {
             for mon in monitors {
+                ipc_client.assign_wallpaper_optimistic(mon.id, entry.id, selected_fit_mode);
                 ipc_client.send(Request::AssignWallpaper {
                     monitor_id: mon.id,
                     wallpaper_id: entry.id,

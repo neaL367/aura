@@ -105,6 +105,11 @@ pub fn spawn_ipc_worker(
                                                         tracing::info!("UI received WallpaperList with {} wallpaper(s)", list.len());
                                                         *wallpapers.lock().unwrap_or_else(|err| err.into_inner()) = list.clone();
                                                         *last_error.lock().unwrap_or_else(|err| err.into_inner()) = None;
+                                                        let _ = toast_tx.send((
+                                                            format!("Library updated — {} wallpaper(s)", list.len()),
+                                                            ToastKind::Success,
+                                                        ));
+                                                        ctx.request_repaint();
                                                     }
                                                     Ok(Response::Config(c)) => {
                                                         tracing::info!("UI received Config update");

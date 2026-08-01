@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 pub mod path_safety;
 pub mod pipe_security;
 pub mod process_security;

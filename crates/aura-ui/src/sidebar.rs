@@ -91,8 +91,8 @@ impl Sidebar {
 
         // Floating collapse/expand toggle button centered vertically on the right sidebar border
         let sidebar_rect = ui.min_rect();
-        let toggle_size = egui::vec2(24.0, 24.0);
-        let toggle_pos = egui::pos2(sidebar_rect.right() - 12.0, sidebar_rect.center().y - 12.0);
+        let toggle_size = egui::vec2(28.0, 28.0);
+        let toggle_pos = egui::pos2(sidebar_rect.right() - 14.0, sidebar_rect.center().y - 14.0);
 
         let toggle_icon = if *collapsed {
             theme::ICON_EXPAND

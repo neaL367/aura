@@ -22,4 +22,7 @@ pub const SIDEBAR_INDICATOR_WIDTH: f32 = 3.0;
 pub const NAV_ICON_WIDTH: f32 = 20.0;
 pub const NAV_ITEM_HEIGHT: f32 = 44.0;
 
+/// Minimum button height — guarantees a 28px touch target on every button.
+pub const BUTTON_MIN_HEIGHT: f32 = 28.0;
+
 pub const SLIDESHOW_DEFAULT_INTERVAL_SECS: f32 = 300.0;

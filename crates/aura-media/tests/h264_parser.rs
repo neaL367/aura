@@ -1,4 +1,4 @@
-use aura_win::h264_parser::{ParsedH264Frame, PocReorderBuffer, avcc_to_annex_b};
+use aura_media::h264_parser::{ParsedH264Frame, PocReorderBuffer, avcc_to_annex_b};
 
 #[test]
 fn test_avcc_to_annex_b_conversion() {

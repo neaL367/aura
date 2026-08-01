@@ -40,6 +40,10 @@ impl InspectorPanel {
         placeholder::show_placeholder(ui);
     }
 
+    pub fn selected_fit_mode(&self) -> FitMode {
+        self.selected_fit_mode
+    }
+
     pub fn show(
         &mut self,
         ui: &mut egui::Ui,

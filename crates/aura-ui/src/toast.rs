@@ -15,12 +15,16 @@ pub enum ToastKind {
 }
 
 impl ToastKind {
-    fn color(&self) -> Color32 {
-        match self {
-            ToastKind::Success => Color32::from_rgb(76, 175, 80),
-            ToastKind::Error => Color32::from_rgb(244, 67, 54),
-            ToastKind::Info => Color32::from_rgb(33, 150, 243),
-            ToastKind::Warning => Color32::from_rgb(255, 152, 0),
+    fn color(&self, dark_mode: bool) -> Color32 {
+        match (self, dark_mode) {
+            (ToastKind::Success, false) => theme::TOAST_SUCCESS,
+            (ToastKind::Success, true) => theme::TOAST_SUCCESS_DARK,
+            (ToastKind::Error, false) => theme::TOAST_ERROR,
+            (ToastKind::Error, true) => theme::TOAST_ERROR_DARK,
+            (ToastKind::Info, false) => theme::TOAST_INFO,
+            (ToastKind::Info, true) => theme::TOAST_INFO_DARK,
+            (ToastKind::Warning, false) => theme::TOAST_WARNING,
+            (ToastKind::Warning, true) => theme::TOAST_WARNING_DARK,
         }
     }
 
@@ -135,8 +139,23 @@ impl Default for ToastManager {
 
 fn draw_toast(ui: &mut egui::Ui, toast: &Toast) {
     let alpha = toast.remaining().clamp(0.0, 1.0);
-    let bg = Color32::from_rgba_premultiplied(30, 30, 30, (180.0 * alpha) as u8);
-    let accent = toast.kind.color();
+    let dark_mode = ui.visuals().dark_mode;
+    let bg = if dark_mode {
+        Color32::from_rgba_premultiplied(
+            theme::TOAST_BG_DARK.r(),
+            theme::TOAST_BG_DARK.g(),
+            theme::TOAST_BG_DARK.b(),
+            (230.0 * alpha) as u8,
+        )
+    } else {
+        Color32::from_rgba_premultiplied(
+            theme::TOAST_BG.r(),
+            theme::TOAST_BG.g(),
+            theme::TOAST_BG.b(),
+            (210.0 * alpha) as u8,
+        )
+    };
+    let accent = toast.kind.color(dark_mode);
     let accent_faded =
         Color32::from_rgba_premultiplied(accent.r(), accent.g(), accent.b(), (255.0 * alpha) as u8);
     let text_faded = Color32::from_rgba_premultiplied(255, 255, 255, (255.0 * alpha) as u8);

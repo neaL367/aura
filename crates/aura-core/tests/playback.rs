@@ -15,7 +15,6 @@ fn playback_state_eq() {
 fn playback_command_variants() {
     let _ = PlaybackCommand::Play;
     let _ = PlaybackCommand::Pause;
-    let _ = PlaybackCommand::Loop;
     let _ = PlaybackCommand::Stop;
 }
 
@@ -48,7 +47,6 @@ fn serde_roundtrip_playback_command() {
     for cmd in &[
         PlaybackCommand::Play,
         PlaybackCommand::Pause,
-        PlaybackCommand::Loop,
         PlaybackCommand::Stop,
     ] {
         let json = serde_json::to_string(cmd).unwrap();

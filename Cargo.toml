@@ -95,4 +95,9 @@ opt-level       = 3
 lto             = "thin"
 codegen-units   = 1
 panic           = "abort"
-strip           = "symbols"
+# Line-tables-only debug info (MSVC emits a .pdb beside each exe) for crash
+# diagnostics without bloated symbol files. strip must be "none" so the PDB
+# is emitted at all. Full debug info can be opt-in for developers:
+#   cargo build --release --config profile.release.debug=true
+debug           = "limited"
+strip           = "none"

@@ -1,4 +1,5 @@
 use aura_core::monitor::MonitorAssignment;
+use aura_core::wallpaper::FitMode;
 use aura_ipc::protocol::{MonitorSummary, Request, WallpaperEntry};
 
 use crate::ipc_client::UiIpcClient;
@@ -7,11 +8,13 @@ use crate::theme;
 pub struct MonitorCanvas;
 
 impl MonitorCanvas {
+    #[allow(clippy::too_many_arguments)]
     pub fn show(
         ui: &mut egui::Ui,
         monitors: &[MonitorSummary],
         assignments: &[MonitorAssignment],
         selected_wallpaper: Option<&WallpaperEntry>,
+        fit_mode: FitMode,
         ipc_client: &UiIpcClient,
     ) {
         if monitors.is_empty() {
@@ -26,8 +29,8 @@ impl MonitorCanvas {
             return;
         }
 
-        let is_single = monitors.len() <= 1;
-        if is_single {
+        if monitors.len() <= 1 {
+            Self::compact_status_bar(ui, &monitors[0], selected_wallpaper, fit_mode, ipc_client);
             return;
         }
 
@@ -136,18 +139,112 @@ impl MonitorCanvas {
             }
 
             // Quick Assign Button on click
-            if child_ui.rect_contains_pointer(mon_rect)
-                && child_ui.input(|i| i.pointer.any_click())
-                && let Some(sel) = selected_wallpaper
-            {
-                ipc_client.send(Request::AssignWallpaper {
-                    monitor_id: mon.id,
-                    wallpaper_id: sel.id,
-                    fit_mode: None,
-                });
+            if child_ui.rect_contains_pointer(mon_rect) {
+                child_ui
+                    .ctx()
+                    .set_cursor_icon(egui::CursorIcon::PointingHand);
+                if child_ui.input(|i| i.pointer.any_click())
+                    && let Some(sel) = selected_wallpaper
+                {
+                    ipc_client.assign_wallpaper_optimistic(mon.id, sel.id, fit_mode);
+                    ipc_client.send(Request::AssignWallpaper {
+                        monitor_id: mon.id,
+                        wallpaper_id: sel.id,
+                        fit_mode: Some(fit_mode),
+                    });
+                }
             }
+
+            let tooltip = if selected_wallpaper.is_some() {
+                if is_assigned {
+                    format!("{} — click to reassign selected wallpaper", mon.name)
+                } else {
+                    format!("{} — click to assign selected wallpaper", mon.name)
+                }
+            } else {
+                format!("{} — select a wallpaper to assign", mon.name)
+            };
+            child_ui.response().on_hover_text(tooltip);
         }
 
+        ui.add_space(theme::SPACING_MD);
+    }
+
+    /// Compact 36px status bar for single-monitor setups (per AGENTS.md §6).
+    fn compact_status_bar(
+        ui: &mut egui::Ui,
+        mon: &MonitorSummary,
+        selected_wallpaper: Option<&WallpaperEntry>,
+        fit_mode: FitMode,
+        ipc_client: &UiIpcClient,
+    ) {
+        let dark = ui.visuals().dark_mode;
+        let bg = if dark {
+            theme::BG_CARD_DARK
+        } else {
+            theme::BG_CARD
+        };
+        let (rect, response) =
+            ui.allocate_at_least(egui::vec2(ui.available_width(), 36.0), egui::Sense::hover());
+        ui.painter().rect_filled(rect, theme::RADIUS_MD, bg);
+        ui.painter().rect_stroke(
+            rect,
+            theme::RADIUS_MD,
+            egui::Stroke::new(
+                1.0,
+                if dark {
+                    theme::BORDER_SUBTLE_DARK
+                } else {
+                    theme::BORDER_SUBTLE
+                },
+            ),
+            egui::StrokeKind::Outside,
+        );
+
+        let child = &mut ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(rect)
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        );
+
+        child.add_space(theme::SPACING_MD);
+        child.label(
+            egui::RichText::new(&mon.name)
+                .strong()
+                .size(theme::FONT_CARD_TITLE),
+        );
+        child.add_space(theme::SPACING_XS);
+        theme::status_dot(child, theme::STATUS_CONNECTED, 8.0);
+        child.add_space(theme::SPACING_XS);
+        child.label(
+            egui::RichText::new("Connected")
+                .size(theme::FONT_CAPTION)
+                .color(child.visuals().weak_text_color()),
+        );
+
+        child.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(theme::SPACING_MD);
+            if let Some(sel) = selected_wallpaper {
+                let label = format!("Assign {}", theme::ICON_CHECK);
+                if theme::button(ui, &label, theme::ButtonVariant::Ghost)
+                    .on_hover_text(format!("Assign selected wallpaper to {}", mon.name))
+                    .clicked()
+                {
+                    ipc_client.assign_wallpaper_optimistic(mon.id, sel.id, fit_mode);
+                    ipc_client.send(Request::AssignWallpaper {
+                        monitor_id: mon.id,
+                        wallpaper_id: sel.id,
+                        fit_mode: Some(fit_mode),
+                    });
+                }
+            }
+        });
+
+        if selected_wallpaper.is_some() {
+            response.on_hover_text("Click assign to apply the selected wallpaper");
+        } else {
+            response.on_hover_text("Select a wallpaper to enable assignment");
+        }
         ui.add_space(theme::SPACING_MD);
     }
 }

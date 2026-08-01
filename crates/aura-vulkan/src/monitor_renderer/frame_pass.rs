@@ -63,6 +63,39 @@ pub fn execute_frame(
         },
     };
 
+    // A presented video frame must be transitioned out of the decode layout
+    // before it is sampled (once per presented frame; CONCURRENT image
+    // sharing with the decode queue, so no ownership transfer is required).
+    if let Some(ref mut video) = renderer.active_video_frame
+        && !video.layout_transitioned
+    {
+        let barrier = vk::ImageMemoryBarrier2::default()
+            .old_layout(vk::ImageLayout::VIDEO_DECODE_DPB_KHR)
+            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .image(video.image)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            })
+            .src_stage_mask(vk::PipelineStageFlags2::VIDEO_DECODE_KHR)
+            .src_access_mask(vk::AccessFlags2::VIDEO_DECODE_WRITE_KHR)
+            .dst_stage_mask(vk::PipelineStageFlags2::FRAGMENT_SHADER)
+            .dst_access_mask(vk::AccessFlags2::SHADER_SAMPLED_READ);
+        let dependencies =
+            vk::DependencyInfo::default().image_memory_barriers(std::slice::from_ref(&barrier));
+        unsafe {
+            context
+                .device
+                .cmd_pipeline_barrier2(renderer.command_buffer, &dependencies);
+        }
+        video.layout_transitioned = true;
+    }
+
     let render_pass_begin = vk::RenderPassBeginInfo::default()
         .render_pass(renderer.pipeline.render_pass)
         .framebuffer(framebuffer)
@@ -109,11 +142,21 @@ pub fn execute_frame(
         );
     }
 
-    if let Some(ref texture) = renderer.active_texture {
+    let video_frame = renderer.active_video_frame.as_ref();
+    let has_sampled_content = video_frame.is_some() || renderer.active_texture.is_some();
+
+    if has_sampled_content {
+        let (img_w, img_h) = match video_frame {
+            Some(video) => (video.width, video.height),
+            None => {
+                let texture = renderer.active_texture.as_ref().expect("checked above");
+                (texture.width, texture.height)
+            }
+        };
         let pc = if renderer.active_fit_mode == FitMode::Span {
             crate::transform::calculate_span_uv_transform(
-                texture.width,
-                texture.height,
+                img_w,
+                img_h,
                 renderer.virtual_x,
                 renderer.virtual_y,
                 renderer.swapchain.extent.width,
@@ -124,8 +167,8 @@ pub fn execute_frame(
         } else {
             calculate_uv_transform(
                 renderer.active_fit_mode,
-                texture.width,
-                texture.height,
+                img_w,
+                img_h,
                 renderer.swapchain.extent.width,
                 renderer.swapchain.extent.height,
             )
@@ -164,15 +207,37 @@ pub fn execute_frame(
             .map_err(|e| VulkanError::Render(format!("end_command_buffer failed: {}", e)))?;
     }
 
-    let wait_semaphores = [renderer.frame_sync.image_available_semaphore];
-    let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-    let signal_semaphores = [renderer.frame_sync.render_finished_semaphore];
+    // Wait on the decode timeline so the presented frame's DPB contents are
+    // guaranteed complete before sampling. Values for binary semaphores must
+    // be 0 when VkTimelineSemaphoreSubmitInfo is chained.
+    let mut wait_semaphores = vec![renderer.frame_sync.image_available_semaphore];
+    let mut wait_stages = vec![vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+    let mut wait_values = vec![0u64];
+    let mut signal_semaphores = vec![renderer.frame_sync.render_finished_semaphore];
+    let mut signal_values = vec![0u64];
+    if let Some(ref mut video) = renderer.active_video_frame {
+        wait_semaphores.push(video.timeline_semaphore);
+        wait_stages.push(vk::PipelineStageFlags::FRAGMENT_SHADER);
+        wait_values.push(video.timeline_value);
+        // Signal the graphics->video timeline in this same submit: once the
+        // sampling commands complete, the decode worker may overwrite the
+        // slot. The value is reported back to the worker in the slot ack.
+        renderer.gfx_timeline_value += 1;
+        signal_semaphores.push(video.gfx_timeline);
+        signal_values.push(renderer.gfx_timeline_value);
+        video.sampled_gfx_value = renderer.gfx_timeline_value;
+    }
+
+    let mut timeline_info = vk::TimelineSemaphoreSubmitInfo::default()
+        .wait_semaphore_values(&wait_values)
+        .signal_semaphore_values(&signal_values);
 
     let submit_info = vk::SubmitInfo::default()
         .wait_semaphores(&wait_semaphores)
         .wait_dst_stage_mask(&wait_stages)
         .command_buffers(std::slice::from_ref(&renderer.command_buffer))
-        .signal_semaphores(&signal_semaphores);
+        .signal_semaphores(&signal_semaphores)
+        .push_next(&mut timeline_info);
 
     let _lock = context.queue_lock();
 

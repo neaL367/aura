@@ -47,6 +47,9 @@ pub enum VulkanError {
     #[error("Allocation error: {0}")]
     Allocation(String),
 
+    #[error("Video error: {0}")]
+    Video(String),
+
     #[error("Shader compilation failed: {0}")]
     ShaderCompilation(String),
 }

@@ -21,11 +21,25 @@ impl StatusBar {
         last_error: Option<&str>,
     ) -> Option<crate::action::UiAction> {
         let mut action = None;
+        let dark = ui.visuals().dark_mode;
+        let (badge_connected, badge_connecting, badge_disconnected) = if dark {
+            (
+                theme::STATUS_BADGE_CONNECTED_DARK,
+                theme::STATUS_BADGE_CONNECTING_DARK,
+                theme::STATUS_BADGE_DISCONNECTED_DARK,
+            )
+        } else {
+            (
+                theme::STATUS_BADGE_CONNECTED,
+                theme::STATUS_BADGE_CONNECTING,
+                theme::STATUS_BADGE_DISCONNECTED,
+            )
+        };
         ui.horizontal(|ui| {
             ui.add_space(theme::SPACING_SM);
             match status {
                 ConnectionStatus::Connected(s) => {
-                    theme::badge_frame(theme::STATUS_BADGE_CONNECTED).show(ui, |ui| {
+                    theme::badge_frame(badge_connected).show(ui, |ui| {
                         ui.horizontal(|ui| {
                             theme::connection_dot(ui, theme::STATUS_CONNECTED);
                             ui.label(
@@ -71,7 +85,7 @@ impl StatusBar {
                     });
                 }
                 ConnectionStatus::Connecting => {
-                    theme::badge_frame(theme::STATUS_BADGE_CONNECTING).show(ui, |ui| {
+                    theme::badge_frame(badge_connecting).show(ui, |ui| {
                         ui.horizontal(|ui| {
                             theme::connection_dot(ui, theme::STATUS_CONNECTING);
                             ui.label(
@@ -84,7 +98,7 @@ impl StatusBar {
                     });
                 }
                 ConnectionStatus::Disconnected => {
-                    theme::badge_frame(theme::STATUS_BADGE_DISCONNECTED).show(ui, |ui| {
+                    theme::badge_frame(badge_disconnected).show(ui, |ui| {
                         ui.horizontal(|ui| {
                             theme::connection_dot(ui, theme::STATUS_DISCONNECTED);
                             ui.label(
@@ -97,7 +111,7 @@ impl StatusBar {
                     });
                 }
                 ConnectionStatus::Error(reason) => {
-                    theme::badge_frame(theme::STATUS_BADGE_DISCONNECTED).show(ui, |ui| {
+                    theme::badge_frame(badge_disconnected).show(ui, |ui| {
                         ui.horizontal(|ui| {
                             theme::connection_dot(ui, theme::STATUS_DISCONNECTED);
                             ui.label(

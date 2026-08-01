@@ -1,10 +1,18 @@
 /// Win32 full-screen foreground window detection.
+///
+/// Multi-monitor aware: compares the foreground window rect against the
+/// monitor the window occupies (`MonitorFromWindow` + `GetMonitorInfoW`)
+/// rather than the primary screen metrics. A ~99% coverage tolerance is
+/// applied because borderless fullscreen windows can differ by 1-2 px due to
+/// DPI scaling, invisible resize borders, or compositor behavior.
 #[cfg(target_os = "windows")]
 pub fn is_fullscreen_app_active() -> bool {
     use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
+    };
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetClassNameW, GetForegroundWindow, GetSystemMetrics, GetWindowRect, SM_CXSCREEN,
-        SM_CYSCREEN,
+        GetClassNameW, GetForegroundWindow, GetWindowRect,
     };
 
     unsafe {
@@ -20,7 +28,7 @@ pub fn is_fullscreen_app_active() -> bool {
             let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
             if class_name == "Progman"
                 || class_name == "WorkerW"
-                || class_name == "Shell_TrayWnd"
+                || class_name == "Shell_TrayW"
                 || class_name == "Windows.UI.Core.CoreWindow"
             {
                 return false;
@@ -28,16 +36,28 @@ pub fn is_fullscreen_app_active() -> bool {
         }
 
         let mut rect = RECT::default();
-        if GetWindowRect(hwnd, &mut rect).is_ok() {
-            let width = (rect.right - rect.left).abs();
-            let height = (rect.bottom - rect.top).abs();
-            let screen_w = GetSystemMetrics(SM_CXSCREEN);
-            let screen_h = GetSystemMetrics(SM_CYSCREEN);
-
-            width >= screen_w && height >= screen_h
-        } else {
-            false
+        if GetWindowRect(hwnd, &mut rect).is_err() {
+            return false;
         }
+        let win_w = (rect.right - rect.left).abs() as i64;
+        let win_h = (rect.bottom - rect.top).abs() as i64;
+
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        if monitor.0.is_null() {
+            return false;
+        }
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if !GetMonitorInfoW(monitor, &mut info).as_bool() {
+            return false;
+        }
+        let mon_w = (info.rcMonitor.right - info.rcMonitor.left).abs() as i64;
+        let mon_h = (info.rcMonitor.bottom - info.rcMonitor.top).abs() as i64;
+
+        // ~99% coverage tolerance (see module docs).
+        win_w >= (mon_w * 99) / 100 && win_h >= (mon_h * 99) / 100
     }
 }
 

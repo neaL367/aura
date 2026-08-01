@@ -2,7 +2,16 @@ use std::path::PathBuf;
 
 use aura_core::playback::PlaybackCommand;
 use aura_media::{FrameSender, GifDecoder, MediaDecoder};
+use aura_vulkan::video_decode_pipeline::{GpuAck, GpuVideoMessage};
 use crossbeam_channel::{Receiver, Sender};
+
+mod ack;
+mod process;
+mod run;
+mod session;
+
+use run::run_vulkan_video_loop;
+use session::VulkanVideoDecoder;
 
 /// Handle to a background decode worker thread.
 pub struct DecodeWorkerHandle {
@@ -31,15 +40,20 @@ impl DecodeWorkerHandle {
         spawn_video_worker(path, frame_sender)
     }
 
-    /// Spawn a hardware-accelerated video decode worker. Tier 2 (Vulkan Video)
-    /// is not yet wired up; this always delegates to the Tier 1 Media
-    /// Foundation CPU path today.
+    /// Spawn a hardware-accelerated video decode worker. Frames are presented
+    /// by direct DPB sampling: the worker sends `GpuVideoMessage` messages to
+    /// `gpu_frame_tx` and the render thread acknowledges slot reuse via
+    /// `ack_rx` (the worker never reuses a DPB slot the renderer still
+    /// displays). Falls back to the Media Foundation CPU path when Vulkan
+    /// Video is unavailable.
     pub fn spawn_hw_video_worker(
         path: PathBuf,
         frame_sender: FrameSender,
+        gpu_frame_tx: crossbeam_channel::Sender<GpuVideoMessage>,
+        ack_rx: crossbeam_channel::Receiver<GpuAck>,
         context: std::sync::Arc<aura_vulkan::VulkanContext>,
     ) -> Self {
-        spawn_hw_video_worker(path, frame_sender, context)
+        spawn_hw_video_worker(path, frame_sender, gpu_frame_tx, ack_rx, context)
     }
 }
 
@@ -93,7 +107,6 @@ pub fn handle_command(cmd: PlaybackCommand, cmd_rx: &Receiver<PlaybackCommand>) 
             // terminate rather than silently falling through to resume decoding.
             ControlFlow::Stopped
         }
-        _ => ControlFlow::Continue,
     }
 }
 
@@ -176,7 +189,7 @@ pub fn spawn_video_worker(path: PathBuf, frame_sender: FrameSender) -> DecodeWor
     let handle = std::thread::Builder::new()
         .name("aura-video-worker".into())
         .spawn(move || {
-            let mut decoder = match aura_win::MfVideoDecoder::open(&path) {
+            let decoder = match aura_win::MfVideoDecoder::open(&path) {
                 Ok(d) => d,
                 Err(e) => {
                     tracing::error!("Failed to open video wallpaper {}: {}", path.display(), e);
@@ -184,54 +197,7 @@ pub fn spawn_video_worker(path: PathBuf, frame_sender: FrameSender) -> DecodeWor
                 }
             };
 
-            tracing::info!("Video DecodeWorker started for {}", path.display());
-
-            'outer: loop {
-                if let Ok(cmd) = cmd_rx.try_recv()
-                    && handle_command(cmd, &cmd_rx) == ControlFlow::Stopped
-                {
-                    break 'outer;
-                }
-
-                match decoder.next_frame() {
-                    Ok(Some(frame)) => {
-                        // Clamp to avoid an effective busy-loop on malformed
-                        // (zero-duration) frame metadata.
-                        let duration = std::time::Duration::from_millis(frame.duration_ms.max(1));
-                        if !frame_sender.send_blocking(frame) {
-                            break 'outer;
-                        }
-
-                        // Sleep in small increments so a Stop sent mid-frame
-                        // is honored promptly instead of only being checked
-                        // once per full frame duration.
-                        const CHUNK: std::time::Duration = std::time::Duration::from_millis(25);
-                        let mut remaining = duration;
-                        while remaining > std::time::Duration::ZERO {
-                            let step = remaining.min(CHUNK);
-                            if let Ok(cmd) = cmd_rx.recv_timeout(step) {
-                                if handle_command(cmd, &cmd_rx) == ControlFlow::Stopped {
-                                    break 'outer;
-                                }
-                                break; // command handled (e.g. resumed from a pause); move on
-                            }
-                            remaining = remaining.saturating_sub(step);
-                        }
-                    }
-                    Ok(None) => {
-                        if let Err(e) = decoder.loop_reset() {
-                            tracing::error!("Failed to reset video loop: {}", e);
-                            break 'outer;
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!("Video decoder error: {}", e);
-                        break 'outer;
-                    }
-                }
-            }
-
-            tracing::info!("Video DecodeWorker finished for {}", path.display());
+            run_cpu_video_loop(decoder, frame_sender, cmd_rx, path);
         })
         .expect("failed to spawn video decode worker thread");
 
@@ -241,17 +207,102 @@ pub fn spawn_video_worker(path: PathBuf, frame_sender: FrameSender) -> DecodeWor
     }
 }
 
-/// Spawn a hardware-accelerated video decode worker. Tier 2 (Vulkan Video)
-/// is not yet wired up; this always delegates to the Tier 1 Media
-/// Foundation CPU path today.
+/// Media Foundation CPU decode loop (shared by the CPU worker and as the
+/// fallback path of the Vulkan Video worker).
+fn run_cpu_video_loop(
+    mut decoder: aura_win::MfVideoDecoder,
+    frame_sender: FrameSender,
+    cmd_rx: Receiver<PlaybackCommand>,
+    path: PathBuf,
+) {
+    tracing::info!("Video DecodeWorker started for {}", path.display());
+
+    'outer: loop {
+        if let Ok(cmd) = cmd_rx.try_recv()
+            && handle_command(cmd, &cmd_rx) == ControlFlow::Stopped
+        {
+            break 'outer;
+        }
+
+        match decoder.next_frame() {
+            Ok(Some(frame)) => {
+                // Clamp to avoid an effective busy-loop on malformed
+                // (zero-duration) frame metadata.
+                let duration = std::time::Duration::from_millis(frame.duration_ms.max(1));
+                if !frame_sender.send_blocking(frame) {
+                    break 'outer;
+                }
+
+                // Sleep in small increments so a Stop sent mid-frame
+                // is honored promptly instead of only being checked
+                // once per full frame duration.
+                const CHUNK: std::time::Duration = std::time::Duration::from_millis(25);
+                let mut remaining = duration;
+                while remaining > std::time::Duration::ZERO {
+                    let step = remaining.min(CHUNK);
+                    if let Ok(cmd) = cmd_rx.recv_timeout(step) {
+                        if handle_command(cmd, &cmd_rx) == ControlFlow::Stopped {
+                            break 'outer;
+                        }
+                        break; // command handled (e.g. resumed from a pause); move on
+                    }
+                    remaining = remaining.saturating_sub(step);
+                }
+            }
+            Ok(None) => {
+                if let Err(e) = decoder.loop_reset() {
+                    tracing::error!("Failed to reset video loop: {}", e);
+                    break 'outer;
+                }
+            }
+            Err(e) => {
+                tracing::error!("Video decoder error: {}", e);
+                break 'outer;
+            }
+        }
+    }
+
+    tracing::info!("Video DecodeWorker finished for {}", path.display());
+}
+/// Spawn a hardware-accelerated video decode worker: Vulkan Video when the
+/// GPU pipeline is available, Media Foundation CPU decode as fallback. The
+/// caller owns the matching `gpu_frame_rx` / `ack_tx` channel ends.
 pub fn spawn_hw_video_worker(
     path: PathBuf,
     frame_sender: FrameSender,
+    gpu_frame_tx: crossbeam_channel::Sender<GpuVideoMessage>,
+    ack_rx: crossbeam_channel::Receiver<GpuAck>,
     context: std::sync::Arc<aura_vulkan::VulkanContext>,
 ) -> DecodeWorkerHandle {
-    let _ = context;
-    tracing::info!(
-        "Vulkan Video hardware pipeline routing to Media Foundation decoder until Tier 2 frame delivery is completed"
-    );
-    spawn_video_worker(path, frame_sender)
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+
+    let handle = std::thread::Builder::new()
+        .name("aura-hw-video-worker".into())
+        .spawn(move || match VulkanVideoDecoder::setup(&path, &context, &gpu_frame_tx, ack_rx) {
+            Ok(decoder) => {
+                run_vulkan_video_loop(decoder, &context, gpu_frame_tx, frame_sender, cmd_rx, path);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Vulkan Video unavailable ({}); falling back to Media Foundation CPU decode",
+                    e
+                );
+                match aura_win::MfVideoDecoder::open(&path) {
+                    Ok(decoder) => run_cpu_video_loop(decoder, frame_sender, cmd_rx, path),
+                    Err(e2) => {
+                        tracing::error!(
+                            "Failed to open video wallpaper {}: {}",
+                            path.display(),
+                            e2
+                        );
+                    }
+                }
+            }
+        })
+        .expect("failed to spawn hardware video decode worker thread");
+
+    DecodeWorkerHandle {
+        command_sender: cmd_tx,
+        join_handle: Some(handle),
+    }
 }

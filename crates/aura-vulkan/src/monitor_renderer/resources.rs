@@ -77,6 +77,31 @@ pub fn update_descriptor_set(
     }
 }
 
+/// Bind a decoded video frame's DPB image view (multi-planar NV12 with the
+/// session's `VkSamplerYcbcrConversion` chained) for hardware sampling.
+pub fn update_video_descriptor_set(
+    context: &VulkanContext,
+    descriptor_set: vk::DescriptorSet,
+    image_view: vk::ImageView,
+    video_sampler: vk::Sampler,
+) {
+    let image_info = vk::DescriptorImageInfo::default()
+        .sampler(video_sampler)
+        .image_view(image_view)
+        .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+
+    let write = vk::WriteDescriptorSet::default()
+        .dst_set(descriptor_set)
+        .dst_binding(0)
+        .descriptor_count(1)
+        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+        .image_info(std::slice::from_ref(&image_info));
+
+    unsafe {
+        context.device.update_descriptor_sets(&[write], &[]);
+    }
+}
+
 pub fn create_framebuffers(
     context: &VulkanContext,
     pipeline: &GraphicsPipeline,

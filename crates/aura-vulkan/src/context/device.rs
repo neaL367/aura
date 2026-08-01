@@ -2,6 +2,30 @@ use ash::vk;
 
 use crate::error::VulkanError;
 
+/// Mirror of `VkPhysicalDeviceVideoDecodeH264FeaturesKHR`.
+///
+/// ash 0.38 never generated this struct (or its `StructureType` variant)
+/// even though the rest of `VK_EXT_video_decode_h264` is present. The
+/// layout matches the C definition exactly; `std_syntax_only` tells the
+/// driver we only submit well-formed H.264 standard-syntax bitstreams.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct H264DecodeFeaturesKhr {
+    s_type: vk::StructureType,
+    p_next: *mut std::ffi::c_void,
+    std_syntax_only: u32,
+}
+
+impl H264DecodeFeaturesKhr {
+    fn new(std_syntax_only: bool) -> Self {
+        Self {
+            s_type: unsafe { std::mem::transmute::<i32, vk::StructureType>(1000185000i32) },
+            p_next: std::ptr::null_mut(),
+            std_syntax_only: u32::from(std_syntax_only),
+        }
+    }
+}
+
 pub fn select_physical_device(
     instance: &ash::Instance,
 ) -> Result<(vk::PhysicalDevice, u32), VulkanError> {
@@ -120,9 +144,34 @@ pub fn create_device(
         }
     }
 
+    // Core features required by the video pipeline: timeline semaphores
+    // (decode <-> graphics queue sync), synchronization2 (queue submits),
+    // and sampler YCbCr conversion (hardware NV12 -> RGB sampling).
+    let mut vulkan13_features =
+        vk::PhysicalDeviceVulkan13Features::default().synchronization2(true);
+    let mut vulkan12_features =
+        vk::PhysicalDeviceVulkan12Features::default().timeline_semaphore(true);
+    let mut vulkan11_features =
+        vk::PhysicalDeviceVulkan11Features::default().sampler_ycbcr_conversion(true);
+
+    let mut features2 = if video_extensions_enabled {
+        let mut h264_features = H264DecodeFeaturesKhr::new(true);
+        vulkan11_features.p_next = &mut h264_features as *mut H264DecodeFeaturesKhr as *mut _;
+        vk::PhysicalDeviceFeatures2::default()
+            .push_next(&mut vulkan13_features)
+            .push_next(&mut vulkan12_features)
+            .push_next(&mut vulkan11_features)
+    } else {
+        vk::PhysicalDeviceFeatures2::default()
+            .push_next(&mut vulkan13_features)
+            .push_next(&mut vulkan12_features)
+            .push_next(&mut vulkan11_features)
+    };
+
     let create_info = vk::DeviceCreateInfo::default()
         .queue_create_infos(&queue_infos)
-        .enabled_extension_names(&extensions);
+        .enabled_extension_names(&extensions)
+        .push_next(&mut features2);
 
     let device = unsafe { instance.create_device(physical_device, &create_info, None)? };
     Ok((device, video_extensions_enabled))

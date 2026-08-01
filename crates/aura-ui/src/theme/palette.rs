@@ -73,3 +73,19 @@ pub const BG_ERROR: Color32 = Color32::from_rgb(254, 242, 242);
 pub const BG_SUCCESS_DARK: Color32 = Color32::from_rgb(20, 83, 45);
 pub const BG_WARNING_DARK: Color32 = Color32::from_rgb(113, 63, 18);
 pub const BG_ERROR_DARK: Color32 = Color32::from_rgb(127, 29, 29);
+
+// Toasts (kept in the Zinc token system; light theme uses the dark toast
+// surface for contrast against the light app background).
+pub const TOAST_BG: Color32 = Color32::from_rgb(24, 24, 27);
+pub const TOAST_BG_DARK: Color32 = Color32::from_rgb(39, 39, 42);
+pub const TOAST_TEXT: Color32 = Color32::from_rgb(250, 250, 250);
+pub const TOAST_TEXT_DARK: Color32 = Color32::from_rgb(250, 250, 250);
+
+pub const TOAST_SUCCESS: Color32 = Color32::from_rgb(34, 197, 94);
+pub const TOAST_SUCCESS_DARK: Color32 = Color32::from_rgb(74, 222, 128);
+pub const TOAST_ERROR: Color32 = Color32::from_rgb(239, 68, 68);
+pub const TOAST_ERROR_DARK: Color32 = Color32::from_rgb(248, 113, 113);
+pub const TOAST_INFO: Color32 = Color32::from_rgb(59, 130, 246);
+pub const TOAST_INFO_DARK: Color32 = Color32::from_rgb(96, 165, 250);
+pub const TOAST_WARNING: Color32 = Color32::from_rgb(245, 158, 11);
+pub const TOAST_WARNING_DARK: Color32 = Color32::from_rgb(251, 191, 36);

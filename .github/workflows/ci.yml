@@ -78,13 +78,3 @@ jobs:
 
       - name: Build Release Binaries
         run: cargo build --workspace --release
-
-      - name: Upload Binaries Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: aura-windows-x64-binaries
-          path: |
-            target/release/wallpaperd.exe
-            target/release/wallpaper-ui.exe
-            target/release/workerw-proof.exe
-          if-no-files-found: error

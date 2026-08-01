@@ -10,6 +10,8 @@ pub mod error;
 #[cfg(target_os = "windows")]
 pub mod frame;
 #[cfg(target_os = "windows")]
+pub mod h264_std_video;
+#[cfg(target_os = "windows")]
 pub mod monitor_renderer;
 #[cfg(target_os = "windows")]
 pub mod pipeline;
@@ -26,6 +28,8 @@ pub mod texture;
 pub mod transform;
 #[cfg(target_os = "windows")]
 pub mod video_decode_pipeline;
+#[cfg(target_os = "windows")]
+pub mod video_readback;
 #[cfg(target_os = "windows")]
 pub mod video_session;
 #[cfg(target_os = "windows")]

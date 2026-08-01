@@ -8,6 +8,10 @@ use windows::Win32::Media::MediaFoundation::{
     MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_SOURCE_READERF_ENDOFSTREAM, MFCreateAttributes,
     MFCreateMediaType, MFCreateSourceReaderFromURL, MFMediaType_Video, MFVideoFormat_H264,
 };
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
+#[cfg(target_os = "windows")]
+use windows::core::GUID;
 
 /// Pure H.264 container demuxer using Media Foundation (IMFSourceReader with MFVideoFormat_H264).
 pub struct MfH264Demuxer {
@@ -106,6 +110,19 @@ impl MfH264Demuxer {
 
     pub fn height(&self) -> u32 {
         self.height
+    }
+
+    /// Reset the demuxer to the beginning of the media (for looping).
+    pub fn loop_reset(&mut self) -> Result<(), MediaError> {
+        #[cfg(target_os = "windows")]
+        unsafe {
+            let var = PROPVARIANT::default();
+            let null_guid = GUID::default();
+            self.reader
+                .SetCurrentPosition(&null_guid, &var)
+                .map_err(|e| MediaError::Decode(format!("SetCurrentPosition failed: {}", e)))?;
+        }
+        Ok(())
     }
 
     /// Read next compressed NAL sample and convert to Annex-B (`0x00000001` start code) format.

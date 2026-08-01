@@ -9,15 +9,18 @@ use std::{
     },
 };
 
-use aura_core::playback::PlaybackCommand;
-use aura_core::wallpaper::MediaKind;
-use aura_core::wallpaper::detect_media_kind;
-use aura_media::{ImageDecoder, MediaDecoder, frame_channel};
-use aura_vulkan::{VulkanContext, monitor_renderer::MonitorRenderer};
-
 use crate::daemon::DaemonError;
 use crate::decode_worker::DecodeWorkerHandle;
 use crate::render_coordinator::MonitorContext;
+use aura_core::playback::PlaybackCommand;
+use aura_core::wallpaper::MediaKind;
+use aura_core::wallpaper::detect_media_kind;
+use aura_media::frame_channel;
+use aura_vulkan::{
+    VulkanContext,
+    monitor_renderer::MonitorRenderer,
+    video_decode_pipeline::{GpuAck, GpuVideoMessage},
+};
 
 pub use loop_runner::load_and_upload_static_image;
 
@@ -26,6 +29,12 @@ pub enum RenderCommand {
     SetWallpaper {
         path: PathBuf,
         fit_mode: Option<aura_core::wallpaper::FitMode>,
+    },
+    /// Static wallpaper with an already-decoded frame (slideshow preload).
+    SetWallpaperPredecoded {
+        path: PathBuf,
+        fit_mode: Option<aura_core::wallpaper::FitMode>,
+        frame: Arc<aura_media::DecodedFrame>,
     },
     SetFitMode(aura_core::wallpaper::FitMode),
     Resize {
@@ -70,7 +79,16 @@ pub fn create_monitor_context(
     let black = [0u8, 0u8, 0u8, 255u8];
     renderer.set_wallpaper_pixels(context, 1, 1, &black)?;
 
+    // GPU frame channel (Vulkan Video direct DPB sampling) + slot-reuse acks.
+    // Only used when the wallpaper is a video decoded by the HW worker; the
+    // CPU fallback keeps sending regular `DecodedFrame`s via `frame_channel`.
+    let (gpu_frame_tx, gpu_frame_rx) = crossbeam_channel::bounded::<GpuVideoMessage>(2);
+    let (gpu_ack_tx, gpu_ack_rx) = crossbeam_channel::unbounded::<GpuAck>();
+
     // Handle wallpaper path: static image or animated GIF/Video.
+    // Static images are NOT decoded here — decoding happens on the render
+    // thread via SetWallpaper after spawn, so a large 4K/8K decode never
+    // blocks daemon startup or subsequent monitor context creation.
     let (initial_worker, initial_frame_rx) = if let Some(path) = wallpaper_path {
         match detect_media_kind(path) {
             Some(MediaKind::Gif) => {
@@ -80,30 +98,20 @@ pub fn create_monitor_context(
             }
             Some(MediaKind::Video) => {
                 let (tx, rx) = frame_channel();
-                let handle = DecodeWorkerHandle::spawn_video_worker(path.to_owned(), tx);
+                let handle = DecodeWorkerHandle::spawn_hw_video_worker(
+                    path.to_owned(),
+                    tx,
+                    gpu_frame_tx,
+                    gpu_ack_rx,
+                    context.clone(),
+                );
                 (Some(handle), Some(rx))
             }
-            Some(MediaKind::Image) => {
-                let mut decoder = ImageDecoder::open(path)?;
-                if let Ok(Some(frame)) = decoder.next_frame() {
-                    renderer.set_wallpaper_pixels(
-                        context,
-                        frame.width,
-                        frame.height,
-                        &frame.data,
-                    )?;
-                }
-                (None, None)
-            }
-            _ => {
-                tracing::warn!("Unsupported wallpaper path: {}", path.display());
-                (None, None)
-            }
+            _ => (None, None),
         }
     } else {
         (None, None)
     };
-
     let (assign_tx, assign_rx) = crossbeam_channel::unbounded::<RenderCommand>();
     let frame_counter = Arc::new(AtomicU64::new(0));
 
@@ -125,6 +133,8 @@ pub fn create_monitor_context(
                 context: context_clone,
                 initial_worker,
                 initial_frame_rx,
+                gpu_frame_rx: Some(gpu_frame_rx),
+                gpu_ack_tx: Some(gpu_ack_tx),
                 assign_rx,
                 shutdown_flag: shutdown_clone,
                 pause_flag: pause_clone,
@@ -134,6 +144,18 @@ pub fn create_monitor_context(
             });
         })
         .map_err(|_| DaemonError::ThreadSpawn)?;
+
+    // Deferred static-image load: decode + upload runs on the render thread
+    // (non-blocking for daemon startup). The 1x1 black fallback was already
+    // uploaded above, so the desktop presents instantly.
+    if let Some(path) = wallpaper_path
+        && detect_media_kind(path) == Some(MediaKind::Image)
+    {
+        let _ = assign_tx.send(RenderCommand::SetWallpaper {
+            path: path.to_owned(),
+            fit_mode: Some(fit_mode),
+        });
+    }
 
     Ok((
         MonitorContext::new(

@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 mod tray;
@@ -19,7 +18,12 @@ fn main() {
         .init();
 
     // Step 2: parse args
-    let daemon_only = std::env::args().any(|a| a == "--daemon-only");
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("aura {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+    let daemon_only = args.iter().any(|a| a == "--daemon-only");
 
     if daemon_only {
         // No singleton check — headless daemon mode

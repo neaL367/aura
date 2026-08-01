@@ -194,16 +194,20 @@ pub fn reconcile_monitors(
     orchestrator.update_monitors(summaries, wallpaper_txs.clone());
 }
 
+/// Poll full-screen foreground state and update the game-mode pause flag.
+///
+/// Game mode is an additional pause source: it only tracks whether a
+/// full-screen application is active. The caller merges it with the user's
+/// manual pause state (`orchestrator.is_paused() || game_mode_paused`) so the
+/// game-mode poll can never overwrite a manual pause.
 #[cfg(target_os = "windows")]
-pub fn check_game_mode_pause(coordinator: &mut RenderCoordinator, game_mode_paused: &mut bool) {
+pub fn check_game_mode_pause(game_mode_paused: &mut bool) {
     let is_fullscreen = aura_win::is_fullscreen_app_active();
     if is_fullscreen && !*game_mode_paused {
         tracing::info!("Game Mode: Full-screen app detected — pausing presentation (0% CPU/GPU)");
-        coordinator.set_paused(true);
         *game_mode_paused = true;
     } else if !is_fullscreen && *game_mode_paused {
         tracing::info!("Game Mode: Full-screen app closed — resuming presentation");
-        coordinator.set_paused(false);
         *game_mode_paused = false;
     }
 }

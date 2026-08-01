@@ -5,88 +5,8 @@ use aura_ipc::protocol::Request;
 use crate::ipc_client::UiIpcClient;
 use crate::theme;
 
-pub struct SettingsPanel {
-    config_requested: bool,
-}
-
-impl Default for SettingsPanel {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl SettingsPanel {
-    pub fn new() -> Self {
-        Self {
-            config_requested: false,
-        }
-    }
-
-    pub fn show(&mut self, ui: &mut egui::Ui, ipc_client: &UiIpcClient) {
-        let config_opt = ipc_client.config();
-        if config_opt.is_some() {
-            self.config_requested = false;
-        } else if !self.config_requested {
-            self.config_requested = true;
-            ipc_client.send(Request::GetConfig);
-        }
-
-        ui.label(
-            egui::RichText::new("Settings")
-                .strong()
-                .size(theme::FONT_WINDOW_TITLE)
-                .color(ui.visuals().text_color()),
-        );
-        ui.add_space(theme::SPACING_MD);
-        ui.separator();
-        ui.add_space(theme::SPACING_MD);
-
-        let avail_w = ui.available_width();
-        egui::ScrollArea::vertical()
-            .id_salt("settings_scroll")
-            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
-            .show(ui, |ui| {
-                let gap = theme::SPACING_LG;
-                if avail_w >= 720.0 {
-                    let col_w = ((avail_w - gap) / 2.0).max(300.0);
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = gap;
-                        ui.allocate_ui_with_layout(
-                            egui::vec2(col_w, 0.0),
-                            egui::Layout::top_down(egui::Align::LEFT),
-                            |ui| {
-                                Self::render_library_card(ui, &config_opt, ipc_client);
-                                ui.add_space(theme::SPACING_LG);
-                                Self::render_performance_card(ui, &config_opt, ipc_client);
-                            },
-                        );
-                        ui.allocate_ui_with_layout(
-                            egui::vec2(col_w, 0.0),
-                            egui::Layout::top_down(egui::Align::LEFT),
-                            |ui| {
-                                Self::render_appearance_card(ui, &config_opt, ipc_client);
-                                ui.add_space(theme::SPACING_LG);
-                                Self::render_slideshow_card(ui, &config_opt, ipc_client);
-                                ui.add_space(theme::SPACING_LG);
-                                Self::render_info_card(ui);
-                            },
-                        );
-                    });
-                } else {
-                    Self::render_library_card(ui, &config_opt, ipc_client);
-                    ui.add_space(theme::SPACING_LG);
-                    Self::render_performance_card(ui, &config_opt, ipc_client);
-                    ui.add_space(theme::SPACING_LG);
-                    Self::render_appearance_card(ui, &config_opt, ipc_client);
-                    ui.add_space(theme::SPACING_LG);
-                    Self::render_slideshow_card(ui, &config_opt, ipc_client);
-                    ui.add_space(theme::SPACING_LG);
-                    Self::render_info_card(ui);
-                }
-            });
-    }
-
-    fn render_library_card(
+impl super::SettingsPanel {
+    pub(super) fn render_library_card(
         ui: &mut egui::Ui,
         config_opt: &Option<AppConfig>,
         ipc_client: &UiIpcClient,
@@ -105,6 +25,7 @@ impl SettingsPanel {
                             .clicked()
                             && let Some(folder) = rfd::FileDialog::new().pick_folder()
                         {
+                            ipc_client.set_library_path_optimistic(folder.clone());
                             ipc_client.send(Request::SetWallpaperLibrary { path: folder });
                         }
                         ui.add_space(theme::SPACING_SM);
@@ -147,7 +68,7 @@ impl SettingsPanel {
         });
     }
 
-    fn render_performance_card(
+    pub(super) fn render_performance_card(
         ui: &mut egui::Ui,
         config_opt: &Option<AppConfig>,
         ipc_client: &UiIpcClient,
@@ -223,7 +144,7 @@ impl SettingsPanel {
         });
     }
 
-    fn render_appearance_card(
+    pub(super) fn render_appearance_card(
         ui: &mut egui::Ui,
         config_opt: &Option<AppConfig>,
         ipc_client: &UiIpcClient,
@@ -263,11 +184,17 @@ impl SettingsPanel {
                 if changed {
                     ipc_client.send(Request::UpdateConfig { config: updated });
                 }
+            } else {
+                ui.label(
+                    egui::RichText::new("Loading appearance settings...")
+                        .size(theme::FONT_SECONDARY)
+                        .color(ui.visuals().weak_text_color()),
+                );
             }
         });
     }
 
-    fn render_slideshow_card(
+    pub(super) fn render_slideshow_card(
         ui: &mut egui::Ui,
         config_opt: &Option<AppConfig>,
         ipc_client: &UiIpcClient,
@@ -309,7 +236,7 @@ impl SettingsPanel {
                         ui.label(egui::RichText::new("Interval").size(theme::FONT_BODY));
                         ui.add_space(theme::SPACING_SM);
                         let prev = interval;
-                        ui.add(
+                        let slider_resp = ui.add(
                             egui::Slider::new(&mut interval, 30.0..=3600.0)
                                 .step_by(30.0)
                                 .trailing_fill(true),
@@ -319,7 +246,9 @@ impl SettingsPanel {
                                 .size(theme::FONT_BODY)
                                 .color(ui.visuals().weak_text_color()),
                         );
-                        if (interval - prev).abs() > f32::EPSILON {
+                        // Debounce: only persist once the drag is released
+                        // (dragging fires change events every frame).
+                        if (interval - prev).abs() > f32::EPSILON && !slider_resp.dragged() {
                             updated.appearance.slideshow_interval_secs = interval as u64;
                             changed = true;
                         }
@@ -339,7 +268,7 @@ impl SettingsPanel {
         });
     }
 
-    fn render_info_card(ui: &mut egui::Ui) {
+    pub(super) fn render_info_card(ui: &mut egui::Ui) {
         theme::group_frame(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             theme::section_label(ui, "DAEMON & PLATFORM INFO");

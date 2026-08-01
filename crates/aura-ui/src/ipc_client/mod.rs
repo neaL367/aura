@@ -82,11 +82,6 @@ impl UiIpcClient {
             .clone()
     }
 
-    #[allow(dead_code)]
-    pub fn fetch_wallpapers(&self) {
-        self.send(Request::ListWallpapers);
-    }
-
     pub fn library_path(&self) -> Option<PathBuf> {
         self.config().map(|c| c.library.library_path)
     }
@@ -121,6 +116,15 @@ impl UiIpcClient {
         let mut guard = self.config.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(ref mut cfg) = *guard {
             cfg.assignments.retain(|a| a.monitor_id != monitor_id);
+        }
+    }
+
+    /// Update the cached library path immediately so UI reads reflect the new
+    /// folder before the daemon's authoritative response arrives.
+    pub fn set_library_path_optimistic(&self, path: PathBuf) {
+        let mut guard = self.config.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(ref mut cfg) = *guard {
+            cfg.library.library_path = path;
         }
     }
 

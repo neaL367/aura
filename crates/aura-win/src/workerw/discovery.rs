@@ -13,33 +13,23 @@ use windows::{
 
 use crate::error::PlatformError;
 
-#[allow(dead_code)]
 pub(super) struct ScanResult {
     pub target: Option<HWND>,
-    pub candidates: Vec<isize>,
 }
 
-#[allow(dead_code)]
 pub(super) struct ScanContext {
     pub target: Option<HWND>,
-    pub candidates: Vec<isize>,
 }
 
 pub(super) fn find_workerw_pass() -> ScanResult {
-    let mut ctx = ScanContext {
-        target: None,
-        candidates: Vec::new(),
-    };
+    let mut ctx = ScanContext { target: None };
 
     // SAFETY: EnumWindows passes a valid raw pointer to local stack variable `ctx` via LPARAM.
     unsafe {
         let _ = EnumWindows(Some(find_workerw_callback), LPARAM(&raw mut ctx as isize));
     }
 
-    ScanResult {
-        target: ctx.target,
-        candidates: ctx.candidates,
-    }
+    ScanResult { target: ctx.target }
 }
 
 /// Single pass: scan EnumWindows for empty WorkerW or SHELLDLL_DefView host.
@@ -221,10 +211,6 @@ unsafe extern "system" fn find_workerw_callback(hwnd: HWND, lparam: LPARAM) -> B
     let mut class_buf = [0u16; 256];
     let len = unsafe { GetClassNameW(hwnd, &mut class_buf) };
     let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
-
-    if class_name == "WorkerW" || class_name == "Progman" {
-        ctx.candidates.push(hwnd.0 as isize);
-    }
 
     // Check 1: Top-level WorkerW window without SHELLDLL_DefView
     if class_name == "WorkerW" {
