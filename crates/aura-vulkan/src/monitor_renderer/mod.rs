@@ -116,6 +116,17 @@ impl MonitorRenderer {
 
         Ok(())
     }
+
+    /// Clear the active wallpaper, releasing textures and stopping media playback.
+    /// The descriptor set is updated to sample from a neutral 1x1 black texture.
+    pub fn clear(&mut self, context: &VulkanContext) {
+        if let Some(mut texture) = self.active_texture.take() {
+            unsafe {
+                texture.destroy(context);
+            }
+        }
+        self.clear_video_frame(context);
+    }
 }
 
 impl Drop for MonitorRenderer {

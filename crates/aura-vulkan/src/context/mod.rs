@@ -34,13 +34,24 @@ impl VulkanContext {
     pub fn new() -> Result<Self, VulkanError> {
         let entry = unsafe { ash::Entry::load() }
             .map_err(|_| VulkanError::MissingExtension("vulkan-1.dll"))?;
+        tracing::info!("Vulkan entry loaded");
 
         let instance = create_instance(&entry)?;
+        tracing::info!("Vulkan instance created");
         let (physical_device, graphics_queue_family) = select_physical_device(&instance)?;
+        tracing::info!(
+            "Vulkan physical device selected, graphics queue family {}",
+            graphics_queue_family
+        );
         let video_qf = find_video_decode_queue_family_for_device(&instance, physical_device);
+        tracing::info!("Vulkan video decode queue family: {:?}", video_qf);
 
         let (device, video_extensions_enabled) =
             create_device(&instance, physical_device, graphics_queue_family, video_qf)?;
+        tracing::info!(
+            "Vulkan logical device created, video extensions enabled={}",
+            video_extensions_enabled
+        );
 
         if let Some(vqf) = video_qf {
             tracing::info!(

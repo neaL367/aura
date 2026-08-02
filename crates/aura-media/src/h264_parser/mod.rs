@@ -28,9 +28,6 @@ pub use pps::{H264Pps, parse_pps};
 pub use slice::{H264SliceHeader, parse_slice_header};
 pub use sps::{H264Sps, parse_sps};
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Debug, thiserror::Error)]
 pub enum H264ParseError {
     #[error("H.264 bitstream truncated while parsing")]

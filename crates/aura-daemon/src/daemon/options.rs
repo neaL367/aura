@@ -1,4 +1,6 @@
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use aura_win::singleton::ProcessSingleton;
 use thiserror::Error;
@@ -28,6 +30,10 @@ pub struct DaemonOptions {
     pub ready_tx: std::sync::mpsc::SyncSender<()>,
     pub done_tx: crossbeam_channel::Sender<()>,
     pub _singleton: ProcessSingleton,
+    /// Shared Ctrl+C flag. When `Some`, the daemon uses this flag directly
+    /// and does NOT register its own console handler (caller owns it).
+    /// When `None` (standalone), the daemon creates and registers its own.
+    pub ctrlc_flag: Option<Arc<AtomicBool>>,
 }
 
 impl DaemonOptions {
@@ -47,6 +53,7 @@ impl DaemonOptions {
             ready_tx,
             done_tx,
             _singleton: singleton,
+            ctrlc_flag: None,
         }
     }
 }

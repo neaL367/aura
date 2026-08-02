@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 #[cfg(target_os = "windows")]
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use aura_win::event_pump::HostEvent;
@@ -16,9 +16,8 @@ use crate::render_thread::RenderCommand;
 use crate::slideshow_preload::SlideshowPreloader;
 
 use super::{
-    AttachState, CTRLC_REQUESTED, DaemonError, attach_or_detach, check_game_mode_pause,
-    effective_paused_state, pump_messages_once, reconcile_monitors, run_slideshow_cycle,
-    select_slideshow_items,
+    AttachState, DaemonError, attach_or_detach, check_game_mode_pause, effective_paused_state,
+    pump_messages_once, reconcile_monitors, run_slideshow_cycle, select_slideshow_items,
 };
 #[cfg(target_os = "windows")]
 use aura_vulkan::VulkanContext;
@@ -46,6 +45,7 @@ pub(super) fn run_event_loop(
     slideshow_store: &aura_storage::slideshow_store::SlideshowStore,
     slideshow_state: &mut Option<aura_core::slideshow_state::SlideshowState>,
     slideshow_preloader: &mut SlideshowPreloader,
+    ctrlc_flag: &Arc<AtomicBool>,
 ) -> Result<(), DaemonError> {
     let mut last_slideshow = std::time::Instant::now();
 
@@ -61,7 +61,7 @@ pub(super) fn run_event_loop(
             break;
         }
 
-        if CTRLC_REQUESTED.load(Ordering::Relaxed) {
+        if ctrlc_flag.load(Ordering::Relaxed) {
             tracing::info!("Ctrl+C received. Exiting daemon...");
             break;
         }

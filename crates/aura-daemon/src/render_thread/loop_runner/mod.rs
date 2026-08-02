@@ -86,6 +86,28 @@ pub fn run_render_loop(params: RenderLoopParams) {
             break;
         }
 
+        // Wait for the previous frame to finish before any resource mutation
+        // (commands, descriptor updates, texture uploads/destruction). The
+        // fence starts SIGNALED, so the first iteration returns immediately.
+        match state
+            .renderer
+            .frame_sync
+            .wait_for_fence_timeout(&context.device, 100_000_000)
+        {
+            Ok(true) => {}
+            Ok(false) => {
+                if shutdown_flag.load(Ordering::Relaxed) {
+                    break;
+                }
+                std::thread::yield_now();
+                continue;
+            }
+            Err(e) => {
+                tracing::error!("Render thread fence wait failed: {} — shutting down", e);
+                break;
+            }
+        }
+
         state.drain_commands(&assign_rx, &counter, &context);
 
         if pause_flag.load(Ordering::Relaxed) || state.current_profile == PerformanceProfile::Paused

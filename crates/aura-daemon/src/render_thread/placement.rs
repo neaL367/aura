@@ -10,9 +10,8 @@ pub fn setup_host_window_placement(
 ) -> Result<HostWindow, DaemonError> {
     let host_window = HostWindow::create()?;
     if !workerw.0.is_null() {
-        if let Err(e) = aura_win::workerw::attach_to_workerw(host_window.hwnd(), workerw) {
-            tracing::error!("Failed to attach window to WorkerW: {}", e);
-        } else {
+        aura_win::workerw::attach_to_workerw(host_window.hwnd(), workerw)?;
+        {
             unsafe {
                 use windows::Win32::Foundation::{POINT, RECT};
                 use windows::Win32::Graphics::Gdi::{InvalidateRect, ScreenToClient};
@@ -93,6 +92,7 @@ pub fn setup_host_window_placement(
             info.y,
             info.width as i32,
             info.height as i32,
+            None,
         ) {
             tracing::error!("Top-level fallback placement failed: {}", e);
         }

@@ -51,7 +51,16 @@ fn main() {
         }
     };
 
-    // Step 5: create shutdown/ready/done channels
+    // Step 5: register Ctrl+C handler on main thread — posts WM_CLOSE to the
+    // egui window so the main thread unblocks from aura_ui::run() and triggers
+    // graceful daemon shutdown even if the daemon thread has exited early.
+    let ctrlc_flag = {
+        let ctrlc = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        aura_win::register_console_ctrl_handler(ctrlc.clone(), Some(aura_core::WINDOW_TITLE));
+        ctrlc
+    };
+
+    // Step 6: create shutdown/ready/done channels
     let (shutdown_tx, shutdown_rx) = crossbeam_channel::bounded::<()>(1);
     let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel::<()>(1);
     let (done_tx, done_rx) = crossbeam_channel::bounded::<()>(1);
@@ -62,6 +71,7 @@ fn main() {
         ready_tx,
         done_tx,
         _singleton: singleton,
+        ctrlc_flag: Some(ctrlc_flag.clone()),
     };
 
     // Step 6: spawn daemon on background thread
@@ -80,59 +90,68 @@ fn main() {
         Err(_) => tracing::warn!("IPC readiness timeout — UI reconnect handles delay"),
     }
 
-    // Step 8: spawn tray icon (background message loop)
-    let (tray_quit_tx, tray_quit_rx) = crossbeam_channel::bounded::<()>(1);
-    let _tray_handle = tray::TrayManager::new().spawn(tray_quit_tx);
+    // If Ctrl+C was detected during daemon initialization, the daemon has
+    // already exited through its unified cleanup path (signaling done_tx).
+    // Skip the UI entirely and proceed directly to shutdown.
+    if ctrlc_flag.load(std::sync::atomic::Ordering::Relaxed) {
+        tracing::info!("Ctrl+C detected during daemon init — skipping UI startup");
+    } else {
+        let (tray_quit_tx, tray_quit_rx) = crossbeam_channel::bounded::<()>(1);
+        let mut tray = tray::TrayManager::new().spawn(tray_quit_tx);
 
-    // Step 8b: quit-fallback listener — if FindWindowW fails inside the tray
-    // thread (e.g. startup race), this retries with backoff and falls back
-    // to process::exit as a last resort.
-    let _quit_fallback = {
-        use std::time::Duration;
-        std::thread::Builder::new()
-            .name("quit-fallback".into())
-            .spawn(move || {
-                if tray_quit_rx.recv().is_err() {
-                    return;
-                }
-                let title = windows::core::HSTRING::from(aura_core::WINDOW_TITLE);
-                for retry in 0u32..10 {
-                    let hwnd = unsafe {
-                        windows::Win32::UI::WindowsAndMessaging::FindWindowW(None, &title)
-                    };
-                    let Ok(hwnd) = hwnd else {
-                        std::thread::sleep(Duration::from_millis(100));
-                        tracing::warn!("quit-fallback: retry {} FindWindowW failed", retry + 1);
-                        continue;
-                    };
-                    if !hwnd.is_invalid() {
-                        unsafe {
-                            let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
-                                Some(hwnd),
-                                windows::Win32::UI::WindowsAndMessaging::WM_CLOSE,
-                                windows::Win32::Foundation::WPARAM(0),
-                                windows::Win32::Foundation::LPARAM(0),
-                            );
-                        }
+        // Step 8b: quit-fallback listener — if FindWindowW fails inside the tray
+        // thread (e.g. startup race), this retries with backoff and falls back
+        // to process::exit as a last resort.
+        let _quit_fallback = {
+            use std::time::Duration;
+            std::thread::Builder::new()
+                .name("quit-fallback".into())
+                .spawn(move || {
+                    if tray_quit_rx.recv().is_err() {
                         return;
                     }
-                }
-                tracing::error!(
-                    "quit-fallback: exhausted retries — restoring wallpaper then force-exiting"
-                );
-                aura_win::workerw::restore_desktop_wallpaper();
-                std::process::exit(0);
-            })
-            .expect("failed to spawn quit-fallback thread")
-    };
+                    let title = windows::core::HSTRING::from(aura_core::WINDOW_TITLE);
+                    for retry in 0u32..10 {
+                        let hwnd = unsafe {
+                            windows::Win32::UI::WindowsAndMessaging::FindWindowW(None, &title)
+                        };
+                        let Ok(hwnd) = hwnd else {
+                            std::thread::sleep(Duration::from_millis(100));
+                            tracing::warn!("quit-fallback: retry {} FindWindowW failed", retry + 1);
+                            continue;
+                        };
+                        if !hwnd.is_invalid() {
+                            unsafe {
+                                let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                                    Some(hwnd),
+                                    windows::Win32::UI::WindowsAndMessaging::WM_CLOSE,
+                                    windows::Win32::Foundation::WPARAM(0),
+                                    windows::Win32::Foundation::LPARAM(0),
+                                );
+                            }
+                            return;
+                        }
+                    }
+                    tracing::error!(
+                        "quit-fallback: exhausted retries — restoring wallpaper then force-exiting"
+                    );
+                    aura_win::workerw::restore_desktop_wallpaper();
+                    std::process::exit(0);
+                })
+                .expect("failed to spawn quit-fallback thread")
+        };
 
-    // Step 9: run eframe (blocks until window closed)
-    aura_ui::run();
+        // Step 9: run eframe (blocks until window closed)
+        aura_ui::run();
 
-    // Step 10: signal daemon to stop
-    let _ = shutdown_tx.send(());
+        // Step 10: stop tray icon before signaling daemon
+        tray.stop();
 
-    // Step 11: wait for daemon shutdown with timeout
+        // Step 11: signal daemon to stop
+        let _ = shutdown_tx.send(());
+    }
+
+    // Step 12: wait for daemon shutdown with timeout
     match done_rx.recv_timeout(std::time::Duration::from_secs(5)) {
         Ok(()) => tracing::info!("daemon shutdown complete"),
         Err(_) => {

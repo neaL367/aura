@@ -128,9 +128,18 @@ impl GpuTexture {
     /// Must be called when GPU execution using this texture has completed.
     pub unsafe fn destroy(&mut self, context: &VulkanContext) {
         unsafe {
-            context.device.destroy_sampler(self.sampler, None);
-            context.device.destroy_image_view(self.view, None);
-            context.device.destroy_image(self.image, None);
+            if self.sampler != vk::Sampler::null() {
+                context.device.destroy_sampler(self.sampler, None);
+                self.sampler = vk::Sampler::null();
+            }
+            if self.view != vk::ImageView::null() {
+                context.device.destroy_image_view(self.view, None);
+                self.view = vk::ImageView::null();
+            }
+            if self.image != vk::Image::null() {
+                context.device.destroy_image(self.image, None);
+                self.image = vk::Image::null();
+            }
             if let Some(alloc) = self.allocation.take()
                 && let Ok(mut guard) = context.allocator.lock()
                 && let Some(ref mut allocator) = *guard

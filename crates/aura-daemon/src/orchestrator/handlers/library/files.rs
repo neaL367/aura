@@ -152,24 +152,60 @@ pub(crate) fn handle_delete_wallpaper(
         }
     };
 
-    let item = state.library_items.remove(pos);
+    // Clone the item for path validation and deletion first — only remove
+    // from in-memory state after all I/O succeeds to prevent corruption.
+    let item = state.library_items[pos].clone();
     info!("DeleteWallpaper: removing {:?} from library", item.path);
 
-    // Delete the on-disk wallpaper file.
-    let _ = std::fs::remove_file(&item.path);
+    let config = state.config_store.load().unwrap_or_default();
+    let library_root = config.library.library_path;
 
-    // Remove any thumbnail for this wallpaper.
-    let thumb_dir = aura_storage::ThumbnailStore::thumbs_dir();
-    let thumb_path = thumb_dir.join(format!("{}.jpg", item.id));
-    let _ = std::fs::remove_file(&thumb_path);
+    // Validate the cached path is within the configured library root.
+    // Canonicalize both to catch symlink escapes and path equivalences.
+    let Ok(library_root_canonical) = library_root.canonicalize() else {
+        return Response::Error {
+            reason: "Cannot resolve library root".to_string(),
+        };
+    };
+    let Ok(item_canonical) = item.path.canonicalize() else {
+        return Response::Error {
+            reason: format!(
+                "Cannot resolve wallpaper path: {}",
+                aura_security::redact_path(&item.path)
+            ),
+        };
+    };
+    if !item_canonical.starts_with(&library_root_canonical) {
+        return Response::Error {
+            reason: "Wallpaper path is outside the configured library".to_string(),
+        };
+    }
 
+    // Remove from in-memory state and persist metadata FIRST — only then
+    // delete the physical file. If the save fails, the cache stays consistent
+    // and the file remains on disk.
+    state.library_items.remove(pos);
     state.library_items.shrink_to_fit();
     if let Err(e) = state.library_store.save(&state.library_items) {
         tracing::error!("Failed to save library after deletion: {}", e);
+        // Restore item to memory since the persistence layer is inconsistent.
+        state.library_items.push(item);
         return Response::Error {
             reason: format!("Failed to save library: {}", e),
         };
     }
+
+    // Delete the on-disk wallpaper file.
+    if let Err(e) = std::fs::remove_file(&item_canonical) {
+        // The cache is already updated — this is a partial failure. Log it
+        // but consider the operation successful since the metadata is clean.
+        tracing::warn!("Failed to delete wallpaper file: {}", e);
+    }
+
+    // Remove any thumbnail for this wallpaper (best-effort).
+    let thumb_dir = aura_storage::ThumbnailStore::thumbs_dir();
+    let thumb_path = thumb_dir.join(format!("{}.jpg", item.id));
+    let _ = std::fs::remove_file(&thumb_path);
 
     info!(
         "DeleteWallpaper complete — {} wallpaper(s) remaining",

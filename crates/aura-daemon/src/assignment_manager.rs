@@ -22,6 +22,10 @@ impl AssignmentManager {
         self.assignments.remove(monitor_id)
     }
 
+    pub fn clear(&mut self) {
+        self.assignments.clear();
+    }
+
     pub fn get(&self, monitor_id: &MonitorId) -> Option<&WallpaperId> {
         self.assignments.get(monitor_id)
     }

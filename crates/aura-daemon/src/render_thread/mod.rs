@@ -44,6 +44,7 @@ pub enum RenderCommand {
     Playback(PlaybackCommand),
     SetPerformanceProfile(aura_core::playback::PerformanceProfile),
     SetTargetFps(u8),
+    Clear,
 }
 
 #[cfg(target_os = "windows")]

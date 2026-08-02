@@ -4,8 +4,8 @@ use windows::{
     Win32::{
         Foundation::{HWND, LPARAM, WPARAM},
         UI::WindowsAndMessaging::{
-            EnumWindows, FindWindowExW, FindWindowW, GW_HWNDNEXT, GetClassNameW, GetDesktopWindow,
-            GetWindow, SMTO_ABORTIFHUNG, SendMessageTimeoutW,
+            EnumChildWindows, EnumWindows, FindWindowExW, FindWindowW, GW_HWNDNEXT, GetClassNameW,
+            GetDesktopWindow, GetWindow, SMTO_ABORTIFHUNG, SendMessageTimeoutW,
         },
     },
     core::{BOOL, w},
@@ -40,23 +40,42 @@ pub(super) fn find_workerw_once() -> std::result::Result<HWND, PlatformError> {
     }
 
     // Direct resolution: Find SHELLDLL_DefView and obtain its host parent window directly.
+    // Validate the parent's class and dimensions to avoid attaching to unexpected shell windows.
     unsafe {
         use windows::Win32::UI::WindowsAndMessaging::GetParent;
         let def_hwnd = FindWindowExW(None, None, w!("SHELLDLL_DefView"), None).unwrap_or_default();
         if !def_hwnd.0.is_null() {
             let parent_hwnd = GetParent(def_hwnd).unwrap_or_default();
             let desktop = GetDesktopWindow();
-            if !parent_hwnd.0.is_null() && parent_hwnd.0 != desktop.0 {
-                tracing::info!(
-                    "SHELLDLL_DefView host window resolved directly: HWND({:?})",
-                    parent_hwnd.0
-                );
-                return Ok(parent_hwnd);
-            }
-            if parent_hwnd.0 == desktop.0 {
+            if parent_hwnd.0.is_null() || parent_hwnd.0 == desktop.0 {
+                if parent_hwnd.0 == desktop.0 {
+                    tracing::warn!(
+                        "SHELLDLL_DefView GetParent() resolved to the raw Desktop Window (HWND {:?}) — rejecting as an invalid attach target",
+                        desktop.0
+                    );
+                }
+            } else {
+                let mut class_buf = [0u16; 256];
+                let len = GetClassNameW(parent_hwnd, &mut class_buf);
+                let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
+                if class_name == "WorkerW" && is_valid_workerw_candidate(parent_hwnd) {
+                    tracing::info!(
+                        "SHELLDLL_DefView host window resolved directly (WorkerW): HWND({:?})",
+                        parent_hwnd.0
+                    );
+                    return Ok(parent_hwnd);
+                }
+                if class_name == "Progman" && is_valid_workerw_candidate(parent_hwnd) {
+                    tracing::info!(
+                        "SHELLDLL_DefView host window resolved directly (Progman): HWND({:?})",
+                        parent_hwnd.0
+                    );
+                    return Ok(parent_hwnd);
+                }
                 tracing::warn!(
-                    "SHELLDLL_DefView GetParent() resolved to the raw Desktop Window (HWND {:?}) — rejecting as an invalid attach target",
-                    desktop.0
+                    "SHELLDLL_DefView parent HWND({:?}) class '{}' is not a recognized attach target",
+                    parent_hwnd.0,
+                    class_name
                 );
             }
         }
@@ -129,7 +148,20 @@ pub fn find_and_prepare_workerw() -> std::result::Result<HWND, PlatformError> {
         }
     }
 
-    // Step 4: Fallback to Progman for Windows 11 24H2+ composition engine.
+    // Step 4: Windows 11 24H2+ may keep WorkerW as a child of Progman rather than
+    // as a top-level sibling. Search Progman's children for a WorkerW that does
+    // NOT contain SHELLDLL_DefView; that is the empty background layer we can host.
+    if !progman.0.is_null()
+        && let Some(workerw) = find_workerw_child_of_progman(progman)
+    {
+        tracing::info!(
+            "WorkerW child discovery succeeded: found child WorkerW HWND({:?}) under Progman",
+            workerw.0
+        );
+        return Ok(workerw);
+    }
+
+    // Step 5: Fallback to Progman for Windows 11 24H2+ composition engine.
     if !progman.0.is_null() {
         tracing::info!(
             "Falling back to Progman HWND({:?}) for desktop composition",
@@ -188,6 +220,39 @@ fn find_defview_child(parent: HWND) -> Option<HWND> {
 ///
 /// Used to filter out tiny internal WorkerW windows that Explorer creates
 /// as implementation details and that are unsuitable as wallpaper hosts.
+/// Search the children of `progman` for a WorkerW window that does not contain
+/// SHELLDLL_DefView. This is the empty background layer used on Windows 11
+/// 24H2+ where the WorkerW split is kept as a child of Progman.
+fn find_workerw_child_of_progman(progman: HWND) -> Option<HWND> {
+    unsafe {
+        let mut target: Option<HWND> = None;
+        let _ = EnumChildWindows(
+            Some(progman),
+            Some(find_workerw_child_callback),
+            LPARAM(&raw mut target as isize),
+        );
+        target
+    }
+}
+
+unsafe extern "system" fn find_workerw_child_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    unsafe {
+        let mut class_buf = [0u16; 256];
+        let len = GetClassNameW(hwnd, &mut class_buf);
+        let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
+        if class_name == "WorkerW" {
+            let def_view =
+                FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None).unwrap_or_default();
+            if def_view.0.is_null() {
+                let slot = &mut *(lparam.0 as *mut Option<HWND>);
+                *slot = Some(hwnd);
+                return BOOL::from(false);
+            }
+        }
+    }
+    BOOL::from(true)
+}
+
 fn is_valid_workerw_candidate(hwnd: HWND) -> bool {
     let mut client_rect = windows::Win32::Foundation::RECT::default();
     let ok = unsafe {

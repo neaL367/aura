@@ -168,3 +168,9 @@ impl eframe::App for AuraApp {
         self.toasts.show(ui.ctx());
     }
 }
+
+impl Drop for AuraApp {
+    fn drop(&mut self) {
+        self.ipc_client.shutdown();
+    }
+}

@@ -62,6 +62,10 @@ impl IpcClient {
                 expected = PROTOCOL_VERSION,
                 "IPC protocol version mismatch"
             );
+            return Err(IpcError::VersionMismatch {
+                expected: PROTOCOL_VERSION,
+                got: resp.version,
+            });
         }
         Ok(resp.payload)
     }
@@ -70,6 +74,17 @@ impl IpcClient {
     pub async fn send_message(&mut self, msg: IpcMessage<Request>) -> Result<Response, IpcError> {
         write_message(&mut self.pipe, &msg).await?;
         let resp: IpcMessage<Response> = read_message(&mut self.pipe).await?;
+        if resp.version != PROTOCOL_VERSION {
+            warn!(
+                got = resp.version,
+                expected = PROTOCOL_VERSION,
+                "IPC protocol version mismatch"
+            );
+            return Err(IpcError::VersionMismatch {
+                expected: PROTOCOL_VERSION,
+                got: resp.version,
+            });
+        }
         Ok(resp.payload)
     }
 }

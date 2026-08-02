@@ -43,10 +43,14 @@ pub(super) fn handle_get_config(state_lock: &Arc<Mutex<OrchestratorState>>) -> R
 
 pub(super) fn handle_update_config(
     state_lock: &Arc<Mutex<OrchestratorState>>,
-    config: AppConfig,
+    mut config: AppConfig,
 ) -> Response {
     info!("UpdateConfig received — saving config & broadcasting performance parameters");
-    let state = match state_lock.lock() {
+    let corrections = config.validate();
+    for c in &corrections {
+        tracing::warn!("Config validation correction: {}", c);
+    }
+    let mut state = match state_lock.lock() {
         Ok(s) => s,
         Err(e) => {
             return Response::Error {
@@ -56,19 +60,46 @@ pub(super) fn handle_update_config(
     };
     if let Err(e) = state.config_store.save(&config) {
         tracing::error!("Failed to save config: {}", e);
-        Response::Error {
+        return Response::Error {
             reason: e.to_string(),
-        }
-    } else {
-        #[cfg(target_os = "windows")]
-        set_autostart(config.appearance.auto_start);
-
-        for tx in state.wallpaper_txs.values() {
-            let _ = tx.send(RenderCommand::SetTargetFps(config.performance.target_fps));
-            let _ = tx.send(RenderCommand::SetPerformanceProfile(
-                config.performance.default_profile,
-            ));
-        }
-        Response::Config(config)
+        };
     }
+
+    #[cfg(target_os = "windows")]
+    set_autostart(config.appearance.auto_start);
+
+    // Apply performance parameters to all render threads.
+    for tx in state.wallpaper_txs.values() {
+        let _ = tx.send(RenderCommand::SetTargetFps(config.performance.target_fps));
+        let _ = tx.send(RenderCommand::SetPerformanceProfile(
+            config.performance.default_profile,
+        ));
+    }
+
+    // Reconcile assignments from the incoming config.
+    state.assignments.clear();
+    for assignment in &config.assignments {
+        state
+            .assignments
+            .assign(assignment.monitor_id, assignment.wallpaper_id);
+        if let Some(tx) = state.wallpaper_txs.get(&assignment.monitor_id)
+            && let Some(item) = state
+                .library_items
+                .iter()
+                .find(|i| i.id == assignment.wallpaper_id)
+        {
+            let _ = tx.send(RenderCommand::SetWallpaper {
+                path: item.path.clone(),
+                fit_mode: Some(assignment.fit_mode),
+            });
+        }
+    }
+
+    // Sync library watch paths.
+    let library_path = config.library.library_path.clone();
+    if let Some(watcher) = &mut state.watcher {
+        watcher.replace_paths(std::slice::from_ref(&library_path));
+    }
+
+    Response::Config(config)
 }

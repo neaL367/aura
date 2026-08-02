@@ -21,10 +21,10 @@ use windows::Win32::{
     UI::WindowsAndMessaging::{
         AppendMenuW, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreatePopupMenu, CreateWindowExW,
         DefWindowProcW, DestroyMenu, DestroyWindow, DispatchMessageW, FindWindowW, GetCursorPos,
-        GetMessageW, GetWindowThreadProcessId, IDC_ARROW, IDI_APPLICATION, IsWindowVisible,
-        LoadCursorW, LoadIconW, MF_STRING, MSG, PostMessageW, PostQuitMessage, RegisterClassW,
+        GetWindowThreadProcessId, IDC_ARROW, IDI_APPLICATION, IsWindowVisible, LoadCursorW,
+        LoadIconW, MF_STRING, MSG, PM_REMOVE, PeekMessageW, PostQuitMessage, RegisterClassW,
         SW_HIDE, SW_RESTORE, SetForegroundWindow, ShowWindow, TPM_RIGHTBUTTON, TrackPopupMenu,
-        WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDOWN, WM_NULL,
+        WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDOWN, WM_NULL, WM_QUIT,
         WM_RBUTTONDOWN, WNDCLASSW,
     },
 };
@@ -37,31 +37,47 @@ thread_local! {
 }
 
 pub struct TrayManager {
+    #[cfg(target_os = "windows")]
     shutdown_flag: Arc<AtomicBool>,
+    join_handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl TrayManager {
     pub fn new() -> Self {
         Self {
+            #[cfg(target_os = "windows")]
             shutdown_flag: Arc::new(AtomicBool::new(false)),
+            join_handle: None,
         }
     }
 
     #[cfg(target_os = "windows")]
-    pub fn spawn(self, quit_tx: Sender<()>) -> std::thread::JoinHandle<()> {
-        std::thread::Builder::new()
+    pub fn spawn(mut self, quit_tx: Sender<()>) -> Self {
+        let shutdown_flag = self.shutdown_flag.clone();
+        let handle = std::thread::Builder::new()
             .name("tray".into())
-            .spawn(move || self.run_message_loop(quit_tx))
-            .expect("failed to spawn tray thread")
+            .spawn(move || Self::run_message_loop(quit_tx, shutdown_flag))
+            .expect("failed to spawn tray thread");
+        self.join_handle = Some(handle);
+        self
     }
 
     #[cfg(not(target_os = "windows"))]
-    pub fn spawn(self, _quit_tx: Sender<()>) -> std::thread::JoinHandle<()> {
-        std::thread::spawn(|| {})
+    pub fn spawn(self, _quit_tx: Sender<()>) -> Self {
+        self
+    }
+
+    pub fn stop(&mut self) {
+        #[cfg(target_os = "windows")]
+        if let Some(handle) = self.join_handle.take() {
+            self.shutdown_flag
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            let _ = handle.join();
+        }
     }
 
     #[cfg(target_os = "windows")]
-    fn run_message_loop(&self, quit_tx: Sender<()>) {
+    fn run_message_loop(quit_tx: Sender<()>, shutdown_flag: Arc<AtomicBool>) {
         TRAY_SENDER.with(|s| s.set(Some(quit_tx)));
 
         let instance = unsafe { GetModuleHandleW(None).unwrap_or_default() };
@@ -105,13 +121,31 @@ impl TrayManager {
         Self::add_icon(hwnd);
 
         let mut msg = MSG::default();
-        unsafe {
-            while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-                let _ = DispatchMessageW(&msg);
+        let sleep_dur = std::time::Duration::from_millis(100);
+        loop {
+            if shutdown_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                Self::remove_icon(hwnd);
+                unsafe {
+                    let _ = DestroyWindow(hwnd);
+                }
+                break;
             }
-        }
-        unsafe {
-            let _ = DestroyWindow(hwnd);
+
+            let peeked = unsafe {
+                PeekMessageW(&mut msg, Some(hwnd), 0, 0, PM_REMOVE).as_bool()
+                    || PeekMessageW(&mut msg, None, WM_QUIT, WM_QUIT, PM_REMOVE).as_bool()
+            };
+
+            if peeked {
+                if msg.message == WM_QUIT {
+                    break;
+                }
+                unsafe {
+                    let _ = DispatchMessageW(&msg);
+                }
+            } else {
+                std::thread::sleep(sleep_dur);
+            }
         }
     }
 
@@ -149,7 +183,6 @@ impl TrayManager {
                         LRESULT(0)
                     }
                     ID_TRAY_QUIT => {
-                        // Close the eframe window so the main thread unblocks.
                         let title = windows::core::HSTRING::from(aura_core::WINDOW_TITLE);
                         let _closed = unsafe { FindWindowW(None, &title) }
                             .ok()
@@ -229,7 +262,12 @@ impl TrayManager {
 
             // Workaround for MSDN Q135788: send WM_NULL to dismiss the menu
             // when the user clicks outside of it.
-            let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
+            let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                Some(hwnd),
+                WM_NULL,
+                WPARAM(0),
+                LPARAM(0),
+            );
 
             let _ = DestroyMenu(menu);
         }

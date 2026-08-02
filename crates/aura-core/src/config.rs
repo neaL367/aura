@@ -52,6 +52,29 @@ impl Default for AppConfig {
     }
 }
 
+impl AppConfig {
+    /// Validate the config, clamping out-of-range values and returning a list of
+    /// corrections applied. Errors on unrecoverable invalid state.
+    pub fn validate(&mut self) -> Vec<String> {
+        let mut corrections = Vec::new();
+        if self.performance.target_fps < 1 {
+            corrections.push(format!(
+                "target_fps {} out of range (1–120), clamped to 1",
+                self.performance.target_fps
+            ));
+            self.performance.target_fps = 1;
+        }
+        if self.performance.target_fps > 120 {
+            corrections.push(format!(
+                "target_fps {} out of range (1–120), clamped to 120",
+                self.performance.target_fps
+            ));
+            self.performance.target_fps = 120;
+        }
+        corrections
+    }
+}
+
 // ---------------------------------------------------------------------------
 // PerformanceConfig
 // ---------------------------------------------------------------------------

@@ -112,7 +112,6 @@ pub fn create_device(
 
     let mut extensions = Vec::with_capacity(4);
     extensions.push(ash::khr::swapchain::NAME.as_ptr());
-
     let mut video_extensions_enabled = false;
 
     if video_queue_family.is_some() {
@@ -144,28 +143,86 @@ pub fn create_device(
         }
     }
 
-    // Core features required by the video pipeline: timeline semaphores
-    // (decode <-> graphics queue sync), synchronization2 (queue submits),
-    // and sampler YCbCr conversion (hardware NV12 -> RGB sampling).
-    let mut vulkan13_features =
-        vk::PhysicalDeviceVulkan13Features::default().synchronization2(true);
-    let mut vulkan12_features =
-        vk::PhysicalDeviceVulkan12Features::default().timeline_semaphore(true);
-    let mut vulkan11_features =
-        vk::PhysicalDeviceVulkan11Features::default().sampler_ycbcr_conversion(true);
+    // Probe device API version; only enable core features the device supports.
+    let props = unsafe { instance.get_physical_device_properties(physical_device) };
+    let api_version = props.api_version;
+    let has_vulkan_1_1 = api_version >= vk::API_VERSION_1_1;
+    let has_vulkan_1_2 = api_version >= vk::API_VERSION_1_2;
+    let has_vulkan_1_3 = api_version >= vk::API_VERSION_1_3;
 
-    let mut features2 = if video_extensions_enabled {
-        let mut h264_features = H264DecodeFeaturesKhr::new(true);
-        vulkan11_features.p_next = &mut h264_features as *mut H264DecodeFeaturesKhr as *mut _;
+    if !has_vulkan_1_1 {
+        tracing::warn!(
+            "Device only supports Vulkan {} — video decode and YCbCr sampling unavailable",
+            api_version
+        );
+    }
+
+    let mut vulkan13_features = if has_vulkan_1_3 {
+        vk::PhysicalDeviceVulkan13Features::default().synchronization2(true)
+    } else {
+        vk::PhysicalDeviceVulkan13Features::default()
+    };
+    let mut vulkan12_features = if has_vulkan_1_2 {
+        vk::PhysicalDeviceVulkan12Features::default().timeline_semaphore(true)
+    } else {
+        vk::PhysicalDeviceVulkan12Features::default()
+    };
+    let mut vulkan11_features = if has_vulkan_1_1 {
+        vk::PhysicalDeviceVulkan11Features::default().sampler_ycbcr_conversion(true)
+    } else {
+        vk::PhysicalDeviceVulkan11Features::default()
+    };
+
+    // Query device features first, then only enable the H.264 decode feature
+    // chain if the device reports support. Passing the H264 decode feature
+    // struct unconditionally has been observed to hang some drivers inside
+    // vkCreateDevice, so we gate it on the explicit feature query.
+    let mut h264_features_opt: Option<H264DecodeFeaturesKhr> = None;
+    if video_extensions_enabled && has_vulkan_1_1 {
+        let mut probe_h264 = H264DecodeFeaturesKhr::new(true);
+        let mut probe_features2 = vk::PhysicalDeviceFeatures2 {
+            p_next: &mut probe_h264 as *mut H264DecodeFeaturesKhr as *mut _,
+            ..Default::default()
+        };
+        unsafe {
+            instance.get_physical_device_features2(physical_device, &mut probe_features2);
+        }
+        if probe_h264.std_syntax_only != 0 {
+            h264_features_opt = Some(probe_h264);
+        } else {
+            tracing::warn!(
+                "VK_KHR_video_decode_h264 supported but std_syntax_only is not — disabling H.264 decode"
+            );
+        }
+    }
+
+    let mut features2 = if let Some(ref mut h264_features) = h264_features_opt {
+        vulkan11_features.p_next = h264_features as *mut H264DecodeFeaturesKhr as *mut _;
+        if has_vulkan_1_3 {
+            vk::PhysicalDeviceFeatures2::default()
+                .push_next(&mut vulkan13_features)
+                .push_next(&mut vulkan12_features)
+                .push_next(&mut vulkan11_features)
+        } else if has_vulkan_1_2 {
+            vk::PhysicalDeviceFeatures2::default()
+                .push_next(&mut vulkan12_features)
+                .push_next(&mut vulkan11_features)
+        } else {
+            vk::PhysicalDeviceFeatures2::default().push_next(&mut vulkan11_features)
+        }
+    } else if has_vulkan_1_3 {
         vk::PhysicalDeviceFeatures2::default()
             .push_next(&mut vulkan13_features)
             .push_next(&mut vulkan12_features)
             .push_next(&mut vulkan11_features)
+    } else if has_vulkan_1_2 {
+        vk::PhysicalDeviceFeatures2::default()
+            .push_next(&mut vulkan12_features)
+            .push_next(&mut vulkan11_features)
+    } else if has_vulkan_1_1 {
+        vk::PhysicalDeviceFeatures2::default().push_next(&mut vulkan11_features)
     } else {
         vk::PhysicalDeviceFeatures2::default()
-            .push_next(&mut vulkan13_features)
-            .push_next(&mut vulkan12_features)
-            .push_next(&mut vulkan11_features)
     };
 
     let create_info = vk::DeviceCreateInfo::default()

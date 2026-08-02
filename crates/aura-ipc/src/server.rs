@@ -111,17 +111,24 @@ impl IpcServer {
                     match result {
                         Ok(()) => {
                             let client_pid = get_server_client_pid(&server);
-                            if let Some(pid) = client_pid {
-                                if !self.skip_client_validation {
-                                    let allowed = if self.client_validator.has_restrictions() {
-                                        self.client_validator.is_allowed(pid)
-                                    } else {
-                                        validate_client_pid(pid)
-                                    };
-                                    if !allowed {
-                                        warn!("IPC connection rejected: unauthorized PID {}", pid);
+                            if self.skip_client_validation {
+                                info!("IPC connection accepted (validation skipped)");
+                            } else {
+                                let pid = match client_pid {
+                                    Some(pid) => pid,
+                                    None => {
+                                        warn!("IPC connection rejected: failed to obtain client PID");
                                         continue;
                                     }
+                                };
+                                let allowed = if self.client_validator.has_restrictions() {
+                                    self.client_validator.is_allowed(pid)
+                                } else {
+                                    validate_client_pid(pid)
+                                };
+                                if !allowed {
+                                    warn!("IPC connection rejected: unauthorized PID {}", pid);
+                                    continue;
                                 }
                                 info!("IPC connection accepted from PID {}", pid);
                             }

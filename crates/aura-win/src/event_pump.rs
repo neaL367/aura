@@ -113,6 +113,13 @@ thread_local! {
 #[cfg(target_os = "windows")]
 fn run_message_loop(sender: Sender<HostEvent>, hwnd_shared: Arc<Mutex<Option<isize>>>) {
     let taskbar_created = unsafe { RegisterWindowMessageW(windows::core::w!("TaskbarCreated")) };
+    if taskbar_created == 0 {
+        tracing::error!(
+            "RegisterWindowMessageW failed: {}",
+            crate::error::PlatformError::Win32(windows::core::Error::from_thread())
+        );
+        return;
+    }
 
     EVENT_SENDER.with(|s| s.set(Some(sender)));
     TASKBAR_CREATED_MSG.with(|m| m.set(taskbar_created));
@@ -129,7 +136,11 @@ fn run_message_loop(sender: Sender<HostEvent>, hwnd_shared: Arc<Mutex<Option<isi
             ..Default::default()
         };
 
-        RegisterClassW(&wc);
+        if RegisterClassW(&wc) == 0 {
+            let err = crate::error::PlatformError::Win32(windows::core::Error::from_thread());
+            tracing::error!("RegisterClassW failed: {}", err);
+            return;
+        }
 
         let hwnd = CreateWindowExW(
             Default::default(),
@@ -162,7 +173,18 @@ fn run_message_loop(sender: Sender<HostEvent>, hwnd_shared: Arc<Mutex<Option<isi
         );
 
         let mut msg = MSG::default();
-        while GetMessageW(&mut msg, None, 0, 0).into() {
+        loop {
+            let ret = GetMessageW(&mut msg, None, 0, 0);
+            if ret.0 == -1 {
+                tracing::error!(
+                    "GetMessageW failed: {}",
+                    crate::error::PlatformError::Win32(windows::core::Error::from_thread())
+                );
+                break;
+            }
+            if ret.0 == 0 {
+                break;
+            }
             DispatchMessageW(&msg);
         }
 

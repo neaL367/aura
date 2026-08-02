@@ -52,32 +52,21 @@ pub(super) fn handle_assign_wallpaper(
                         "Assigning wallpaper {:?} (fit_mode: {:?}) to monitor {:?}",
                         meta.path, fit_mode, monitor_id
                     );
-                    if tx.send(cmd.clone()).is_ok() {
+                    if tx.send(cmd).is_ok() {
                         return Response::Ok;
                     }
                     tracing::warn!(
-                        "Render channel for monitor {:?} was dead; purging and sending to fallback channel",
+                        "Render channel for monitor {:?} was dead; purging",
                         monitor_id
                     );
                     state.wallpaper_txs.remove(&monitor_id);
                 }
                 None => {
-                    info!(
-                        "No direct channel for monitor {:?}; attempting fallback delivery",
+                    tracing::debug!(
+                        "No render channel for monitor {:?} yet; assignment persisted, will flush on channel registration",
                         monitor_id
                     );
                 }
-            }
-
-            // Fallback delivery to any live render channel if direct channel is missing or dead
-            if let Some((&fallback_id, fallback_tx)) =
-                state.wallpaper_txs.iter().find(|(_, tx)| !tx.is_full())
-            {
-                info!(
-                    "Forwarding wallpaper assignment to active fallback monitor {:?}",
-                    fallback_id
-                );
-                let _ = fallback_tx.send(cmd);
             }
 
             Response::Ok
@@ -114,7 +103,7 @@ pub(super) fn handle_set_fit_mode(
                 "Setting fit mode {:?} for monitor {:?}",
                 fit_mode, monitor_id
             );
-            if tx.send(cmd.clone()).is_ok() {
+            if tx.send(cmd).is_ok() {
                 return Response::Ok;
             }
             tracing::warn!(
@@ -124,15 +113,11 @@ pub(super) fn handle_set_fit_mode(
             state.wallpaper_txs.remove(&monitor_id);
         }
         None => {
-            info!(
-                "No direct channel for monitor {:?}; updating fit mode config",
+            tracing::debug!(
+                "No render channel for monitor {:?} yet; fit mode persisted",
                 monitor_id
             );
         }
-    }
-
-    if let Some((_, fallback_tx)) = state.wallpaper_txs.iter().find(|(_, tx)| !tx.is_full()) {
-        let _ = fallback_tx.send(cmd);
     }
 
     Response::Ok
@@ -155,6 +140,12 @@ pub(super) fn handle_remove_assignment(
         return Response::Error { reason: e };
     }
     state.assignments.remove(&monitor_id);
+
+    let tx = state.wallpaper_txs.get(&monitor_id).cloned();
+    if let Some(tx) = tx {
+        let _ = tx.send(RenderCommand::Clear);
+    }
+
     Response::Ok
 }
 
@@ -180,7 +171,7 @@ pub(super) fn handle_set_playback(
                 "Forwarding playback command {:?} to monitor {:?}",
                 command, monitor_id
             );
-            if tx.send(cmd.clone()).is_ok() {
+            if tx.send(cmd).is_ok() {
                 return Response::Ok;
             }
             tracing::warn!(
@@ -190,15 +181,11 @@ pub(super) fn handle_set_playback(
             state.wallpaper_txs.remove(&monitor_id);
         }
         None => {
-            info!(
-                "No direct channel for monitor {:?}; attempting playback command fallback",
+            tracing::debug!(
+                "No render channel for monitor {:?} yet; playback command dropped",
                 monitor_id
             );
         }
-    }
-
-    if let Some((_, fallback_tx)) = state.wallpaper_txs.iter().find(|(_, tx)| !tx.is_full()) {
-        let _ = fallback_tx.send(cmd);
     }
 
     Response::Ok

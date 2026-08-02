@@ -232,3 +232,23 @@ impl RenderCoordinator {
         }
     }
 }
+
+impl Drop for RenderCoordinator {
+    fn drop(&mut self) {
+        for ctx in &self.monitors {
+            ctx.shutdown_flag.store(true, Ordering::Relaxed);
+        }
+        for ctx in &mut self.monitors {
+            if let Some(handle) = ctx.render_thread.take() {
+                if !handle.is_finished() {
+                    tracing::warn!(
+                        "RenderCoordinator dropped without explicit shutdown — \
+                         joining render thread {:?}",
+                        ctx.monitor_id
+                    );
+                }
+                let _ = handle.join();
+            }
+        }
+    }
+}

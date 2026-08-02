@@ -197,7 +197,7 @@ impl MediaDecoder for MfVideoDecoder {
                 timestamp_ms,
                 duration_ms,
             };
-            let _ = frame.validate();
+            frame.validate()?;
 
             Ok(Some(frame))
         }

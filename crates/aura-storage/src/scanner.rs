@@ -15,11 +15,12 @@ impl LibraryScanner {
         let mut visited = HashSet::new();
         for path in paths {
             if path.is_dir() {
-                Self::scan_directory(path, &mut results, &mut visited, 0);
+                let root = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+                Self::scan_directory(path, &mut results, &mut visited, 0, Some(&root));
             } else if path.is_file() {
                 let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-                if visited.insert(canonical) {
-                    let meta = Self::inspect_file(path);
+                if visited.insert(canonical.clone()) {
+                    let meta = Self::inspect_file(&canonical);
                     if let Some(meta) = meta {
                         results.push(meta);
                     }
@@ -41,6 +42,7 @@ impl LibraryScanner {
         results: &mut Vec<WallpaperMeta>,
         visited: &mut HashSet<PathBuf>,
         depth: u32,
+        library_root: Option<&PathBuf>,
     ) {
         if depth > 16 {
             warn!("Maximum directory recursion depth reached at {:?}", dir);
@@ -69,11 +71,24 @@ impl LibraryScanner {
                     warn!("Skipping symlink: {}", e);
                     continue;
                 }
-                Self::scan_directory(&path, results, visited, depth + 1);
+                // Verify symlinked directories stay within the library root.
+                if let (Some(root), Ok(canonical)) = (library_root, path.canonicalize())
+                    && !canonical.starts_with(root)
+                {
+                    warn!("Skipping directory outside library root: {:?}", canonical);
+                    continue;
+                }
+                Self::scan_directory(&path, results, visited, depth + 1, library_root);
             } else if path.is_file() {
                 let canonical_file = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-                if visited.insert(canonical_file) {
-                    let meta = Self::inspect_file(&path);
+                // Skip files outside the library root.
+                if let Some(root) = library_root
+                    && !canonical_file.starts_with(root)
+                {
+                    continue;
+                }
+                if visited.insert(canonical_file.clone()) {
+                    let meta = Self::inspect_file(&canonical_file);
                     if let Some(meta) = meta {
                         results.push(meta);
                     }

@@ -18,9 +18,6 @@ pub use reconciliation::{
 };
 pub use slideshow::{run_slideshow_cycle, select_slideshow_items};
 
-static CTRLC_REQUESTED: std::sync::LazyLock<Arc<AtomicBool>> =
-    std::sync::LazyLock::new(|| Arc::new(AtomicBool::new(false)));
-
 /// Effective render pause state: the user's manual pause (via IPC) OR the
 /// game-mode fullscreen pause. Game mode is an additional pause source and
 /// must never overwrite the manual pause state.
@@ -43,7 +40,26 @@ pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
     let ready_tx = opts.ready_tx;
     let done_tx = opts.done_tx;
     let _singleton = opts._singleton;
+    let ctrlc_flag = opts.ctrlc_flag;
     tracing::info!("Process singleton held by daemon thread");
+
+    // Install standalone handler before monitor, IPC, or Vulkan startup so
+    // Ctrl+C cannot be lost during expensive initialization.
+    let ctrlc_flag = match ctrlc_flag {
+        Some(flag) => {
+            tracing::info!("Using caller-supplied Ctrl+C flag");
+            flag
+        }
+        None => {
+            let flag = Arc::new(AtomicBool::new(false));
+            if register_console_ctrl_handler(flag.clone(), None) {
+                tracing::info!("Console Ctrl+C handler registered (standalone)");
+            } else {
+                tracing::warn!("Failed to register Console Ctrl+C handler");
+            }
+            flag
+        }
+    };
 
     // Spawn async IPC server on a dedicated Tokio thread IMMEDIATELY at process startup (<2ms)
     // so UI client connections are accepted instantly without waiting for GPU or WorkerW init.
@@ -81,29 +97,31 @@ pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
 
     tracing::info!("IPC server listening on \\\\.\\pipe\\aura-wallpaperd");
 
-    // Install Ctrl+C handler for graceful shutdown.
-    if register_console_ctrl_handler(CTRLC_REQUESTED.clone()) {
-        tracing::info!("Console Ctrl+C handler registered successfully");
-    } else {
-        tracing::warn!("Failed to register Console Ctrl+C handler");
-    }
-
     #[cfg(target_os = "windows")]
     let vulkan_context = Arc::new(VulkanContext::new()?);
+
+    // Check for Ctrl+C before proceeding with GPU-heavy operations.
+    let mut early_shutdown = ctrlc_flag.load(std::sync::atomic::Ordering::Relaxed);
 
     let mut workerw_manager = WorkerWManager::new();
     let mut attach_state = attach_or_detach(&mut workerw_manager);
 
     #[cfg(target_os = "windows")]
-    let (monitor_contexts, mut wallpaper_txs, perf_counters) = rendering::setup_monitor_rendering(
-        &vulkan_context,
-        &monitors,
-        &workerw_manager,
-        &wallpaper_path,
-    )?;
+    let (monitor_contexts, mut wallpaper_txs, perf_counters) = if early_shutdown {
+        (Vec::new(), std::collections::HashMap::new(), Vec::new())
+    } else {
+        rendering::setup_monitor_rendering(
+            &vulkan_context,
+            &monitors,
+            &workerw_manager,
+            &wallpaper_path,
+        )?
+    };
     #[cfg(not(target_os = "windows"))]
     let (monitor_contexts, mut wallpaper_txs, perf_counters) =
         (Vec::new(), std::collections::HashMap::new(), Vec::new());
+
+    early_shutdown = early_shutdown || ctrlc_flag.load(std::sync::atomic::Ordering::Relaxed);
 
     let monitor_summaries: Vec<aura_ipc::protocol::MonitorSummary> = monitors
         .iter()
@@ -114,7 +132,6 @@ pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
         })
         .collect();
 
-    // Update Orchestrator with monitor summaries and wallpaper channels once monitor contexts are ready.
     orchestrator.update_monitors(monitor_summaries, wallpaper_txs.clone());
 
     let mut coordinator = RenderCoordinator::new(monitor_contexts);
@@ -141,40 +158,41 @@ pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
     );
     let mut slideshow_state: Option<aura_core::slideshow_state::SlideshowState> =
         slideshow_store.load().ok().flatten();
-    // Game-mode fullscreen pause state: merged with the user's manual pause
-    // below (`is_paused() || game_mode_paused`), so the 500ms poll can never
-    // overwrite a manual pause.
+
     let mut game_mode_paused = false;
-    // Preloads the next slideshow static wallpaper on a background thread so
-    // interval flips present instantly (no decode hitch on the render thread).
     let mut slideshow_preloader = SlideshowPreloader::new();
 
-    event_loop::run_event_loop(
-        &ipc_shutdown_rx,
-        &shutdown_rx,
-        &mut coordinator,
-        &orchestrator,
-        &mut game_mode_paused,
-        &receiver,
-        &mut workerw_manager,
-        &mut attach_state,
-        &mut wallpaper_txs,
-        #[cfg(target_os = "windows")]
-        &vulkan_context,
-        &wallpaper_path,
-        &mut perf_mon,
-        &cfg_store,
-        &lib_store,
-        &slideshow_store,
-        &mut slideshow_state,
-        &mut slideshow_preloader,
-    )?;
+    let event_loop_result = if early_shutdown {
+        tracing::info!("Ctrl+C requested during daemon initialization — skipping event loop");
+        Ok(())
+    } else {
+        event_loop::run_event_loop(
+            &ipc_shutdown_rx,
+            &shutdown_rx,
+            &mut coordinator,
+            &orchestrator,
+            &mut game_mode_paused,
+            &receiver,
+            &mut workerw_manager,
+            &mut attach_state,
+            &mut wallpaper_txs,
+            #[cfg(target_os = "windows")]
+            &vulkan_context,
+            &wallpaper_path,
+            &mut perf_mon,
+            &cfg_store,
+            &lib_store,
+            &slideshow_store,
+            &mut slideshow_state,
+            &mut slideshow_preloader,
+            &ctrlc_flag,
+        )
+    };
 
-    // Shutdown: signal IPC server and render threads.
+    // Shutdown: signal IPC server and render threads (always executes).
     let _ = ipc_server_shutdown_tx.send(true);
 
-    // Join slideshow preload threads (they only write to the cache, but keep
-    // shutdown deterministic).
+    // Join slideshow preload threads.
     slideshow_preloader.join_all();
 
     // Join render threads with a timeout to prevent indefinite hangs.
@@ -192,5 +210,6 @@ pub fn run(opts: DaemonOptions) -> Result<(), DaemonError> {
 
     tracing::info!("wallpaperd daemon shutdown complete");
     let _ = done_tx.send(());
+    event_loop_result?;
     Ok(())
 }

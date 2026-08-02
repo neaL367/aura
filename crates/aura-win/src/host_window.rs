@@ -34,8 +34,6 @@ static HOST_CLASS_REGISTERED: std::sync::OnceLock<std::result::Result<(), String
 /// must detect this and call `HostWindow::recreate()`.
 pub struct HostWindow {
     hwnd: HWND,
-    /// Whether the HWND is still valid (set to false on WM_DESTROY).
-    valid: bool,
 }
 
 impl HostWindow {
@@ -79,7 +77,7 @@ impl HostWindow {
             .map_err(|_| PlatformError::WindowCreation)?
         };
 
-        Ok(Self { hwnd, valid: true })
+        Ok(Self { hwnd })
     }
 
     /// Return the raw HWND (for Vulkan surface creation and platform APIs).
@@ -89,22 +87,27 @@ impl HostWindow {
 
     /// True if the underlying HWND is still valid.
     pub fn is_valid(&self) -> bool {
-        if !self.valid || self.hwnd.0.is_null() {
+        if self.hwnd.0.is_null() {
             return false;
         }
         unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(self.hwnd)).as_bool() }
     }
 
     /// Mark this window as invalid (called after WorkerW destruction is detected).
+    /// The HWND is immediately destroyed so `is_valid()` will report false.
     pub fn invalidate(&mut self) {
-        self.valid = false;
+        if !self.hwnd.0.is_null() {
+            unsafe {
+                let _ = windows::Win32::UI::WindowsAndMessaging::DestroyWindow(self.hwnd);
+            }
+            self.hwnd = HWND(std::ptr::null_mut());
+        }
     }
 }
 
 impl Drop for HostWindow {
     fn drop(&mut self) {
-        if self.valid && !self.hwnd.0.is_null() {
-            // SAFETY: Detach from parent and DestroyWindow on a valid HWND we own.
+        if !self.hwnd.0.is_null() {
             unsafe {
                 use windows::Win32::UI::WindowsAndMessaging::SetParent;
                 let _ = SetParent(self.hwnd, None);

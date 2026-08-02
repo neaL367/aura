@@ -97,6 +97,12 @@ impl Orchestrator {
             .name("library-rescan".into())
             .spawn(move || {
                 let _ = orch.handle_request(aura_ipc::protocol::Request::RefreshLibrary);
+                let channels = orch
+                    .state
+                    .lock()
+                    .map(|state| state.wallpaper_txs.clone())
+                    .unwrap_or_default();
+                orch.flush_assignments(&channels);
             })
             .ok();
     }
@@ -160,6 +166,50 @@ impl Orchestrator {
                         .find(|a| a.monitor_id == *mon_id)
                         .map(|a| a.fit_mode);
 
+                    info!(
+                        "Flushing active wallpaper assignment {:?} (fit_mode: {:?}) to monitor channel {:?}",
+                        meta.path, fit_mode, mon_id
+                    );
+                    let _ = tx.send(RenderCommand::SetWallpaper {
+                        path: meta.path,
+                        fit_mode,
+                    });
+                }
+            }
+        }
+    }
+
+    /// Re-send every pending assignment (in-memory + persisted) to its render
+    /// thread via the channel currently registered in `state.wallpaper_txs`.
+    /// Called from `handle_assign_wallpaper` when a direct channel was
+    /// unavailable (startup race), and from `update_monitors` /
+    /// `reconcile_monitors` after channels have been rebuilt.
+    pub fn flush_assignments(
+        &self,
+        wallpaper_txs: &HashMap<MonitorId, crossbeam_channel::Sender<RenderCommand>>,
+    ) {
+        if let Ok(state) = self.state.lock() {
+            let config = state.config_store.load().unwrap_or_default();
+            for (mon_id, tx) in wallpaper_txs {
+                let wallpaper_id = state.assignments.get(mon_id).copied().or_else(|| {
+                    config
+                        .assignments
+                        .iter()
+                        .find(|a| a.monitor_id == *mon_id)
+                        .map(|a| a.wallpaper_id)
+                });
+                if let Some(wallpaper_id) = wallpaper_id
+                    && let Some(meta) = state
+                        .library_items
+                        .iter()
+                        .find(|item| item.id == wallpaper_id)
+                        .cloned()
+                {
+                    let fit_mode = config
+                        .assignments
+                        .iter()
+                        .find(|a| a.monitor_id == *mon_id)
+                        .map(|a| a.fit_mode);
                     info!(
                         "Flushing active wallpaper assignment {:?} (fit_mode: {:?}) to monitor channel {:?}",
                         meta.path, fit_mode, mon_id

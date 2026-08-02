@@ -61,6 +61,15 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
 
         let _ = ShowWindow(workerw, SW_SHOW);
 
+        // Windows 11 24H2+ sometimes exposes the Progman window itself as the
+        // desktop composition layer, with no usable WorkerW sibling. Progman
+        // cannot be used as a parent for reparenting; instead the host must be
+        // a top-level window placed behind the desktop.
+        let target_is_progman = class_name == "Progman";
+        if target_is_progman {
+            return attach_topmost_bottom(host_hwnd, 0, 0, client_w, client_h, Some(workerw));
+        }
+
         let _dpi_guard = ScopedDpiHostingBehavior::allow_mixed();
 
         // Do NOT call SetClassLongPtrW(workerw, GCLP_HBRBACKGROUND, ...) here.
@@ -69,14 +78,33 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
         // affects all WorkerW instances of the same class, not just this one.
         // The Aura host window's background is controlled by the Vulkan
         // renderer clearing to black on each present.
-        SetParent(host_hwnd, Some(workerw))?;
-
+        // SetParent returns the previous parent. A top-level host has no
+        // previous parent, so windows-rs can report NULL as an error even
+        // though reparenting succeeded. Verify the new parent explicitly.
+        // A top-level WS_POPUP window cannot be reparented into a child
+        // WorkerW. Switch to WS_CHILD before SetParent so the host becomes a
+        // true child window of the target shell layer.
         let style = GetWindowLongPtrW(host_hwnd, GWL_STYLE);
-        let new_style =
+        let child_style =
             (style & !(WS_POPUP.0 as isize)) | WS_CHILD.0 as isize | WS_VISIBLE.0 as isize;
-        SetWindowLongPtrW(host_hwnd, GWL_STYLE, new_style);
+        SetWindowLongPtrW(host_hwnd, GWL_STYLE, child_style);
         use windows::Win32::UI::WindowsAndMessaging::GWL_EXSTYLE;
         SetWindowLongPtrW(host_hwnd, GWL_EXSTYLE, 0);
+
+        let set_parent_error = SetParent(host_hwnd, Some(workerw)).err();
+        let actual_parent =
+            windows::Win32::UI::WindowsAndMessaging::GetParent(host_hwnd).unwrap_or_default();
+        if actual_parent != workerw {
+            return Err(PlatformError::Win32(
+                set_parent_error.unwrap_or_else(windows::core::Error::from_thread),
+            ));
+        }
+        if let Some(error) = set_parent_error {
+            tracing::debug!(
+                "SetParent reported previous-parent error after successful reparent: {}",
+                error
+            );
+        }
 
         use windows::Win32::UI::WindowsAndMessaging::FindWindowExW;
         use windows::core::w;
@@ -117,18 +145,35 @@ pub fn attach_to_workerw(host_hwnd: HWND, workerw: HWND) -> std::result::Result<
     Ok(())
 }
 
-/// Fallback used when WorkerW/Progman/SHELLDLL_DefView discovery fails entirely.
+/// Fallback used when WorkerW/Progman/SHELLDLL_DefView discovery fails entirely,
+/// or when the shell target is Progman (Windows 11 24H2+) and cannot be reparented.
+///
+/// `insert_after` is the shell window to place the host behind. When supplied,
+/// the host is placed directly behind that window; otherwise it is placed at
+/// the bottom of the top-level Z-order. `SWP_NOACTIVATE` is used so the host
+/// does not steal foreground and cover the desktop UI.
 pub fn attach_topmost_bottom(
     host_hwnd: HWND,
     x: i32,
     y: i32,
     width: i32,
     height: i32,
+    insert_after: Option<HWND>,
 ) -> std::result::Result<(), PlatformError> {
     use windows::Win32::Graphics::Gdi::InvalidateRect;
-    use windows::Win32::UI::WindowsAndMessaging::{HWND_BOTTOM, MoveWindow, SWP_SHOWWINDOW};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GWL_EXSTYLE, HWND_BOTTOM, MoveWindow, SW_SHOWNA, SWP_NOACTIVATE, SWP_SHOWWINDOW,
+        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_POPUP, WS_VISIBLE,
+    };
 
     unsafe {
+        let style = GetWindowLongPtrW(host_hwnd, GWL_STYLE);
+        let new_style =
+            (style & !(WS_CHILD.0 as isize)) | WS_POPUP.0 as isize | WS_VISIBLE.0 as isize;
+        SetWindowLongPtrW(host_hwnd, GWL_STYLE, new_style);
+        let ex_style = WS_EX_NOACTIVATE.0 as isize | WS_EX_TOOLWINDOW.0 as isize;
+        SetWindowLongPtrW(host_hwnd, GWL_EXSTYLE, ex_style);
+
         if let Err(e) = MoveWindow(host_hwnd, x, y, width, height, true) {
             tracing::warn!(
                 "MoveWindow fallback failed for host window {:?}: {}",
@@ -136,9 +181,10 @@ pub fn attach_topmost_bottom(
                 e
             );
         }
+        let after = insert_after.unwrap_or(HWND_BOTTOM);
         if let Err(e) = SetWindowPos(
             host_hwnd,
-            Some(HWND_BOTTOM),
+            Some(after),
             0,
             0,
             0,
@@ -146,7 +192,8 @@ pub fn attach_topmost_bottom(
             windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE
                 | windows::Win32::UI::WindowsAndMessaging::SWP_NOSIZE
                 | windows::Win32::UI::WindowsAndMessaging::SWP_FRAMECHANGED
-                | SWP_SHOWWINDOW,
+                | SWP_SHOWWINDOW
+                | SWP_NOACTIVATE,
         ) {
             tracing::warn!(
                 "SetWindowPos fallback failed for host window {:?}: {}",
@@ -154,12 +201,12 @@ pub fn attach_topmost_bottom(
                 e
             );
         }
-        let _ = ShowWindow(host_hwnd, SW_SHOW);
+        let _ = ShowWindow(host_hwnd, SW_SHOWNA);
         let _ = InvalidateRect(Some(host_hwnd), None, true);
     }
 
-    tracing::warn!(
-        "Using top-level (unparented) fallback placement for HWND({:?}) — WorkerW/Progman discovery did not resolve a valid attach target",
+    tracing::info!(
+        "Placing host window HWND({:?}) as top-level behind the desktop shell",
         host_hwnd.0
     );
 

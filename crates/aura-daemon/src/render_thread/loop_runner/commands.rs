@@ -184,6 +184,17 @@ impl RenderLoopState {
                         tracing::info!(fps = valid_fps, "Render thread target FPS updated");
                         self.target_fps = valid_fps;
                     }
+                    RenderCommand::Clear => {
+                        tracing::info!("Render thread received clear command");
+                        self.ack_active_video_slot();
+                        if let Some(worker) = self.active_worker.take() {
+                            worker.stop();
+                        }
+                        self.current_frame_rx = None;
+                        self.gpu_frame_rx = None;
+                        self.gpu_ack_tx = None;
+                        self.renderer.clear(context);
+                    }
                 }
             } else {
                 break;

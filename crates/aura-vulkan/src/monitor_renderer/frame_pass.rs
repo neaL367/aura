@@ -5,12 +5,19 @@ use crate::{context::VulkanContext, error::VulkanError, transform::calculate_uv_
 
 use super::MonitorRenderer;
 
+const FRAME_WAIT_TIMEOUT_NS: u64 = 100_000_000;
+
 pub fn execute_frame(
     renderer: &mut MonitorRenderer,
     context: &VulkanContext,
     clear_color: [f32; 4],
 ) -> Result<(), VulkanError> {
-    renderer.frame_sync.wait_and_reset(&context.device)?;
+    if !renderer
+        .frame_sync
+        .wait_for_fence_timeout(&context.device, FRAME_WAIT_TIMEOUT_NS)?
+    {
+        return Err(VulkanError::FrameSync("frame fence wait timed out".into()));
+    }
 
     let (image_index, suboptimal) = unsafe {
         renderer
@@ -18,21 +25,27 @@ pub fn execute_frame(
             .swapchain_loader
             .acquire_next_image(
                 renderer.swapchain.swapchain,
-                u64::MAX,
+                FRAME_WAIT_TIMEOUT_NS,
                 renderer.frame_sync.image_available_semaphore,
                 vk::Fence::null(),
             )
             .map_err(|e| {
                 if e == vk::Result::ERROR_OUT_OF_DATE_KHR {
                     VulkanError::SwapchainOutOfDate
+                } else if e == vk::Result::TIMEOUT {
+                    VulkanError::FrameSync("swapchain acquire timed out".into())
                 } else {
                     VulkanError::Swapchain(e.to_string())
                 }
             })?
     };
 
+    // A suboptimal acquire still successfully acquired an image and signaled
+    // the semaphore. Render and submit the frame normally; the presentation
+    // stage will surface the swapchain-out-of-date status so the caller can
+    // recreate the swapchain.
     if suboptimal {
-        return Err(VulkanError::SwapchainOutOfDate);
+        tracing::debug!("swapchain suboptimal during acquire — rendering frame anyway");
     }
 
     let framebuffer = renderer.framebuffers[image_index as usize];
@@ -215,6 +228,9 @@ pub fn execute_frame(
     let mut wait_values = vec![0u64];
     let mut signal_semaphores = vec![renderer.frame_sync.render_finished_semaphore];
     let mut signal_values = vec![0u64];
+    // PresentInfoKHR::wait_semaphores must be binary semaphores only;
+    // timeline semaphores must NOT be passed to vkQueuePresentKHR.
+    let present_wait_semaphores = vec![renderer.frame_sync.render_finished_semaphore];
     if let Some(ref mut video) = renderer.active_video_frame {
         wait_semaphores.push(video.timeline_semaphore);
         wait_stages.push(vk::PipelineStageFlags::FRAGMENT_SHADER);
@@ -241,19 +257,35 @@ pub fn execute_frame(
 
     let _lock = context.queue_lock();
 
-    unsafe {
-        context
-            .device
-            .queue_submit(
+    // Reset the fence only immediately before submission — every earlier
+    // failure path leaves the fence SIGNALED (from the previous frame).
+    renderer.frame_sync.reset_fence(&context.device)?;
+
+    let submit_result = unsafe {
+        context.device.queue_submit(
+            context.graphics_queue,
+            &[submit_info],
+            renderer.frame_sync.in_flight_fence,
+        )
+    };
+
+    if let Err(ref e) = submit_result {
+        // Submission failed: the fence may be unsignaled. Submit an empty
+        // batch (no commands, no semaphores) solely to signal the fence so
+        // the next frame doesn't block forever.
+        unsafe {
+            let empty = vk::SubmitInfo::default();
+            let _ = context.device.queue_submit(
                 context.graphics_queue,
-                &[submit_info],
+                &[empty],
                 renderer.frame_sync.in_flight_fence,
-            )
-            .map_err(|e| VulkanError::Render(e.to_string()))?;
+            );
+        }
+        return Err(VulkanError::Render(e.to_string()));
     }
 
     let present_info = vk::PresentInfoKHR::default()
-        .wait_semaphores(&signal_semaphores)
+        .wait_semaphores(&present_wait_semaphores)
         .swapchains(std::slice::from_ref(&renderer.swapchain.swapchain))
         .image_indices(std::slice::from_ref(&image_index));
 
